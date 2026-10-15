@@ -7,7 +7,7 @@
 |------|------|------|
 | T0 骨架与零工具链证明 | ✅ 2026-10-15 | `python3 tools/gate_t0.py` |
 | T1 规格（规格 → 壳表 + SDK，无漂移） | ✅ 2026-10-15 | `python3 tools/gen.py --check` ＋ `python3 -m unittest discover -s tests -t .` |
-| T2 壳的 store 与解释器（四个操作、路径寻址、槽订阅） | ⏳ | — |
+| T2 壳的 store 与解释器（四个操作、路径寻址、槽订阅） | ✅ 2026-10-15 | `python3 tools/gate_t2.py` |
 | T3 组件分派与本地态 | ⏳ | — |
 | T4 绑定与事件（source / event / payload） | ⏳ | — |
 | T5 路由 | ⏳ | — |
@@ -62,3 +62,30 @@ Ran 16 tests ... OK
 声明了 `payload` 却没有本地态。规则随之立住：**`payload` 只能列本组件自己的本地态**——
 于是 `form` 拿到 `local: ["fields"]`（一次提交多个字段的机制所在），`button` 的绑定收敛为
 `["event"]`（行身份走节点 `id`，不塞进 payload）。
+
+## T2 门的实测结果（2026-10-15）
+
+```
+[1/10]  zero console errors                    none
+[2/10]  create: tree + title                   title='看板' children=['row-greeting','row-name','row-go']
+[3/10]  patch: pointer into a child            value='你好'
+[4/10]  insert: after an id anchor             order=['row-greeting','row-extra','row-name','row-go']
+[5/10]  remove: by row id                      order=['row-greeting','row-name','row-go']
+[6/10]  unknown path: op dropped, rest applied dropped+1 placeholder='名字'
+[7/10]  malformed frame: refused whole         rejected+1 value='你好'
+[8/10]  other category: ignored                ignored+1
+[9/10]  atomicity: 3 ops, 1 store update       effect runs=1
+[10/10] counters account for every frame       ops=8 dropped=1 rejected=1 ignored=1
+```
+
+落地的形状：`shell/js/interp.js`（四个操作 + 路径 + id 锚点 + 计数 + 整批原子）、
+`tools/cdp.py`（两个门共用的 CDP/浏览器夹具，T0 的门已改用它）、`tools/gate_t2.py`。
+
+门抓到的两件事：
+
+- **寻址的根**：第一跑里除 `create` 之外全部被 drop——`locate()` 拿 `tree` 当根，而路径写的是
+  `/tree/...`。正形是**以客户端状态为根**（`tree` 结构 / `slots` 数据两个可写面），文档里那句
+  「`""` 是根」也因此写清楚了。
+- **浅读看不见深写**：原子性断言最初让观察者只读 `state.tree`，于是三操作帧里它一次都没重跑——
+  既说明批处理是对的（写确实生效了），也说明**渲染层必须逐个字段读它真正要画的东西**：读父对象
+  不会有通知。这条直接约束 T3 的写法。
