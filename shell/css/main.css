@@ -1,0 +1,549 @@
+/* Reflux shell — the design language the shell owns.
+ *
+ * Layout follows the stylesheet framework of fluxen's `crates/ui-assets/assets/main.css`:
+ * the layer order is declared first, `theme` holds tokens (with `light-dark()` doing the
+ * scheme switch), `base` is native-element defaults, `layout` is layout primitives,
+ * `element` is the components that own a native element's look, `style` is chrome plus the
+ * variant roles, and `custom` is reserved for a host stylesheet.
+ *
+ * The producer picks components and variants (DESIGN §组件词表) and never sends a class
+ * string, so every variant here is a data attribute the shell sets from the spec's enums —
+ * the layer structure is the same, the selector spelling is what differs. A *datum* (a
+ * progress value) rides a custom property instead. Nothing is set inline except that.
+ */
+
+@layer theme, base, layout, element, custom, style;
+
+/* The order above must be declared before any block, and an `@import` for a host stylesheet
+ * must come after it: layer order is decided by first appearance, so an import placed at the
+ * top would put that layer first and make it the weakest one (the trap that made `.hide` lose
+ * to `.f` in fluxen — docs/PLAN.md §19 there).
+ *
+ * `custom` carries no file at T3. Styles are the shell's; a host-side escape hatch is still an
+ * open question in DESIGN (§组件词表, 样式逃生门), and the slot is here so that decision, if it
+ * is ever taken, has its place reserved instead of reopening this file's order. */
+
+@layer theme {
+    :root {
+        color-scheme: light dark; /* what makes light-dark() switch */
+
+        --rx-fg: light-dark(oklch(0.28 0.02 260), oklch(0.93 0.01 260));
+        --rx-bg: light-dark(oklch(0.99 0.004 250), oklch(0.17 0.012 260));
+        --rx-surface: light-dark(oklch(0.97 0.005 260), oklch(0.23 0.015 260));
+        --rx-muted: light-dark(oklch(0.55 0.02 260), oklch(0.72 0.02 260));
+        --rx-line: light-dark(oklch(0.9 0.01 260), oklch(0.34 0.015 260));
+
+        --rx-accent: oklch(0.55 0.16 265);
+        --rx-secondary: light-dark(oklch(0.95 0.004 260), oklch(0.3 0.012 260));
+        --rx-on-accent: oklch(0.99 0.01 265);
+
+        /* role tones: one closed set every tone-bearing component reads through --rx-role */
+        --rx-neutral: oklch(0.6 0.015 260);
+        --rx-tone-info: oklch(0.55 0.14 250);
+        --rx-tone-success: oklch(0.55 0.13 150);
+        --rx-tone-warning: oklch(0.62 0.13 80);
+        --rx-tone-danger: oklch(0.55 0.18 25);
+
+        --rx-round: 0.55rem;
+        --rx-input-round: 0.4rem;
+
+        --rx-border-width: 1px;
+        --rx-border-style: solid;
+        --rx-border-color: var(--rx-line);
+        --rx-border: var(--rx-border-width) var(--rx-border-style) var(--rx-border-color);
+
+        --rx-shadow: 0 1px 2px oklch(0 0 0 / 0.12);
+
+        --rx-space-sm: 0.25rem;
+        --rx-space-md: 0.5rem;
+        --rx-space-lg: 1rem;
+
+        font-family:
+            system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", "PingFang SC",
+            "Microsoft YaHei", sans-serif;
+        line-height: 1.5;
+    }
+}
+
+@layer base {
+    *,
+    *::before,
+    *::after {
+        box-sizing: border-box;
+    }
+
+    html {
+        height: 100%;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100dvh;
+        padding: var(--rx-space-lg);
+        background-color: var(--rx-bg);
+        color: var(--rx-fg);
+        scrollbar-width: thin;
+        scrollbar-color: var(--rx-muted) transparent;
+    }
+
+    /* the boot probe (T0): shell furniture, not a component */
+    .probe {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.75rem 1rem;
+        border: var(--rx-border);
+        border-radius: var(--rx-round);
+
+        & .dot {
+            inline-size: 0.6rem;
+            block-size: 0.6rem;
+            border-radius: 50%;
+            background-color: oklch(0.72 0.17 150);
+        }
+
+        & code {
+            font-family: ui-monospace, "JetBrains Mono", monospace;
+            font-size: 0.85rem;
+        }
+    }
+}
+
+@layer layout {
+    #app {
+        display: grid;
+        gap: var(--rx-space-lg);
+        align-content: start;
+    }
+
+    /* a layout-transparent wrapper: containers mount their children here so chrome (a card's
+       title, a field's label, a form's submit) keeps its place around them */
+    .rx-body {
+        display: contents;
+    }
+
+    .rx-stack,
+    .rx-row,
+    .rx-rack,
+    .rx-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--rx-gap, var(--rx-space-md));
+    }
+
+    .rx-row {
+        flex-direction: row;
+    }
+
+    /* the gap scale: one attribute re-points the token the containers above consume */
+    .rx-stack,
+    .rx-row {
+        &[data-gap="none"] {
+            --rx-gap: 0;
+        }
+        &[data-gap="sm"] {
+            --rx-gap: var(--rx-space-sm);
+        }
+        &[data-gap="md"] {
+            --rx-gap: var(--rx-space-md);
+        }
+        &[data-gap="lg"] {
+            --rx-gap: var(--rx-space-lg);
+        }
+    }
+
+    .rx-stack {
+        &[data-direction="row"] {
+            flex-direction: row;
+        }
+    }
+
+    .rx-row {
+        flex-wrap: nowrap;
+        &[data-wrap="wrap"] {
+            flex-wrap: wrap;
+        }
+    }
+
+    .rx-stack,
+    .rx-row {
+        &[data-align="start"] {
+            align-items: flex-start;
+        }
+        &[data-align="center"] {
+            align-items: center;
+        }
+        &[data-align="end"] {
+            align-items: flex-end;
+        }
+        &[data-align="stretch"] {
+            align-items: stretch;
+        }
+        &[data-align="baseline"] {
+            align-items: baseline;
+        }
+    }
+
+    .rx-rack {
+        gap: var(--rx-space-sm);
+        overflow-y: auto;
+
+        &[data-density="compact"] {
+            gap: 0.125rem;
+        }
+    }
+
+    .rx-select {
+        inline-size: fit-content;
+    }
+}
+
+@layer element {
+    /* --- text inputs: one look, three elements ---------------------------------------- */
+    .rx-input,
+    .rx-textarea,
+    .rx-select {
+        font: inherit;
+        color: inherit;
+        background-color: var(--rx-surface);
+        border: var(--rx-border);
+        border-radius: var(--rx-input-round);
+        padding: 0.45rem 0.6rem;
+
+        &:focus-visible {
+            outline: 2px solid var(--rx-accent);
+            outline-offset: 1px;
+        }
+
+        &:disabled {
+            color: var(--rx-muted);
+            cursor: not-allowed;
+        }
+    }
+
+    .rx-textarea {
+        resize: vertical;
+        line-height: 1.4;
+    }
+
+    .rx-input[data-kind="search"] {
+        border-radius: var(--rx-round);
+    }
+
+    /* --- checkbox and switch: a real input plus the shell's own affordance ------------- */
+    .rx-checkbox,
+    .rx-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--rx-space-md);
+        cursor: pointer;
+    }
+
+    .rx-checkbox__box,
+    .rx-switch__box {
+        accent-color: var(--rx-accent);
+        cursor: inherit;
+    }
+
+    .rx-switch {
+        & .rx-switch__box {
+            display: none;
+        }
+
+        & .rx-switch__knob {
+            position: relative;
+            inline-size: 1.75rem;
+            block-size: 1rem;
+            border: var(--rx-border);
+            border-radius: 999px;
+            background-color: var(--rx-secondary);
+            transition: background-color 120ms ease;
+
+            &::after {
+                content: "";
+                position: absolute;
+                inset-block-start: 0.125rem;
+                inset-inline-start: 0.125rem;
+                inline-size: 0.75rem;
+                block-size: 0.75rem;
+                border-radius: 50%;
+                background-color: var(--rx-bg);
+                transition: inset-inline-start 120ms ease;
+            }
+        }
+
+        & .rx-switch__box:checked + .rx-switch__knob {
+            background-color: var(--rx-accent);
+
+            &::after {
+                inset-inline-start: 0.875rem;
+            }
+        }
+    }
+
+    /* --- button ----------------------------------------------------------------------- */
+    .rx-button {
+        font: inherit;
+        cursor: pointer;
+        padding: 0.45rem 0.85rem;
+        border: var(--rx-border);
+        border-radius: var(--rx-round);
+        background-color: var(--rx-secondary);
+        color: var(--rx-fg);
+
+        &:disabled {
+            color: var(--rx-muted);
+            cursor: not-allowed;
+        }
+
+        &[data-size="sm"] {
+            padding: 0.25rem 0.6rem;
+            font-size: 0.85rem;
+        }
+
+        &[data-variant="primary"] {
+            background-color: var(--rx-accent);
+            border-color: var(--rx-accent);
+            color: var(--rx-on-accent);
+        }
+
+        &[data-variant="ghost"] {
+            background-color: transparent;
+            border-color: transparent;
+        }
+
+        &[data-variant="danger"] {
+            background-color: var(--rx-tone-danger);
+            border-color: var(--rx-tone-danger);
+            color: var(--rx-on-accent);
+        }
+    }
+
+    /* --- link ------------------------------------------------------------------------- */
+    .rx-link {
+        color: var(--rx-accent);
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+
+        &[data-external="true"]::after {
+            content: " ↗";
+            font-size: 0.8em;
+        }
+    }
+}
+
+@layer style {
+    /* tone roles: the attribute re-points one token, the components below read it — the role
+       is declared once instead of repeating a colour per component (fluxen's `.accent.border`
+       idiom, spelled with the spec's enum instead of a class). `text` and `badge` are the
+       only tone-bearing components; `card`'s tone is a surface variant, handled below. */
+    .rx-text,
+    .rx-badge {
+        --rx-role: var(--rx-fg);
+
+        &[data-tone="neutral"],
+        &[data-tone="muted"] {
+            --rx-role: var(--rx-muted);
+        }
+        &[data-tone="info"] {
+            --rx-role: var(--rx-tone-info);
+        }
+        &[data-tone="success"] {
+            --rx-role: var(--rx-tone-success);
+        }
+        &[data-tone="warning"] {
+            --rx-role: var(--rx-tone-warning);
+        }
+        &[data-tone="danger"] {
+            --rx-role: var(--rx-tone-danger);
+        }
+    }
+
+    /* --- display ---------------------------------------------------------------------- */
+    .rx-text {
+        margin: 0;
+        color: var(--rx-role);
+
+        &[data-size="sm"] {
+            font-size: 0.85rem;
+        }
+        &[data-size="lg"] {
+            font-size: 1.15rem;
+        }
+        &[data-wrap="false"] {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
+
+    .rx-heading {
+        margin: 0;
+
+        &[data-level="1"] {
+            font-size: 1.5rem;
+        }
+        &[data-level="2"] {
+            font-size: 1.2rem;
+        }
+        &[data-level="3"] {
+            font-size: 1rem;
+        }
+    }
+
+    .rx-badge {
+        display: inline-block;
+        padding: 0.1rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        color: var(--rx-role);
+        background-color: color-mix(in oklab, var(--rx-role) 20%, transparent);
+    }
+
+    .rx-code {
+        margin: 0;
+        padding: 0.6rem 0.75rem;
+        border-radius: var(--rx-round);
+        background-color: var(--rx-surface);
+        font-family: ui-monospace, "JetBrains Mono", monospace;
+        font-size: 0.82rem;
+        overflow-x: auto;
+
+        & .rx-code__inner {
+            white-space: pre;
+        }
+    }
+
+    .rx-image {
+        max-inline-size: 100%;
+        border-radius: var(--rx-round);
+
+        &[data-fit="cover"] {
+            object-fit: cover;
+        }
+    }
+
+    /* --- chrome ----------------------------------------------------------------------- */
+    .rx-card {
+        display: flex;
+        flex-direction: column;
+        gap: var(--rx-gap, var(--rx-space-md));
+        padding: var(--rx-space-lg);
+        border: var(--rx-border);
+        border-radius: var(--rx-round);
+
+        &[data-tone="muted"] {
+            background-color: var(--rx-surface);
+        }
+        &[data-tone="raised"] {
+            box-shadow: var(--rx-shadow);
+        }
+
+        & .rx-card__title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+    }
+
+    .rx-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--rx-space-sm);
+
+        & .rx-field__label {
+            font-size: 0.8rem;
+            color: var(--rx-muted);
+        }
+
+        & .rx-field__hint {
+            font-size: 0.75rem;
+            color: var(--rx-muted);
+        }
+
+        &[data-required="true"] .rx-field__label::after {
+            content: " *";
+            color: var(--rx-tone-danger);
+        }
+    }
+
+    .rx-form {
+        gap: var(--rx-gap, var(--rx-space-md));
+
+        & > .rx-button {
+            align-self: start;
+        }
+    }
+
+    .rx-rack {
+        & .rx-rack__empty {
+            padding: var(--rx-space-lg);
+            text-align: center;
+            color: var(--rx-muted);
+            font-size: 0.85rem;
+        }
+    }
+
+    /* --- feedback --------------------------------------------------------------------- */
+    .rx-progress {
+        display: flex;
+        flex-direction: column;
+        gap: var(--rx-space-sm);
+
+        & .rx-progress__bar {
+            display: block;
+            block-size: 0.4rem;
+            border-radius: 999px;
+            background-color: var(--rx-accent);
+            inline-size: var(--rx-value, 0%);
+            transition: inline-size 160ms ease;
+        }
+
+        & .rx-progress__label {
+            font-size: 0.75rem;
+            color: var(--rx-muted);
+        }
+
+        &[data-indeterminate="true"] .rx-progress__bar {
+            inline-size: 40% !important;
+            animation: rx-progress-drift 1.2s ease-in-out infinite alternate;
+        }
+    }
+
+    @keyframes rx-progress-drift {
+        from {
+            margin-inline-start: 0;
+        }
+        to {
+            margin-inline-start: 60%;
+        }
+    }
+
+    .rx-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--rx-space-sm);
+        color: var(--rx-muted);
+
+        & .rx-empty__text {
+            margin: 0;
+        }
+
+        & .rx-empty__hint {
+            font-size: 0.8rem;
+        }
+    }
+
+    /* an implementation gap must be visible, and it is counted — never silent */
+    .rx-unsupported {
+        padding: 0.5rem 0.75rem;
+        border: 1px dashed var(--rx-tone-danger);
+        border-radius: var(--rx-round);
+        color: var(--rx-tone-danger);
+        font-size: 0.85rem;
+    }
+}

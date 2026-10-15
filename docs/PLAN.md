@@ -32,7 +32,8 @@ shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS
 shell/js/interp.js                壳的 store 与四个操作（T2）
 shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
 shell/js/render.js                组件分派表 + 本地态（T3）
-shell/css/reflux.css              壳自己持有的设计语言（组件与变体，按 data 属性选）
+shell/css/main.css               壳自己持有的设计语言：层序 theme/base/layout/element/custom/style
+                                 （框架与 fluxen 的 ui-assets 样式一致），变体走 data 属性改指令牌
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
 tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希
 ```
@@ -97,16 +98,22 @@ Ran 16 tests ... OK
 ## T3 门的实测结果（2026-10-15）
 
 ```
-[1/10] PASS  zero console errors                    none
-[2/10] PASS  spec == implementations                21 components, missing=[] extra=[]
-[3/10] PASS  create renders the tree                root=True text='initial'
-[4/10] PASS  one patch = one mutation, no element churn mutations=1 kinds=['childList'] churn=False text='patched'
-[5/10] PASS  siblings keep their DOM nodes          {'card': True, 'input': True, 'button': True}
-[6/10] PASS  slot write: zero DOM mutations, one reader updated mutations=0 value='from slot'
-[7/10] PASS  local state survives a store write     value='typed by hand'
-[8/10] PASS  unknown component: frame refused whole rejected+1 title='看板'
-[9/10] PASS  bad attr value: frame refused          rejected+1 err='.../attrs.tone: "purple" outside [...]'
-[10/10] PASS  create again: one root, nothing unsupported roots=1 unsupported=0
+[1/16] PASS  zero console errors                    none
+[2/16] PASS  spec == implementations                21 components, missing=[] extra=[]
+[3/16] PASS  create renders the tree                root=True text='initial'
+[4/16] PASS  one patch = one mutation, no element churn mutations=1 kinds=['childList'] churn=False text='patched'
+[5/16] PASS  siblings keep their DOM nodes          {'card': True, 'input': True, 'button': True}
+[6/16] PASS  slot write: zero DOM mutations, one reader updated mutations=0 value='from slot'
+[7/16] PASS  local state survives a store write     value='typed by hand'
+[8/16] PASS  unknown component: frame refused whole rejected+1 title='看板'
+[9/16] PASS  bad attr value: frame refused          rejected+1 err='.../attrs.tone: "purple" outside [...]'
+[10/16] PASS  create again: one root, nothing unsupported roots=1 unsupported=0
+[11/16] PASS  layer order declared first             '@layer theme, base, layout, element, custom, style;'
+[12/16] PASS  theme tokens applied to a component    border=1px radius=8.8px scheme='light dark'
+[13/16] PASS  tone re-points one token, per component danger=oklch(0.55 0.18 25) plain=oklch(0.28 0.02 260) ...
+[14/16] PASS  gap is a data attribute, not an inline style lg=16px sm=4px
+[15/16] PASS  a datum rides its custom property      token='50%' ratio=0.500
+[16/16] PASS  rack shows its empty state when it has no rows visible=True text='还没有记录'
 ```
 
 第 4 条是这里最硬的一条：一次文本 patch 在 DOM 上就是**一条**变更记录，且记录里没有元素节点
@@ -114,8 +121,17 @@ Ran 16 tests ... OK
 是属性不是 attribute），只有读它的那个组件动了。
 
 落地的形状：`shell/js/render.js`（21 个组件的实现表、子节点按行 id 复用、本地态）、
-`shell/js/validate.js`（节点与取值域校验）、`shell/css/reflux.css`（壳自己持有的设计语言）、
-`tools/gate_t3.py`。
+`shell/js/validate.js`（节点与取值域校验）、`shell/css/main.css`（层序 + 令牌 + 组件外观，框架取自 fluxen
+的 ui-assets 样式：变体是 data 属性改指令牌，数据值走自定义属性，壳不写内联样式）、`tools/gate_t3.py`。
+
+样式那六条断言（11-16）是这一轮加的：层序那一行必须先出现（层序由首次出现决定，写错位置整份样式都会
+错位），令牌要真的落到组件上（`border=1px`、圆角来自 `--rx-round`），tone 要真的逐组件改指（danger 的
+文字色与 default 不同、两种 badge 底色不同），间距刻度要走 data 属性，进度条要真的吃到自定义属性，
+空列表要真的显示 `empty_text`。
+
+`rack` 的 `empty_text` 与 `follow: end` 这一轮补上了实现（空态元素 + 贴底滚动）。规格里的
+`input.clearable` 仍是有校验、无外观的属性——清除是一个交互（要事件路径与本地态），跟 T4 的
+`source / event / payload` 一起落地；这条是有意的排期，不是漏项。
 
 门抓到的三件事：
 

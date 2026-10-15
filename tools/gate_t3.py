@@ -116,6 +116,47 @@ SCENARIO = r"""
   await settle();
   out.roots = document.querySelectorAll(".rx-stack").length;
   out.unsupported = R.counters.unsupported;
+
+  // 7. the stylesheet itself: the declared layer order, and the token paths that a variant
+  //    (data attribute -> token) and a datum (custom property) are supposed to ride
+  const sheet = document.styleSheets[0];
+  out.layer_statement = sheet?.cssRules?.[0]?.cssText ?? null;
+  out.color_scheme = getComputedStyle(document.documentElement).colorScheme;
+
+  const styled = { type: "stack", id: null, attrs: { direction: "column", gap: "lg", align: "stretch" }, bind: {}, children: [
+    { type: "card", id: "c-style", attrs: { title: "样式", tone: "plain" }, bind: {}, children: [] },
+    { type: "text", id: "t-danger", attrs: { value: "danger", tone: "danger", size: "md", wrap: true }, bind: {}, children: [] },
+    { type: "text", id: "t-plain", attrs: { value: "plain", tone: "default", size: "md", wrap: true }, bind: {}, children: [] },
+    { type: "badge", id: "b-info", attrs: { value: "info", tone: "info" }, bind: {}, children: [] },
+    { type: "badge", id: "b-neutral", attrs: { value: "neutral", tone: "neutral" }, bind: {}, children: [] },
+    { type: "progress", id: "p-1", attrs: { value: 50, label: "半", indeterminate: false }, bind: {}, children: [] },
+    { type: "rack", id: "r-empty", attrs: { density: "normal", empty_text: "还没有记录", follow: "none" }, bind: {}, children: [] },
+    { type: "stack", id: "s-sm", attrs: { direction: "row", gap: "sm", align: "center" }, bind: {}, children: [
+      { type: "text", id: "t-in-sm", attrs: { value: "x", tone: "default", size: "sm", wrap: true }, bind: {}, children: [] },
+    ] },
+  ] };
+  R.apply({ ev: "draw", ops: [{ op: "create", root: styled }] });
+  await settle(40);
+
+  const q = (sel) => document.querySelector(sel);
+  const progress = q(".rx-progress");
+  const bar = q(".rx-progress__bar");
+  const empty = q(".rx-rack__empty");
+  out.style = {
+    card_border_top: getComputedStyle(q(".rx-card")).borderTopWidth,
+    card_radius: getComputedStyle(q(".rx-card")).borderTopLeftRadius,
+    danger_color: getComputedStyle(q('.rx-text[data-tone="danger"]')).color,
+    plain_color: getComputedStyle(q('.rx-text[data-tone="default"]')).color,
+    info_badge_bg: getComputedStyle(q('.rx-badge[data-tone="info"]')).backgroundColor,
+    neutral_badge_bg: getComputedStyle(q('.rx-badge[data-tone="neutral"]')).backgroundColor,
+    gap_lg: getComputedStyle(q('.rx-stack[data-gap="lg"]')).rowGap,
+    gap_sm: getComputedStyle(q('.rx-stack[data-gap="sm"]')).columnGap,
+    progress_token: getComputedStyle(progress).getPropertyValue("--rx-value").trim(),
+    progress_ratio: bar.getBoundingClientRect().width / progress.getBoundingClientRect().width,
+    empty_visible: !empty.hidden && getComputedStyle(empty).display !== "none",
+    empty_text: empty.textContent,
+  };
+
   out.console_silent = true;
   return out;
 })()
@@ -164,6 +205,28 @@ def main() -> int:
         check("create again: one root, nothing unsupported",
               out["roots"] == 1 and out["unsupported"] == 0,
               f"roots={out['roots']} unsupported={out['unsupported']}")
+
+        style = out["style"]
+        check("layer order declared first",
+              (out["layer_statement"] or "").startswith("@layer theme, base, layout, element, custom, style"),
+              f"{out['layer_statement']!r}")
+        check("theme tokens applied to a component",
+              style["card_border_top"] == "1px" and style["card_radius"] not in ("0px", ""),
+              f"border={style['card_border_top']} radius={style['card_radius']} scheme={out['color_scheme']!r}")
+        check("tone re-points one token, per component",
+              style["danger_color"] not in (None, "", style["plain_color"])
+              and style["info_badge_bg"] != style["neutral_badge_bg"],
+              f"danger={style['danger_color']} plain={style['plain_color']} "
+              f"info={style['info_badge_bg']} neutral={style['neutral_badge_bg']}")
+        check("gap is a data attribute, not an inline style",
+              style["gap_lg"] == "16px" and style["gap_sm"] == "4px",
+              f"lg={style['gap_lg']} sm={style['gap_sm']}")
+        check("a datum rides its custom property",
+              style["progress_token"] == "50%" and abs(style["progress_ratio"] - 0.5) < 0.02,
+              f"token={style['progress_token']!r} ratio={style['progress_ratio']:.3f}")
+        check("rack shows its empty state when it has no rows",
+              style["empty_visible"] and style["empty_text"] == "还没有记录",
+              f"visible={style['empty_visible']} text={style['empty_text']!r}")
 
         if out["error_bad_component"]:
             print(f"    refusal 1: {out['error_bad_component']}")
