@@ -1,0 +1,10 @@
+[project]
+name = "reflux"
+version = "0.0.0"
+description = "A spec plus a static shell: write frontend UI in any language"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+# The producer side is code you run from the repo, not a wheel to install.
+package = false
