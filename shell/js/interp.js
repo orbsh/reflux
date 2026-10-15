@@ -13,8 +13,10 @@
 // `slots` (data) — so `/tree/children/0/attrs/value` and `/slots/name` are both valid paths,
 // and "" means "the tree as a whole" (create's job, and what a whole-tree patch replaces).
 
-import { batch } from "solid-js";
+import { batch, untrack } from "solid-js";
 import { createStore, produce, unwrap } from "solid-js/store";
+
+import { validateFrame } from "./validate.js";
 
 const OPS = new Set(["create", "patch", "insert", "remove"]);
 
@@ -71,7 +73,8 @@ function validOp(op) {
 export function createInterp() {
   const [state, setState] = createStore({ tree: null, title: "", slots: {} });
 
-  const counters = { frames: 0, ops: 0, dropped: 0, rejected: 0, ignored: 0 };
+  const counters = { frames: 0, ops: 0, dropped: 0, rejected: 0, ignored: 0, unsupported: 0 };
+  const errors = []; // why a frame was refused — an unaccounted rejection is a bug
 
   // returns "ok" | "drop"  (a rejected op is caught by validOp before anything is applied)
   function applyOp(draft, op) {
@@ -156,6 +159,13 @@ export function createInterp() {
     }
     if (!Array.isArray(frame.ops) || !frame.ops.every(validOp)) {
       counters.rejected++; // whole frame refused: nothing is applied, not even the good ops
+      errors.push(`frame ${counters.frames}: a malformed op, or an unknown op name`);
+      return false;
+    }
+    const invalid = validateFrame(frame.ops, untrack(() => state.tree));
+    if (invalid) {
+      counters.rejected++; // a structure outside the closed vocabulary is never half-rendered
+      errors.push(`frame ${counters.frames}: ${invalid}`);
       return false;
     }
     const before = counters.dropped;
@@ -175,6 +185,7 @@ export function createInterp() {
   return {
     state,
     counters,
+    errors,
     apply,
     setSlot(name, value) {
       batch(() => setState("slots", name, value));

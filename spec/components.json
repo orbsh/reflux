@@ -15,7 +15,8 @@
     "an attr without a \"default\" is required at construction time",
     "components listed here are the ones the shell implements — never a wish list",
     "bind lists which bind keys a component accepts; payload entries name local state",
-    "primary names the one attr a leaf takes positionally in the SDK (text(\"hello\")); containers take their children positionally instead"
+    "primary names the one attr a leaf takes positionally in the SDK (text(\"hello\")); containers take their children positionally instead",
+    "a select's empty-selection option is an ordinary option child the producer sends — the shell does not synthesize one"
   ],
   "components": {
     "stack": {
@@ -108,7 +109,6 @@
     "select": {
       "family": "input",
       "attrs": {
-        "placeholder": { "type": "string", "default": "" },
         "disabled": { "type": "bool", "default": false }
       },
       "local": ["value"],

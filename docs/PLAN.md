@@ -8,7 +8,7 @@
 | T0 骨架与零工具链证明 | ✅ 2026-10-15 | `python3 tools/gate_t0.py` |
 | T1 规格（规格 → 壳表 + SDK，无漂移） | ✅ 2026-10-15 | `python3 tools/gen.py --check` ＋ `python3 -m unittest discover -s tests -t .` |
 | T2 壳的 store 与解释器（四个操作、路径寻址、槽订阅） | ✅ 2026-10-15 | `python3 tools/gate_t2.py` |
-| T3 组件分派与本地态 | ⏳ | — |
+| T3 组件分派与本地态（21 个组件、规格↔实现相等、变更计数） | ✅ 2026-10-15 | `python3 tools/gate_t3.py` |
 | T4 绑定与事件（source / event / payload） | ⏳ | — |
 | T5 路由 | ⏳ | — |
 | T6 导航 | ⏳ | — |
@@ -29,6 +29,10 @@ reflux/components_generated.py    ← 生成：各组件构造器（签名由规
 reflux/node.py                    线上形状 + 校验边界 make()
 reflux/server.py / demo.py        伺服壳（静态、无缓存、同源）；操作通道在 T2 落地
 shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
+shell/js/interp.js                壳的 store 与四个操作（T2）
+shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
+shell/js/render.js                组件分派表 + 本地态（T3）
+shell/css/reflux.css              壳自己持有的设计语言（组件与变体，按 data 属性选）
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
 tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希
 ```
@@ -89,3 +93,41 @@ Ran 16 tests ... OK
 - **浅读看不见深写**：原子性断言最初让观察者只读 `state.tree`，于是三操作帧里它一次都没重跑——
   既说明批处理是对的（写确实生效了），也说明**渲染层必须逐个字段读它真正要画的东西**：读父对象
   不会有通知。这条直接约束 T3 的写法。
+
+## T3 门的实测结果（2026-10-15）
+
+```
+[1/10] PASS  zero console errors                    none
+[2/10] PASS  spec == implementations                21 components, missing=[] extra=[]
+[3/10] PASS  create renders the tree                root=True text='initial'
+[4/10] PASS  one patch = one mutation, no element churn mutations=1 kinds=['childList'] churn=False text='patched'
+[5/10] PASS  siblings keep their DOM nodes          {'card': True, 'input': True, 'button': True}
+[6/10] PASS  slot write: zero DOM mutations, one reader updated mutations=0 value='from slot'
+[7/10] PASS  local state survives a store write     value='typed by hand'
+[8/10] PASS  unknown component: frame refused whole rejected+1 title='看板'
+[9/10] PASS  bad attr value: frame refused          rejected+1 err='.../attrs.tone: "purple" outside [...]'
+[10/10] PASS  create again: one root, nothing unsupported roots=1 unsupported=0
+```
+
+第 4 条是这里最硬的一条：一次文本 patch 在 DOM 上就是**一条**变更记录，且记录里没有元素节点
+进出——兄弟组件连 DOM 节点对象都是原来那个。第 6 条说明槽写连一条变更都不产生（`input.value`
+是属性不是 attribute），只有读它的那个组件动了。
+
+落地的形状：`shell/js/render.js`（21 个组件的实现表、子节点按行 id 复用、本地态）、
+`shell/js/validate.js`（节点与取值域校验）、`shell/css/reflux.css`（壳自己持有的设计语言）、
+`tools/gate_t3.py`。
+
+门抓到的三件事：
+
+- **`render()` 只求值一次**：Solid 运行期是 `insert(element, code(), ...)`——传进 `render` 的那个函数
+  不算响应式，被它**返回**的函数才算。壳的「有树画树、没树画探针」因此写成柯里化形式；否则
+  `create` 之后 store 明明变了（观察者实测重跑一次），DOM 还停在探针上。
+- **容器需要有身子**：子节点是按 `host.children[i]` 落位的，而卡片的标题是先塞进去的 chrome，
+  两边抢第 0 位。正形是子节点挂进一个 `.rx-body`（`display: contents`，布局透明），chrome 相对它
+  定位——卡片标题在前、表单提交键在后。`select` 是唯一例外（只吃 option，所以 `bodyIsHost`）。
+- **取值域校验要能定位**：patch 写的是 `/tree/.../attrs/tone`，值本身不是节点，单看值判不出合法与否。
+  `validateFrame(ops, tree)` 拿当前树把路径解到那个节点、取出该组件的域来判；`slots` 下的路径不碰
+  （那里是自由数据）。
+
+`select` 的规格同时收窄：去掉 `placeholder` 属性——空选项就是一个普通 `option` 子节点，由生产者送，
+壳不合成（规格的约定里记了这条）。
