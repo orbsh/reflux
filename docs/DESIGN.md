@@ -184,6 +184,21 @@ apply(frame):
 
 走**每组件白名单**加取值域（枚举、字符串、数字、布尔、受检 URL）。永不接受线上设置：`on*` 属性、`srcdoc`、`formaction`、任何非 http(s) 的 URL scheme。生产者受信，但线上内容仍是需要解析的输入；白名单把注入面压到零，同时充当 SDK 的生成依据。
 
+### 样式
+
+样式是壳的（§组件词表）：生产者只选组件与变体，见不到 class 字符串。落地的形状沿 fluxen 那份样式框架
+（`crates/ui-assets/assets/main.css`）：**层序先声明，再写各层**——`theme / base / layout / element / custom / style`。
+
+- `theme` 是令牌层：颜色用 `light-dark()` 随 `color-scheme` 切换；圆角、间距刻度和边框合成
+  （`--rx-border` 由宽／线型／色三件合成）都在这里。
+- `base` 是原生元素默认与页面本身；`layout` 是布局原语（stack / row / rack / form 的 flex 与间距刻度）；
+  `element` 是那几个自有原生元素外观的组件（input / textarea / select / checkbox / switch / button / link）；
+  `style` 是外形、组件 chrome 与变体角色。
+- 变体走两条通道，壳都不写内联样式：**枚举 → data 属性 → 层里改指一个令牌**
+  （`[data-tone="danger"] { --rx-role: var(--rx-tone-danger) }`，组件读 `--rx-role`，于是「角色」只声明一次，
+  这是 fluxen `.accent.border` 那个写法的同构）；**数据值 → 自定义属性**（进度条读 `--rx-value`）。
+- `custom` 层占着位、没有文件：宿主侧的样式逃生门仍是开放问题，层位先留好——将来那一步不必重开这个文件的层序。
+
 ### 导航
 
 同源链接点击、前进后退、地址栏改动都由壳处理：取路径、写 history、发 `reflux:nav` 上行，等生产者的新结构回来。这是壳唯一写 URL 的地方——漏掉它，任何导航都退化成整页刷新，细粒度全部作废。

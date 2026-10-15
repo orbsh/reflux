@@ -13,14 +13,8 @@
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { COMPONENTS } from "./components.generated.js";
 
-const GAP = { none: "0", sm: "0.25rem", md: "0.5rem", lg: "1rem" };
-const ALIGN = {
-  start: "flex-start",
-  center: "center",
-  end: "flex-end",
-  stretch: "stretch",
-  baseline: "baseline",
-};
+// Nothing here maps a variant to a style: the stylesheet owns the scale (a variant is a
+// data attribute, a datum is a custom property) — the shell never writes a class string.
 
 function make(tag, cls) {
   const el = document.createElement(tag);
@@ -112,7 +106,7 @@ const IMPL = {
             const a = nodeA()?.attrs ?? {};
             host.dataset.direction = a.direction;
             host.dataset.align = a.align;
-            host.style.gap = GAP[a.gap] ?? GAP.md;
+            host.dataset.gap = a.gap;
           });
         },
       },
@@ -129,7 +123,7 @@ const IMPL = {
             const a = nodeA()?.attrs ?? {};
             host.dataset.align = a.align;
             host.dataset.wrap = a.wrap;
-            host.style.gap = GAP[a.gap] ?? GAP.md;
+            host.dataset.gap = a.gap;
           });
         },
       },
@@ -163,11 +157,20 @@ const IMPL = {
       {
         cls: "rx-rack",
         chrome: (host, body, n) => {
+          // the empty state is the rack's own furniture, so it sits after the body and the
+          // rows keep the place the spec gives them
+          const empty = make("p", "rx-rack__empty");
+          host.append(empty);
           attr(n, "density", (v) => {
             host.dataset.density = v;
           });
-          attr(n, "empty_text", (v) => {
-            host.dataset.emptyText = v ?? "";
+          createEffect(() => {
+            const attrs = n()?.attrs ?? {};
+            const rows = (n()?.children ?? []).filter(Boolean);
+            empty.textContent = attrs.empty_text ?? "";
+            empty.hidden = rows.length > 0 || !attrs.empty_text;
+            // `follow: end` pins the view to the newest row — a no-op unless the rack scrolls
+            if (attrs.follow === "end" && rows.length > 0) host.scrollTop = host.scrollHeight;
           });
         },
       },
@@ -437,7 +440,8 @@ const IMPL = {
     const caption = make("span", "rx-progress__label");
     attr(nodeA, "value", (v) => {
       host.dataset.value = String(v ?? 0);
-      bar.style.inlineSize = `${Math.max(0, Math.min(100, Number(v) || 0))}%`;
+      // a datum, not a variant: it rides a custom property the stylesheet consumes
+      host.style.setProperty("--rx-value", `${Math.max(0, Math.min(100, Number(v) || 0))}%`);
     });
     attr(nodeA, "label", (v) => {
       caption.textContent = v ?? "";
