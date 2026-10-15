@@ -400,10 +400,6 @@ export const COMPONENTS = {
       "disabled": {
         "default": false,
         "type": "bool"
-      },
-      "placeholder": {
-        "default": "",
-        "type": "string"
       }
     },
     "bind": [

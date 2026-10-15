@@ -101,9 +101,9 @@ def row(*children: Node, align: "start" | "center" | "end" | "baseline" | None =
     return make("row", {"align": align, "gap": gap, "wrap": wrap}, children, id=id, source=source)
 
 
-def select(*children: Node, disabled: bool | None = False, placeholder: str | None = '', source: str | None = None, event: str | None = None, payload: list[str] | None = None, id: str | None = None) -> Node:
+def select(*children: Node, disabled: bool | None = False, source: str | None = None, event: str | None = None, payload: list[str] | None = None, id: str | None = None) -> Node:
     """input: many children; local state: value"""
-    return make("select", {"disabled": disabled, "placeholder": placeholder}, children, id=id, source=source, event=event, payload=payload)
+    return make("select", {"disabled": disabled}, children, id=id, source=source, event=event, payload=payload)
 
 
 def stack(*children: Node, align: "start" | "center" | "end" | "stretch" | None = 'stretch', direction: "column" | "row" | None = 'column', gap: "none" | "sm" | "md" | "lg" | None = 'md', source: str | None = None, id: str | None = None) -> Node:
