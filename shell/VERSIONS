@@ -1,0 +1,18 @@
+# Vendored shell assets — pinned, self-hosted, no CDN at runtime.
+
+solid-js 1.9.9
+
+vendor/solid-js/solid.js sha256 3a8938a05a5f6d9614fc5bec2618f8c3c0e0351a8f48cb7efc7afec8d7703de8 51089
+vendor/solid-js/web.js sha256 e7493ea760279b2aa51b310c5f39b374853adaf41973f4f67ae90d8375997f68 30544
+vendor/solid-js/store.js sha256 6a977d721a540df50ce4aeeec1d15f441e0799cd54397a78d8c56fd417e43089 15165
+vendor/solid-js/h.js sha256 81f7c4495cc95f453b7ddf331521028cd3663f2afc8cab316b4276a0aa0fb67d 4300
+
+source https://unpkg.com/solid-js@1.9.9/
+
+# Bump procedure
+# 1. change the version line above
+# 2. re-download the four files into shell/vendor/solid-js/ (paths on the source line)
+# 3. refresh the sha256 + size lines (sha256sum *.js)
+# 4. re-check the bare specifiers each file imports and keep shell/index.html's import
+#    map in step — tests/test_shell_assets.py fails if the map misses one
+# 5. run: python3 -m unittest discover -s tests
