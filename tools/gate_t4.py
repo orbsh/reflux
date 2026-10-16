@@ -250,9 +250,11 @@ def main() -> int:
             f"frame={ghost_frames} refused+{refused} handlers+{handled} log={ghost_log!r}",
         )
 
+        before_add = len(received(app, "row.add"))
         cdp.click_js(by_text("button", "加一行"))
-        wait(lambda: received(app, "row.add"))
-        alive = len(received(app, "row.add")) >= 2 and bool(app.sessions)
+        # wait for the *new* frame: a predicate satisfied by the earlier one is not a wait at all
+        wait(lambda: len(received(app, "row.add")) > before_add)
+        alive = len(received(app, "row.add")) > before_add and bool(app.sessions)
         check(
             "after a refusal the session still works",
             alive,

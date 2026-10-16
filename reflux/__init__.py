@@ -9,11 +9,15 @@ Layering, so imports never cycle:
   components_generated  the builders (generated)
   ui / ops           the writing layer: components addressed as one object, and frame builders
   channel / events / app / server   the producer: the shell, the /ws channel, the registry
+  routes / cli       the route table (a path declared where its handler is) and the printing of it
 
-    from reflux import ops, ui
+    from reflux import ops, route, ui
 
     page = ui.stack(ui.text("hello", source="greeting"), ui.button("+", event="counter.inc"))
     session.draw(ops.patch("/slots/greeting", "你好"))
+
+    @route("/blog/{slug}", title="文章")
+    def post(session, match): ...
 """
 
 from . import ops, ui
@@ -21,6 +25,7 @@ from .app import App, Session
 from .components_generated import *  # noqa: F403  (the builders, generated from the spec)
 from .events import Registry, RegistryError
 from .node import Node, make
+from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
 from .tables_generated import (
     BIND_KEYS,
     COMPONENTS,
@@ -41,6 +46,13 @@ __all__ = [
     "RegistryError",
     "ops",
     "ui",
+    "route",
+    "Routes",
+    "Route",
+    "Match",
+    "RoutesError",
+    "discover",
+    "DEFAULT",
     "COMPONENTS",
     "OPS",
     "BIND_KEYS",
