@@ -10,7 +10,7 @@
 | T2 壳的 store 与解释器（四个操作、路径寻址、槽订阅） | ✅ 2026-10-15 | `python3 tools/gate_t2.py` |
 | T3 组件分派与本地态（21 个组件、规格↔实现相等、变更计数） | ✅ 2026-10-15 | `python3 tools/gate_t3.py` |
 | T4 绑定与事件（source / event / payload / fire、委托监听、通道与上行帧、拒收） | ✅ 2026-10-16 | `python3 tools/gate_t4.py` |
-| T5 路由 | ⏳ | — |
+| T5 路由（装饰器与注册器、发现、择优键、并列歧义、CLI 打印） | ✅ 2026-10-16 | `python3 -m unittest tests.test_routes` ＋ 全套 |
 | T6 导航 | ⏳ | — |
 | T7 会话与心跳 | ⏳ | — |
 | T8 故障注入 | ⏳ | — |
@@ -35,6 +35,8 @@ reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdl
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
 reflux/app.py                     应用：壳 + /ws + 注册表；收到 hello 发首帧
 reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子）
+reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
+reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注册表
 shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
 shell/js/interp.js                壳的 store 与四个操作（T2）
 shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
@@ -45,7 +47,7 @@ shell/css/main.css                壳自己持有的设计语言：层序 theme/
                                   （框架与 fluxen 的 ui-assets 样式一致），变体走 data 属性改指令牌
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
 tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希、
-                                  事件注册表、通道编解码、写入层
+                                  事件注册表、通道编解码、写入层、路由（含 route_fixture 样例包）
 ```
 
 Python SDK 就是这个仓的 `reflux/` 包（语言无关的东西在 `spec/`，别的语言日后落在
@@ -191,16 +193,50 @@ Ran 16 tests ... OK
 `tools/gate_t4.py`；`tools/cdp.py` 加了真鼠标/真按键夹具，壳改由 App 伺服（T0/T2/T3 跟着走这条，它们照旧直接
 drive `window.reflux`）。
 
-门抓到的五件事：
+门抓到的六件事：
 
 - **真输入暴露了夹具的盲区**：默认无头窗口是 800×600，演示页比它高——第 8 行的探针行在折叠线以下，点击落在
   视口外（`document.activeElement` 仍是 `body`），于是敲键无处可去、`change` 自然不响。页内 `dispatchEvent`
   的写法会「通过」这一条。夹具改成 `--window-size=1280,1600` 且点击前先 `scrollIntoView`。
 - **帧到了不等于画了**：表单那条断言最初在帧一到达就读 DOM，于是同一份代码一次绿一次红。断言必须等它要断言的
   东西（这里等回显/摘要在 DOM 里出现），等帧只说明生产者收到了。
+- **等一个被旧状态满足的条件等于没等**（T5 轮的全套跑动抓到）：「拒收之后会话照常工作」那条写的是
+  `wait(lambda: received(app, "row.add"))`，而前一条检查早就收过同名帧——wait 立即返回，断言在第二帧到达
+  之前就判了。等新事件要等**增量**（`len(...) > before`）。
 - **`register(name)` 只是拿装饰器**：门里写 `events.register("probe.change")` 没给处理器，等于什么都没注册，
   于是探针事件被判未注册拒收。注册表的行为是对的（日志里逐字写着未注册），错的是调用方——门里改成显式传处理器。
 - **壳会上行未注册的名字，拒收在生产侧**：这一条最初写成「没有帧上行」，是错的预期——壳不可能知道生产者的
   注册表，所以帧照发，由生产者拒收并计数。断言改成：这一帧逐字过 socket、注册表拒收、处理器一次都没跑。
 - **`code` 组件的双写**（T3 遗留）：外层元素上挂的 `value` 效果会在槽写入时把里面的 `code` 子元素抹掉。
   让 `source` 真的读槽时它露了出来；现在 `code` 直接建自己的内层，不再走 `textish`。
+
+## T5 门的实测结果（2026-10-16）
+
+```
+Ran 29 tests ... OK          python3 -m unittest tests.test_routes（表驱动，无浏览器）
+Ran 77 tests ... OK          全套（原 48）
+[gen] up to date: spec v0.2.0, 21 components, 3 artifacts
+T0 GATE PASSED   T2 GATE PASSED   T3 GATE PASSED   T4 GATE PASSED
+```
+
+`python3 -m reflux.cli routes tests.route_fixture` 的输出：
+
+```
+[routes] imported 3 module(s) from tests.route_fixture
+path               source                           metadata
+/                  tests.route_fixture.blog
+/admin             tests.route_fixture.admin        title='后台'
+/blog/{rest:path}  tests.route_fixture.blog         title='兜底'
+/blog/{slug}       tests.route_fixture.blog         title='文章'
+/posts             tests.route_fixture.blog
+```
+
+落地的形状：`reflux/routes.py`（`Route` 一条声明、`Match` 一次匹配、`Routes` 表；
+`compile_path` / `rank` / `can_both_match` / `match_segments` 四个纯函数；`discover` 导入给定包并遍历
+子模块，一个模块导入失败即启动错误；默认表 `DEFAULT` 与挂在它上面的 `route`）、`reflux/cli.py`（`routes`
+动词，打印路径、来源模块、元数据字段）、`tests/test_routes.py`（29 例）、`tests/route_fixture/` 与
+`tests/route_fixture_broken/`（后者有一个导入即失败的模块，专供「不跳过」那条断言）。
+
+**路由这一层第一跑就绿**（29/29），没抓到设计缺陷——表驱动把每一形状都写成了案例，包括「换 import 顺序
+匹配结果逐例一致」和「两个都能匹配同一路径且择优键相同 ⇒ 启动即报错」。`reflux events` 那一栏推迟到 T9，
+理由记在 DESIGN 的路由节（打印事件表要先有「从包装配出应用」的约定，路由表不需要）。
