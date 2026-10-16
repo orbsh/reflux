@@ -1,9 +1,9 @@
 // Reflux shell — the channel: one WebSocket per session, ops down, events up.
 //
-// The shell speaks first. On open it sends `reflux:hello` with the two things only the client
-// knows — the path it is standing on, and the previous session's token when there is one — and
-// the producer answers with structure. Anything the shell cannot send is counted, never
-// silently dropped: silent degradation is not an option in this design.
+// The shell speaks first. On open it sends `reflux:hello` with the one thing only the client
+// knows — the path it is standing on — and the producer answers with structure. Nothing crosses
+// connections: the socket is the session, and a refresh is a new one. Anything the shell cannot
+// send is counted, never silently dropped: silent degradation is not an option in this design.
 //
 // Frames are JSON text, one frame per message: `{ev, ops}` down, `{event, id, data}` up.
 
@@ -26,7 +26,7 @@ export function openChannel({ onFrame, onNote = () => {} }) {
   const socketFor = new WebSocket(url);
   socket = socketFor;
   socket.onopen = () => {
-    send({ event: "reflux:hello", data: { path: location.pathname, token: null } });
+    send({ event: "reflux:hello", data: { path: location.pathname } });
   };
   socket.onmessage = (message) => {
     let frame;

@@ -38,7 +38,7 @@ class TestPageResolution(unittest.TestCase):
     def test_hello_resolves_the_path_it_carries(self) -> None:
         app = self.app("/a")
         session = FakeSession(path="/")
-        app.events.dispatch(session, {"event": "reflux:hello", "data": {"path": "/a", "token": None}})
+        app.events.dispatch(session, {"event": "reflux:hello", "data": {"path": "/a"}})
         self.assertEqual(session.path, "/a")
         self.assertEqual(len(session.frames), 1)
         self.assertEqual(session.frames[0]["ev"], "draw")

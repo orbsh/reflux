@@ -80,14 +80,14 @@ def main() -> int:
         check("zero console errors", not errors, "none" if not errors else str(errors))
 
         # 1. cold start: the path in the URL is the page the producer drew
-        wait(lambda: received(app, HELLO) and app.sessions)
+        wait(lambda: received(app, HELLO) and app.live())
         hello = received(app, HELLO)
-        session = app.sessions[0] if app.sessions else None
+        session = app.live()[0] if app.live() else None
         match = app.routes.match("/about")
         check(
             "cold start: hello carries the deep link, that page is drawn",
             bool(hello)
-            and hello[0]["data"] == {"path": "/about", "token": None}
+            and hello[0]["data"] == {"path": "/about"}
             and session is not None
             and session.path == "/about"
             and cdp.eval("location.pathname") == "/about"
@@ -110,11 +110,11 @@ def main() -> int:
             "a link click is a request, not a page load",
             len(received(app, NAV)) == navs_before + 1
             and len(received(app, HELLO)) == 1
-            and len(app.sessions) == 1
+            and len(app.live()) == 1
             and cdp.eval("window.__gateMark") == "alive"
             and cdp.eval("location.pathname") == "/",
             f"nav frames={len(received(app, NAV))} hellos={len(received(app, HELLO))} "
-            f"sessions={len(app.sessions)} mark={cdp.eval('window.__gateMark')!r} "
+            f"sessions={len(app.live())} mark={cdp.eval('window.__gateMark')!r} "
             f"location={cdp.eval('location.pathname')!r}",
         )
 
@@ -181,7 +181,7 @@ def main() -> int:
         )
 
         # 6. the route contract is the path; the query stays in the address bar
-        app.sessions[0].draw(
+        app.live()[0].draw(
             ops.insert(
                 "/tree/children",
                 ui.row(ui.link("/about?x=1", label="带查询串"), gap="sm", id="query-row"),
@@ -203,7 +203,7 @@ def main() -> int:
         )
 
         # 7. an unknown path: the built-in 404, the address left alone, the session intact
-        app.sessions[0].draw(
+        app.live()[0].draw(
             ops.insert(
                 "/tree/children",
                 ui.row(ui.link("/nope", label="幽灵页", id="ghost-link"), gap="sm", id="ghost-row"),
@@ -211,27 +211,27 @@ def main() -> int:
             )
         )
         wait(lambda: cdp.eval("!!" + link("幽灵页")))
-        sessions_before = len(app.sessions)  # a ctrl-click's new tab is a session of its own; this
+        sessions_before = len(app.live())  # a ctrl-click's new tab is a session of its own; this
         navs_before = len(received(app, NAV))  # click must not add one
         cdp.click_js(link("幽灵页"))
         wait(lambda: len(received(app, NAV)) > navs_before)
         wait(lambda: "404" in headings(cdp))
-        still_here = session is not None and any(s.id == session_id for s in app.sessions)
+        still_here = session is not None and any(s.id == session_id for s in app.live())
         check(
             "unknown path: the built-in 404 structure, nothing else moved",
             cdp.eval("location.pathname") == "/nope"
             and headings(cdp) == ["404"]
             and still_here
-            and len(app.sessions) == sessions_before
+            and len(app.live()) == sessions_before
             and session is not None
             and session.path == "/nope",
             f"location={cdp.eval('location.pathname')!r} headings={headings(cdp)} "
-            f"sessions={len(app.sessions)} (was {sessions_before}) session.path={session.path if session else None!r}",
+            f"sessions={len(app.live())} (was {sessions_before}) session.path={session.path if session else None!r}",
         )
 
         # 8. an app that registers a tail route answers unknown paths itself
         app.routes.add("/{rest:path}", fallback_page)
-        app.sessions[0].draw(
+        app.live()[0].draw(
             ops.insert(
                 "/tree/children",
                 ui.row(ui.link("/nope", label="幽灵页", id="ghost-link-2"), gap="sm", id="ghost-row-2"),
