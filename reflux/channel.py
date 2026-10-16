@@ -6,6 +6,11 @@ smallest one that is still correct: text frames, fragmentation reassembled, ping
 close answered. A binary frame closes the connection — the protocol is JSON text, and a second
 encoding would mean a second schema to keep in step.
 
+Two things this layer owns because it is the layer that knows them: ``last_seen`` (every byte
+read from the peer counts as activity — the watchdog judges a session by it, so a peer that
+vanished without a FIN is caught) and a write lock (the app's own thread and the watchdog may
+write the same socket; without the lock their frames would interleave).
+
     from reflux.channel import ChannelClosed, upgrade
 
     channel = upgrade(handler)     # inside an http.server handler's do_GET
@@ -18,12 +23,17 @@ from __future__ import annotations
 import base64
 import hashlib
 import struct
+import threading
+import time
 from typing import IO, Iterator
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 WS_PATH = "/ws"
 
 TEXT, BINARY, CLOSE, PING, PONG, CONTINUATION = 0x1, 0x2, 0x8, 0x9, 0xA, 0x0
+
+# Application close codes (RFC 6455 §7.4.2 reserves 4000-4999 for these).
+JUDGED_DEAD = 4001
 
 
 class ChannelClosed(Exception):
@@ -47,10 +57,13 @@ def is_upgrade(headers) -> bool:
 class Channel:
     """One upgraded connection. Text in, text out; everything else is protocol plumbing."""
 
-    def __init__(self, rfile: IO[bytes], wfile: IO[bytes]) -> None:
+    def __init__(self, rfile: IO[bytes], wfile: IO[bytes], sock=None) -> None:
         self.rfile = rfile
         self.wfile = wfile
+        self.sock = sock  # kept so a judged-dead peer can be woken out of its blocked read
         self.closed = False
+        self.last_seen = time.monotonic()
+        self._write = threading.Lock()
 
     # --- reading -------------------------------------------------------------------------
 
@@ -58,6 +71,7 @@ class Channel:
         data = self.rfile.read(count)
         if data is None or len(data) < count:
             raise ChannelClosed("the peer closed mid-frame")
+        self.last_seen = time.monotonic()
         return data
 
     def recv(self) -> str | None:
@@ -113,17 +127,39 @@ class Channel:
         else:
             head.append(127)
             head += struct.pack(">Q", size)
-        self.wfile.write(bytes(head) + payload)
-        self.wfile.flush()
+        with self._write:  # the app's own thread and the watchdog may write this socket
+            if self.closed and opcode != CLOSE:
+                return
+            self.wfile.write(bytes(head) + payload)
+            self.wfile.flush()
 
     def send(self, text: str) -> None:
         self._send(TEXT, text.encode("utf-8"))
+
+    def ping(self, payload: bytes = b"") -> None:
+        """A protocol-level ping: the peer's answer is the only proof it is still there."""
+        self._send(PING, payload)
 
     def close(self, code: int = 1000) -> None:
         if self.closed:
             return
         self._send(CLOSE, struct.pack(">H", code))
         self.closed = True
+
+    def abort(self) -> None:
+        """Stop waiting on a peer that is not coming back: shut its socket down.
+
+        Closing a descriptor does not wake another thread blocked in ``read``; ``shutdown`` does,
+        which is what lets a judged-dead session's reader thread end instead of hanging forever.
+        """
+        import socket  # only this method needs it, and only for SHUT_RDWR
+
+        self.closed = True
+        if self.sock is not None:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
     def __iter__(self) -> Iterator[str]:
         while True:
@@ -137,7 +173,8 @@ def upgrade(handler) -> Channel:
     """Answer the upgrade on an ``http.server`` handler and hand back the channel.
 
     The handler's connection is now the channel's; the caller owns the read loop and must
-    not let the HTTP machinery write a response for this request.
+    not let the HTTP machinery write a response for this request. The socket is handed on as
+    well, so a judged-dead peer can be shut out of its blocked read.
     """
     key = handler.headers.get("Sec-WebSocket-Key")
     if not key:
@@ -148,4 +185,4 @@ def upgrade(handler) -> Channel:
     handler.send_header("Sec-WebSocket-Accept", accept_key(key))
     handler.end_headers()
     handler.close_connection = True
-    return Channel(handler.rfile, handler.wfile)
+    return Channel(handler.rfile, handler.wfile, handler.connection)

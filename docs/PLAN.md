@@ -23,7 +23,7 @@
 | T4 绑定与事件（source / event / payload / fire、委托监听、通道与上行帧、拒收） | ✅ 2026-10-16 | `python3 tools/gate_t4.py` |
 | T5 路由（装饰器与注册器、发现、择优键、并列歧义、CLI 打印） | ✅ 2026-10-16 | `python3 -m unittest tests.test_routes` ＋ 全套 |
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
-| T7 会话与心跳（token 签发、hello 复用、ping 判死回收） | ⏳ | — |
+| T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入 | ⏳ | — |
 | T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通四类交互） | ⏳ | — |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ | — |
@@ -295,3 +295,34 @@ path               source                           metadata
   「等你要断言的东西」，这里要等的是 DOM。
 
 `reflux events`、重定向、路由中间件与数据 loader 仍按 DESIGN 的开放问题挂着，不在这一轮。
+
+## T7 门的实测结果（2026-10-16）
+
+```
+[1/4] PASS  a connection is one session, standing where its hello said
+      issued=1 live=1 path='/'
+[2/4] PASS  a reload leaves exactly one session    issued=2 reclaimed=1 live=1
+[3/4] PASS  a connection registers a session       live=1
+[4/4] PASS  a deaf client is judged dead and the table empties live=0 dead=1 reclaimed=0
+```
+
+[1]/[2] 走真浏览器（起壳、读表、`Page.reload`、再读表，用默认心跳所以没有竞速）；[3]/[4] 走 stdlib 客户端，
+心跳参数缩到 0.1s / 0.3s——那条客户端读完 hello 就不再应答、也不发 FIN。
+
+落地的形状：`reflux/app.py`（会话表按**连接身份**键、`handle` 登记与回收、`watch()` 一次判死扫描、心跳线程、
+计数、读快照的 `App.live()`）、`reflux/channel.py`（`last_seen`、写锁、`ping()`、`abort()`、`JUDGED_DEAD`）、
+`shell/js/channel.js`（hello 不再带 token）、`tests/test_session.py`（5 例，除心跳线程那例外都不给时钟——直接
+调一次 `watch()`）、`tools/gate_t7.py`（4 条，两段时钟）。
+
+这一轮改了三件设计：
+
+- **token 与 cookie 一起退场**（裁决）：会话就是连接，socket 本身就是持续连接，没有跨连接要搬的状态；身份改成
+  连接上的一个 `login` 事件（对外部署才需要）。原第三条门槛「伪造 token 只开新会话」随之退休——没有 token
+  就没有可伪造的东西。
+- **判死要真的能回收线程**：只写一个 close 帧唤不醒阻塞在 `read` 上的连接线程，所以 `Channel` 拿到了 socket
+  并多一个 `abort()`（`shutdown`）。没有这一条，「会话表归零」只是表上的归零，线程还挂着。
+- **判死与断线不能计两次**：判死那条先出表、再记账——否则被 `shutdown` 唤醒的读线程可能抢先删掉，同一个会话
+  同时算 `dead` 和 `reclaimed`。`[4/4]` 里的 `reclaimed=0` 就是这条的断言。
+
+门还抓出一处我漏判的影响面：**T4 与 T6 直接按列表下标读会话表**（`app.sessions[0]`），表换成身份键的 dict
+之后两门当场 `KeyError`。修法是给应用加一个读快照的 `App.live()`，两门改用它——门不该依赖容器的形状。

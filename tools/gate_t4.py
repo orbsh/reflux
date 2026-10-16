@@ -91,7 +91,7 @@ def main() -> int:
         hellos = received(app, HELLO)
         first_frame = app.log[0][1] if app.log else {}
         sends = sent(app)
-        session = app.sessions[0] if app.sessions else None
+        session = app.live()[0] if app.live() else None
         check(
             "hello first (with its path); structure after",
             bool(hellos)
@@ -216,7 +216,7 @@ def main() -> int:
             gap="sm",
             id="probe-row",
         )
-        app.sessions[0].draw(ops.insert("/tree/children", probe_row, anchor="end"))
+        app.live()[0].draw(ops.insert("/tree/children", probe_row, anchor="end"))
         wait(lambda: cdp.eval("!!" + by_placeholder(".rx-input", "probe")))
 
         cdp.click_js(by_placeholder(".rx-input", "probe"))
@@ -254,11 +254,11 @@ def main() -> int:
         cdp.click_js(by_text("button", "加一行"))
         # wait for the *new* frame: a predicate satisfied by the earlier one is not a wait at all
         wait(lambda: len(received(app, "row.add")) > before_add)
-        alive = len(received(app, "row.add")) > before_add and bool(app.sessions)
+        alive = len(received(app, "row.add")) > before_add and bool(app.live())
         check(
             "after a refusal the session still works",
             alive,
-            f"row.add frames={len(received(app, 'row.add'))} sessions={len(app.sessions)}",
+            f"row.add frames={len(received(app, 'row.add'))} sessions={len(app.live())}",
         )
 
         # 7. every component frame has exactly the documented shape
