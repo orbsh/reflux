@@ -53,6 +53,7 @@ class TestSpecShape(unittest.TestCase):
     def test_closed_sets(self) -> None:
         self.assertEqual(spec["ops"], ["create", "patch", "insert", "remove"])
         self.assertEqual(spec["bind_keys"], ["source", "event", "payload"])
+        self.assertEqual(spec["fire_events"], ["change", "submit", "click"])
         self.assertEqual(spec["reserved_prefix"], "reflux:")
 
     def test_every_component_states_local_state_and_bind(self) -> None:
@@ -61,6 +62,22 @@ class TestSpecShape(unittest.TestCase):
                 self.assertIn("local", comp)
                 self.assertIn("bind", comp)
                 self.assertTrue(comp["attrs"], "a component with no attrs carries no data")
+
+    def test_uplink_timing_is_declared_per_component(self) -> None:
+        """A component that accepts `event` says when it fires; one that does not fires never."""
+        fires = {name: comp["fire"] for name, comp in spec["components"].items()}
+        self.assertEqual(fires["button"], ["click"])
+        self.assertEqual(fires["form"], ["submit"])
+        for name in ("input", "textarea", "select", "checkbox", "switch"):
+            self.assertEqual(fires[name], ["change"], name)
+        self.assertEqual(fires["text"], [])
+        for name, fire in fires.items():
+            with self.subTest(component=name):
+                self.assertEqual(
+                    bool(fire),
+                    "event" in spec["components"][name]["bind"],
+                    f"{name}: fire={fire} bind={spec['components'][name]['bind']}",
+                )
 
 
 class TestBothSidesAgree(unittest.TestCase):
@@ -75,6 +92,16 @@ class TestBothSidesAgree(unittest.TestCase):
 
         self.assertEqual(from_shell, reflux.COMPONENTS)
         self.assertEqual(reflux.SPEC_VERSION, spec["spec_version"])
+
+    def test_both_sides_dispatch_the_same_event_types(self) -> None:
+        js = (REPO / "shell" / "js" / "components.generated.js").read_text(encoding="utf-8")
+        fires = re.search(r"export const FIRE_EVENTS = (\[.*?\]);\n", js)
+        self.assertIsNotNone(fires, "the shell's firing event set is not in the generated file")
+        assert fires is not None
+
+        import reflux
+
+        self.assertEqual(json.loads(fires.group(1)), reflux.FIRE_EVENTS)
 
 
 class TestBoundary(unittest.TestCase):

@@ -9,7 +9,14 @@ Regenerate: python3 tools/gen.py      Verify: python3 tools/gen.py --check
 from __future__ import annotations
 
 from .node import Node, make
-from .tables_generated import BIND_KEYS, COMPONENTS, OPS, RESERVED_PREFIX, SPEC_VERSION
+from .tables_generated import (
+    BIND_KEYS,
+    COMPONENTS,
+    FIRE_EVENTS,
+    OPS,
+    RESERVED_PREFIX,
+    SPEC_VERSION,
+)
 
 __all__ = [
     'badge', 'button', 'card', 'checkbox', 'code', 'empty', 'field', 'form', 'heading', 'image', 'input', 'link', 'option', 'progress', 'rack', 'row', 'select', 'stack', 'switch', 'text', 'textarea',
@@ -17,6 +24,7 @@ __all__ = [
     "RESERVED_PREFIX",
     "OPS",
     "BIND_KEYS",
+    "FIRE_EVENTS",
     "COMPONENTS",
 ]
 
@@ -71,9 +79,9 @@ def image(src: str, *, alt: str | None = '', fit: "contain" | "cover" | None = '
     return make("image", {"alt": alt, "fit": fit, "src": src}, (), id=id, source=source)
 
 
-def input(*, clearable: bool | None = False, disabled: bool | None = False, kind: "text" | "password" | "email" | "number" | "search" | None = 'text', placeholder: str | None = '', source: str | None = None, event: str | None = None, payload: list[str] | None = None, id: str | None = None) -> Node:
+def input(*, disabled: bool | None = False, kind: "text" | "password" | "email" | "number" | "search" | None = 'text', placeholder: str | None = '', source: str | None = None, event: str | None = None, payload: list[str] | None = None, id: str | None = None) -> Node:
     """input: none children; local state: value, focus"""
-    return make("input", {"clearable": clearable, "disabled": disabled, "kind": kind, "placeholder": placeholder}, (), id=id, source=source, event=event, payload=payload)
+    return make("input", {"disabled": disabled, "kind": kind, "placeholder": placeholder}, (), id=id, source=source, event=event, payload=payload)
 
 
 def link(href: str, *, external: bool | None = False, label: str | None = '', source: str | None = None, id: str | None = None) -> Node:

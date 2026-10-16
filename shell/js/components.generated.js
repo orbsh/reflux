@@ -1,10 +1,11 @@
 // GENERATED from spec/components.json — do not edit.
 // Regenerate: python3 tools/gen.py      Verify: python3 tools/gen.py --check
 
-export const SPEC_VERSION = "0.1.0";
+export const SPEC_VERSION = "0.2.0";
 export const RESERVED_PREFIX = "reflux:";
 export const OPS = ["create", "patch", "insert", "remove"];
 export const BIND_KEYS = ["source", "event", "payload"];
+export const FIRE_EVENTS = ["change", "submit", "click"];
 export const COMPONENTS = {
   "badge": {
     "attrs": {
@@ -27,6 +28,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -61,6 +63,9 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "nav",
+    "fire": [
+      "click"
+    ],
     "local": [],
     "primary": "label"
   },
@@ -84,6 +89,7 @@ export const COMPONENTS = {
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "checkbox": {
@@ -103,6 +109,9 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "checked"
     ]
@@ -122,6 +131,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -140,6 +150,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "feedback",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -160,6 +171,7 @@ export const COMPONENTS = {
     "bind": [],
     "children": "one",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "form": {
@@ -178,6 +190,9 @@ export const COMPONENTS = {
     ],
     "children": "many",
     "family": "container",
+    "fire": [
+      "submit"
+    ],
     "local": [
       "fields"
     ]
@@ -199,6 +214,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -224,15 +240,12 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "src"
   },
   "input": {
     "attrs": {
-      "clearable": {
-        "default": false,
-        "type": "bool"
-      },
       "disabled": {
         "default": false,
         "type": "bool"
@@ -259,6 +272,9 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "value",
       "focus"
@@ -283,6 +299,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "nav",
+    "fire": [],
     "local": [],
     "primary": "href"
   },
@@ -303,6 +320,7 @@ export const COMPONENTS = {
     "bind": [],
     "children": "none",
     "family": "input",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -327,6 +345,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "feedback",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -356,6 +375,7 @@ export const COMPONENTS = {
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": [
       "scroll"
     ]
@@ -393,6 +413,7 @@ export const COMPONENTS = {
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "select": {
@@ -409,6 +430,9 @@ export const COMPONENTS = {
     ],
     "children": "many",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "value"
     ]
@@ -446,6 +470,7 @@ export const COMPONENTS = {
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "switch": {
@@ -465,6 +490,9 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "checked"
     ]
@@ -502,6 +530,7 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -529,6 +558,9 @@ export const COMPONENTS = {
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "value",
       "focus"

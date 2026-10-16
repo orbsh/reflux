@@ -35,7 +35,7 @@ SCENARIO = r"""
     bind: {}, children: [
       { type: "card", id: "card-1", attrs: { title: "看板", tone: "plain" }, bind: {}, children: [
         { type: "text", id: "text-1", attrs: { value: "initial", tone: "default", size: "md", wrap: true }, bind: {}, children: [] },
-        { type: "input", id: "input-1", attrs: { kind: "text", placeholder: "名字", disabled: false, clearable: false }, bind: { source: "name" }, children: [] },
+        { type: "input", id: "input-1", attrs: { kind: "text", placeholder: "名字", disabled: false }, bind: { source: "name" }, children: [] },
         { type: "button", id: "button-1", attrs: { label: "do", variant: "primary", size: "md", disabled: false }, bind: { event: "do" }, children: [] },
       ] },
       { type: "rack", id: "rack-1", attrs: { density: "normal", empty_text: "", follow: "none" }, bind: {}, children: [

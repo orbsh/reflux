@@ -9,7 +9,7 @@
 | T1 规格（规格 → 壳表 + SDK，无漂移） | ✅ 2026-10-15 | `python3 tools/gen.py --check` ＋ `python3 -m unittest discover -s tests -t .` |
 | T2 壳的 store 与解释器（四个操作、路径寻址、槽订阅） | ✅ 2026-10-15 | `python3 tools/gate_t2.py` |
 | T3 组件分派与本地态（21 个组件、规格↔实现相等、变更计数） | ✅ 2026-10-15 | `python3 tools/gate_t3.py` |
-| T4 绑定与事件（source / event / payload） | ⏳ | — |
+| T4 绑定与事件（source / event / payload / fire、委托监听、通道与上行帧、拒收） | ✅ 2026-10-16 | `python3 tools/gate_t4.py` |
 | T5 路由 | ⏳ | — |
 | T6 导航 | ⏳ | — |
 | T7 会话与心跳 | ⏳ | — |
@@ -21,21 +21,31 @@
 ## 已落地的形状
 
 ```
-spec/components.json              单一来源：组件/属性白名单/取值域/绑定/操作/保留前缀
+spec/components.json              单一来源：组件/属性白名单/取值域/绑定/上行时机/操作/保留前缀
 tools/gen.py                      规格 → 三件产物；--check 做漂移门
 tools/gate_t0.py                  T0 门：真起 chromium，经 CDP 断言（stdlib-only）
-reflux/tables_generated.py        ← 生成：纯数据（壳与各 SDK 共用的词表）
+tools/gate_t2.py / t3.py / t4.py  各任务的门；共用 tools/cdp.py 的夹具（含真鼠标/真按键）
+reflux/tables_generated.py        ← 生成：纯数据（壳与各 SDK 共用的词表，含 FIRE_EVENTS）
 reflux/components_generated.py    ← 生成：各组件构造器（签名由规格派生）
 reflux/node.py                    线上形状 + 校验边界 make()
-reflux/server.py / demo.py        伺服壳（静态、无缓存、同源）；操作通道在 T2 落地
+reflux/ui.py                      写入层：规格词表寻址成一个模块（ui.stack(...)）
+reflux/ops.py                     写入层：四个操作与 draw 的构造器（形状在边界校验）
+reflux/server.py / demo.py        伺服壳（静态、无缓存、同源）＋ /ws 升级
+reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
+reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
+reflux/app.py                     应用：壳 + /ws + 注册表；收到 hello 发首帧
+reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子）
 shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
 shell/js/interp.js                壳的 store 与四个操作（T2）
 shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
-shell/js/render.js                组件分派表 + 本地态（T3）
-shell/css/main.css               壳自己持有的设计语言：层序 theme/base/layout/element/custom/style
-                                 （框架与 fluxen 的 ui-assets 样式一致），变体走 data 属性改指令牌
+shell/js/render.js                组件分派表 + 本地态 + source 读槽（T3/T4）
+shell/js/events.js                委托监听：认领规则、payload 收集、上行帧（T4）
+shell/js/channel.js               壳的通道：连上即 hello，下行交解释器（T4）
+shell/css/main.css                壳自己持有的设计语言：层序 theme/base/layout/element/custom/style
+                                  （框架与 fluxen 的 ui-assets 样式一致），变体走 data 属性改指令牌
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
-tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希
+tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希、
+                                  事件注册表、通道编解码、写入层
 ```
 
 Python SDK 就是这个仓的 `reflux/` 包（语言无关的东西在 `spec/`，别的语言日后落在
@@ -130,8 +140,8 @@ Ran 16 tests ... OK
 空列表要真的显示 `empty_text`。
 
 `rack` 的 `empty_text` 与 `follow: end` 这一轮补上了实现（空态元素 + 贴底滚动）。规格里的
-`input.clearable` 仍是有校验、无外观的属性——清除是一个交互（要事件路径与本地态），跟 T4 的
-`source / event / payload` 一起落地；这条是有意的排期，不是漏项。
+`input.clearable` 当时是有校验、无外观的属性；到 T4 按「壳无法兑现的属性是规格缺陷」把它从规格里收窄掉了——
+清除控件要给叶级替换元素加外壳，那是一次形状变更，不是加一个属性（记在 DESIGN 的开放问题里）。
 
 门抓到的三件事：
 
@@ -147,3 +157,50 @@ Ran 16 tests ... OK
 
 `select` 的规格同时收窄：去掉 `placeholder` 属性——空选项就是一个普通 `option` 子节点，由生产者送，
 壳不合成（规格的约定里记了这条）。
+
+## T4 门的实测结果（2026-10-16）
+
+```
+[1/13]  PASS  zero console errors                    none
+[2/13]  PASS  hello first (with its path); structure after
+                                              first recv='reflux:hello' path='/' first send op='create'
+[3/13]  PASS  a rack mounts its rows from the slot   dom rows=2 slot rows=['row-1', 'row-2']
+[4/13]  PASS  input echo: type → commit → the producer's slot write comes back
+                                              frame={'event': 'name.change', 'id': 'name-input', 'data': {'value': 'alice'}}
+[5/13]  PASS  a keystroke is not a turn        frames while typing: 0
+[6/13]  PASS  payload is verbatim              keys=['value'] frame keys=['data', 'event', 'id'] id='name-input'
+[7/13]  PASS  list add: producer inserts, the row keeps its DOM node
+                                              frame={'event': 'row.add', 'id': 'add-row', 'data': {}} rows=3 identity kept=True
+[8/13]  PASS  list remove: the frame carries the row's own id
+                                              frame id='row-2' rows=2 removed in dom=False
+[9/13]  PASS  form: one submit carries every field it holds
+                                              frames=1 fields={'user': 'alice', 'pass': 's3cret'} keys=['fields']
+[10/13] PASS  payload declared as two keys arrives as exactly two
+                                              data={'value': 'abc', 'focus': False} order=['value', 'focus']
+[11/13] PASS  unregistered event name: uplinked verbatim, refused, never dispatched
+                                              frame=[{'event': 'ghost.press', 'id': 'ghost', 'data': {}}] refused+1 handlers+0
+[12/13] PASS  after a refusal the session still works    row.add frames=2 sessions=1
+[13/13] PASS  every uplink frame is exactly {event, id, data}   7 frames
+```
+
+驱动方式是真交互：`Input.dispatchMouseEvent` 点进输入框、`Input.dispatchKeyEvent` 逐字敲、点别处失焦触发
+`change`；断言读的是**过 socket 的帧**（生产者 `app.log`），不是页内的桩。
+
+落地的形状：`shell/js/events.js`（委托监听与上行）、`shell/js/channel.js`（壳的通道）、`reflux/channel.py`、
+`reflux/events.py`、`reflux/app.py`、`reflux/ui.py` + `reflux/ops.py`（写入层）、`reflux/demo_app.py`、
+`tools/gate_t4.py`；`tools/cdp.py` 加了真鼠标/真按键夹具，壳改由 App 伺服（T0/T2/T3 跟着走这条，它们照旧直接
+drive `window.reflux`）。
+
+门抓到的五件事：
+
+- **真输入暴露了夹具的盲区**：默认无头窗口是 800×600，演示页比它高——第 8 行的探针行在折叠线以下，点击落在
+  视口外（`document.activeElement` 仍是 `body`），于是敲键无处可去、`change` 自然不响。页内 `dispatchEvent`
+  的写法会「通过」这一条。夹具改成 `--window-size=1280,1600` 且点击前先 `scrollIntoView`。
+- **帧到了不等于画了**：表单那条断言最初在帧一到达就读 DOM，于是同一份代码一次绿一次红。断言必须等它要断言的
+  东西（这里等回显/摘要在 DOM 里出现），等帧只说明生产者收到了。
+- **`register(name)` 只是拿装饰器**：门里写 `events.register("probe.change")` 没给处理器，等于什么都没注册，
+  于是探针事件被判未注册拒收。注册表的行为是对的（日志里逐字写着未注册），错的是调用方——门里改成显式传处理器。
+- **壳会上行未注册的名字，拒收在生产侧**：这一条最初写成「没有帧上行」，是错的预期——壳不可能知道生产者的
+  注册表，所以帧照发，由生产者拒收并计数。断言改成：这一帧逐字过 socket、注册表拒收、处理器一次都没跑。
+- **`code` 组件的双写**（T3 遗留）：外层元素上挂的 `value` 效果会在槽写入时把里面的 `code` 子元素抹掉。
+  让 `source` 真的读槽时它露了出来；现在 `code` 直接建自己的内层，不再走 `textish`。

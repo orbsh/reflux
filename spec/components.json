@@ -1,8 +1,9 @@
 {
-  "spec_version": "0.1.0",
+  "spec_version": "0.2.0",
   "reserved_prefix": "reflux:",
   "ops": ["create", "patch", "insert", "remove"],
   "bind_keys": ["source", "event", "payload"],
+  "fire_events": ["change", "submit", "click"],
   "children_cardinality": ["none", "one", "many"],
   "attr_domains": {
     "enum": "{ \"enum\": [...] } — closed set of strings; \"default\" makes the attr optional",
@@ -15,6 +16,9 @@
     "an attr without a \"default\" is required at construction time",
     "components listed here are the ones the shell implements — never a wish list",
     "bind lists which bind keys a component accepts; payload entries name local state",
+    "fire lists the DOM events (a subset of fire_events) this component uplinks on; it is non-empty exactly when the component accepts event",
+    "a frame's id is the id of the node carrying bind.event — a row's identity reaches the frame by putting the row's id on that node",
+    "source names the slot a component watches: a leaf paints it as its primary value, a value-carrying input uses it as its value, a container mounts it as children (an array of rows, or one node); until the slot is written the component falls back to the attr it was built with",
     "primary names the one attr a leaf takes positionally in the SDK (text(\"hello\")); containers take their children positionally instead",
     "a select's empty-selection option is an ordinary option child the producer sends — the shell does not synthesize one"
   ],
@@ -28,6 +32,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "many"
     },
     "row": {
@@ -39,6 +44,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "many"
     },
     "card": {
@@ -49,6 +55,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "many"
     },
     "field": {
@@ -60,6 +67,7 @@
       },
       "local": [],
       "bind": [],
+      "fire": [],
       "children": "one"
     },
     "form": {
@@ -70,6 +78,7 @@
       },
       "local": ["fields"],
       "bind": ["event", "payload"],
+      "fire": ["submit"],
       "children": "many"
     },
     "rack": {
@@ -81,6 +90,7 @@
       },
       "local": ["scroll"],
       "bind": ["source"],
+      "fire": [],
       "children": "many"
     },
     "input": {
@@ -88,11 +98,11 @@
       "attrs": {
         "kind": { "enum": ["text", "password", "email", "number", "search"], "default": "text" },
         "placeholder": { "type": "string", "default": "" },
-        "disabled": { "type": "bool", "default": false },
-        "clearable": { "type": "bool", "default": false }
+        "disabled": { "type": "bool", "default": false }
       },
       "local": ["value", "focus"],
       "bind": ["source", "event", "payload"],
+      "fire": ["change"],
       "children": "none"
     },
     "textarea": {
@@ -104,6 +114,7 @@
       },
       "local": ["value", "focus"],
       "bind": ["source", "event", "payload"],
+      "fire": ["change"],
       "children": "none"
     },
     "select": {
@@ -113,6 +124,7 @@
       },
       "local": ["value"],
       "bind": ["source", "event", "payload"],
+      "fire": ["change"],
       "children": "many"
     },
     "option": {
@@ -125,6 +137,7 @@
       },
       "local": [],
       "bind": [],
+      "fire": [],
       "children": "none"
     },
     "checkbox": {
@@ -135,6 +148,7 @@
       },
       "local": ["checked"],
       "bind": ["source", "event", "payload"],
+      "fire": ["change"],
       "children": "none"
     },
     "switch": {
@@ -145,6 +159,7 @@
       },
       "local": ["checked"],
       "bind": ["source", "event", "payload"],
+      "fire": ["change"],
       "children": "none"
     },
     "text": {
@@ -158,6 +173,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "heading": {
@@ -169,6 +185,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "badge": {
@@ -180,6 +197,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "code": {
@@ -191,6 +209,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "image": {
@@ -203,6 +222,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "link": {
@@ -215,6 +235,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "button": {
@@ -228,6 +249,7 @@
       },
       "local": [],
       "bind": ["event"],
+      "fire": ["click"],
       "children": "none"
     },
     "progress": {
@@ -240,6 +262,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     },
     "empty": {
@@ -251,6 +274,7 @@
       },
       "local": [],
       "bind": ["source"],
+      "fire": [],
       "children": "none"
     }
   }

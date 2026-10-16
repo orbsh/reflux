@@ -63,5 +63,17 @@ class TestVendoredAssets(unittest.TestCase):
         self.assertIn('id="app"', html)
 
 
+class TestShellModules(unittest.TestCase):
+    def test_every_local_import_resolves(self) -> None:
+        """A typo in a module path is otherwise a runtime error the browser alone would see."""
+        pattern = re.compile(r"""from\s+['"](\.[^'"]+)['"]""")
+        missing: list[str] = []
+        for path in sorted((SHELL / "js").glob("*.js")):
+            for spec in pattern.findall(path.read_text(encoding="utf-8")):
+                if not (path.parent / spec).is_file():
+                    missing.append(f"{path.name} → {spec}")
+        self.assertEqual(missing, [], f"unresolvable local imports: {missing}")
+
+
 if __name__ == "__main__":
     unittest.main()

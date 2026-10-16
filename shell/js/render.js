@@ -1,14 +1,17 @@
-// Reflux shell — component dispatch and local state.
+// Reflux shell — component dispatch, local state, and the two things a binding reads.
 //
 // One implementation per entry in the generated component table, dispatched by a switch over
-// `type` (a table in code, not a runtime registry). Two rules shape every implementation:
+// `type` (a table in code, not a runtime registry). Three rules shape every implementation:
 //
 // 1. Read each field you draw, inside the effect that draws it. A store write only notifies
 //    the expressions that read the written path — reading a parent object never fires (T2's
 //    gate proved that), so a component that reads `node()` and paints from it is static.
-// 2. Local state (an input buffer, whether a panel is open) lives here and never goes up
-//    unless the node's `bind.payload` asks for it. A store write must not clobber what the
-//    user is typing.
+// 2. `bind.source` names the slot the component watches: a leaf paints it as its primary
+//    value, a value-carrying input uses it as its value, a container mounts it as children.
+//    The attr the node was built with is the fallback until the slot is written.
+// 3. Local state (an input buffer, whether a panel is open) lives here, is readable by the
+//    delegate (`el.__rx.locals`), and never goes up unless the node's `bind.payload` asks
+//    for it. A store write must not clobber what the user is typing.
 
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { COMPONENTS } from "./components.generated.js";
@@ -30,15 +33,75 @@ function attr(nodeA, name, apply) {
   });
 }
 
+// The primary value a component paints: the slot named by `source` once the producer has
+// written one that fits the attr it replaces, else the attr itself. Type-matched on purpose —
+// a node parked in a text slot paints the fallback rather than "[object Object]".
+function slotted(nodeA, ctx, name, apply) {
+  createEffect(() => {
+    const node = nodeA();
+    if (!node) return;
+    const built = node.attrs?.[name];
+    const source = node.bind?.source;
+    if (source === undefined) return apply(built, node);
+    const watched = ctx.readSlot(source);
+    apply(typeof watched === typeof built && watched !== undefined ? watched : built, node);
+  });
+}
+
+// The children a node mounts: its own `children`, or the slot its `source` names when the
+// producer wrote structure there (a list slot: an array of rows; a fragment: one node).
+// A value a component uses as its data (a select's) simply falls through to `children`.
+function nodeChildren(nodeA, ctx) {
+  const node = nodeA();
+  if (!node) return [];
+  const source = node.bind?.source;
+  if (source !== undefined) {
+    const watched = ctx.readSlot(source);
+    if (Array.isArray(watched)) return watched;
+    if (watched && typeof watched === "object" && typeof watched.type === "string") {
+      return [watched];
+    }
+  }
+  return node.children ?? [];
+}
+
+// A form's `fields` local state: every descendant that declares a `source`, keyed by it —
+// the slot name is the field's address, so one submit carries them all at once.
+function collectFields(host) {
+  const out = {};
+  for (const el of host.querySelectorAll("*")) {
+    const handle = el.__rx;
+    if (!handle) continue;
+    const source = handle.node()?.bind?.source;
+    if (source === undefined) continue;
+    const locals = handle.locals(el);
+    if ("value" in locals) out[source] = locals.value;
+    else if ("checked" in locals) out[source] = locals.checked;
+  }
+  return out;
+}
+
+// Each component's local state, read off the DOM at the moment the delegate asks. Where the
+// user's editing buffer lives is a DOM fact, so the buffer IS the value a payload carries.
+const LOCALS = {
+  input: (el) => ({ value: el.value, focus: document.activeElement === el }),
+  textarea: (el) => ({ value: el.value, focus: document.activeElement === el }),
+  select: (el) => ({ value: el.value }),
+  checkbox: (el) => ({ checked: el.querySelector("input").checked }),
+  switch: (el) => ({ checked: el.querySelector("input").checked }),
+  rack: (el) => ({ scroll: el.scrollTop }),
+  form: (el) => ({ fields: collectFields(el) }),
+};
+
 /**
- * Reconcile `node`'s children into `host`. Rows carrying an `id` keep their DOM node (and
- * therefore their local state) across inserts; positional rows follow their index and lose
- * it on reorder — the documented consequence of not carrying a key, not an accident.
+ * Reconcile the children `childrenA` reports into `host`. Rows carrying an `id` keep their DOM
+ * node (and therefore their local state) across inserts; positional rows follow their index and
+ * lose it on reorder — the documented consequence of not carrying a key, not an accident.
  */
-function mountChildren(host, nodeA, renderChild) {
+function mountChildren(host, childrenA, renderChild) {
   let entries = []; // { key, type, el, index, id, accessor }
   createEffect(() => {
-    const kids = nodeA()?.children ?? [];
+    const kids = childrenA() ?? [];
     const next = [];
     const keep = new Set();
     for (let i = 0; i < kids.length; i++) {
@@ -49,7 +112,7 @@ function mountChildren(host, nodeA, renderChild) {
       if (!entry) {
         entry = { key, type: kid.type, id: kid.id ?? null, index: i, el: null, accessor: null };
         entry.accessor = () => {
-          const ns = nodeA()?.children ?? [];
+          const ns = childrenA() ?? [];
           return entry.id !== null ? ns.find((n) => n && n.id === entry.id) : ns[entry.index];
         };
         entry.el = renderChild(entry.accessor);
@@ -80,13 +143,13 @@ function container(nodeA, opts, ctx) {
   const body = bodyIsHost ? host : make("div", "rx-body");
   if (!bodyIsHost) host.append(body);
   if (chrome) chrome(host, body, nodeA);
-  mountChildren(body, nodeA, (childA) => renderNode(childA, ctx));
+  mountChildren(body, () => nodeChildren(nodeA, ctx), (childA) => renderNode(childA, ctx));
   return host;
 }
 
-function textish(nodeA, tag, cls) {
+function textish(nodeA, ctx, tag, cls) {
   const el = make(tag, cls);
-  attr(nodeA, "value", (v) => {
+  slotted(nodeA, ctx, "value", (v) => {
     el.textContent = v;
   });
   return el;
@@ -166,7 +229,7 @@ const IMPL = {
           });
           createEffect(() => {
             const attrs = n()?.attrs ?? {};
-            const rows = (n()?.children ?? []).filter(Boolean);
+            const rows = nodeChildren(n, ctx).filter(Boolean);
             empty.textContent = attrs.empty_text ?? "";
             empty.hidden = rows.length > 0 || !attrs.empty_text;
             // `follow: end` pins the view to the newest row — a no-op unless the rack scrolls
@@ -348,8 +411,8 @@ const IMPL = {
   },
 
   // display
-  text(nodeA) {
-    const el = textish(nodeA, "p", "rx-text");
+  text(nodeA, ctx) {
+    const el = textish(nodeA, ctx, "p", "rx-text");
     attr(nodeA, "tone", (v) => {
       el.dataset.tone = v;
     });
@@ -361,27 +424,25 @@ const IMPL = {
     });
     return el;
   },
-  heading(nodeA) {
-    const el = textish(nodeA, "h2", "rx-heading");
+  heading(nodeA, ctx) {
+    const el = textish(nodeA, ctx, "h2", "rx-heading");
     attr(nodeA, "level", (v) => {
       el.dataset.level = String(v);
     });
     return el;
   },
-  badge(nodeA) {
-    const el = textish(nodeA, "span", "rx-badge");
+  badge(nodeA, ctx) {
+    const el = textish(nodeA, ctx, "span", "rx-badge");
     attr(nodeA, "tone", (v) => {
       el.dataset.tone = v;
     });
     return el;
   },
-  code(nodeA) {
-    const el = textish(nodeA, "pre", "rx-code");
+  code(nodeA, ctx) {
+    const el = make("pre", "rx-code");
     const inner = make("code", "rx-code__inner");
-    el.textContent = "";
     el.append(inner);
-    inner.append(document.createTextNode(""));
-    attr(nodeA, "value", (v) => {
+    slotted(nodeA, ctx, "value", (v) => {
       inner.textContent = v ?? "";
     });
     attr(nodeA, "lang", (v) => {
@@ -389,9 +450,9 @@ const IMPL = {
     });
     return el;
   },
-  image(nodeA) {
+  image(nodeA, ctx) {
     const el = make("img", "rx-image");
-    attr(nodeA, "src", (v) => {
+    slotted(nodeA, ctx, "src", (v) => {
       el.setAttribute("src", v);
     });
     attr(nodeA, "alt", (v) => {
@@ -404,9 +465,9 @@ const IMPL = {
   },
 
   // nav + feedback
-  link(nodeA) {
+  link(nodeA, ctx) {
     const el = make("a", "rx-link");
-    attr(nodeA, "href", (v) => {
+    slotted(nodeA, ctx, "href", (v) => {
       el.setAttribute("href", v);
     });
     attr(nodeA, "label", (v) => {
@@ -434,11 +495,11 @@ const IMPL = {
     });
     return el;
   },
-  progress(nodeA) {
+  progress(nodeA, ctx) {
     const host = make("div", "rx-progress");
     const bar = make("div", "rx-progress__bar");
     const caption = make("span", "rx-progress__label");
-    attr(nodeA, "value", (v) => {
+    slotted(nodeA, ctx, "value", (v) => {
       host.dataset.value = String(v ?? 0);
       // a datum, not a variant: it rides a custom property the stylesheet consumes
       host.style.setProperty("--rx-value", `${Math.max(0, Math.min(100, Number(v) || 0))}%`);
@@ -452,9 +513,9 @@ const IMPL = {
     host.append(bar, caption);
     return host;
   },
-  empty(nodeA) {
+  empty(nodeA, ctx) {
     const host = make("div", "rx-empty");
-    const caption = textish(nodeA, "p", "rx-empty__text");
+    const caption = textish(nodeA, ctx, "p", "rx-empty__text");
     const hint = make("span", "rx-empty__hint");
     attr(nodeA, "hint", (v) => {
       hint.textContent = v ?? "";
@@ -478,8 +539,13 @@ function unsupported(nodeA, ctx) {
 
 /** Render one node (and its subtree) into an element. */
 export function renderNode(nodeA, ctx) {
-  const impl = IMPL[nodeA()?.type];
-  return impl ? impl(nodeA, ctx) : unsupported(nodeA, ctx);
+  const type = nodeA()?.type;
+  const impl = IMPL[type];
+  const el = impl ? impl(nodeA, ctx) : unsupported(nodeA, ctx);
+  // The handle the delegate walks to: which node this element hosts, and how to read its local
+  // state. Set on the host, so a nested target (a checkbox's inner input) still resolves here.
+  el.__rx = { node: nodeA, locals: LOCALS[type] ?? (() => ({})) };
+  return el;
 }
 
 /** Create the context the components read slots and count through. */
