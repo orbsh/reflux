@@ -12,9 +12,25 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable, Mapping
 
-from .tables_generated import BIND_KEYS, COMPONENTS, OPS, RESERVED_PREFIX, SPEC_VERSION
+from .tables_generated import (
+    BIND_KEYS,
+    COMPONENTS,
+    FIRE_EVENTS,
+    OPS,
+    RESERVED_PREFIX,
+    SPEC_VERSION,
+)
 
-__all__ = ["Node", "make", "COMPONENTS", "OPS", "BIND_KEYS", "RESERVED_PREFIX", "SPEC_VERSION"]
+__all__ = [
+    "Node",
+    "make",
+    "COMPONENTS",
+    "OPS",
+    "BIND_KEYS",
+    "FIRE_EVENTS",
+    "RESERVED_PREFIX",
+    "SPEC_VERSION",
+]
 
 
 class Node(dict):

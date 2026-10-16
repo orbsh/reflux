@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import json
 
-SPEC_VERSION = '0.1.0'
+SPEC_VERSION = '0.2.0'
 RESERVED_PREFIX = 'reflux:'
 OPS = ['create', 'patch', 'insert', 'remove']
 BIND_KEYS = ['source', 'event', 'payload']
+FIRE_EVENTS = ['change', 'submit', 'click']
 
 COMPONENTS: dict = json.loads(
     """
@@ -39,6 +40,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -73,6 +75,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "nav",
+    "fire": [
+      "click"
+    ],
     "local": [],
     "primary": "label"
   },
@@ -96,6 +101,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "checkbox": {
@@ -115,6 +121,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "checked"
     ]
@@ -134,6 +143,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -152,6 +162,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "feedback",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -172,6 +183,7 @@ COMPONENTS: dict = json.loads(
     "bind": [],
     "children": "one",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "form": {
@@ -190,6 +202,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "many",
     "family": "container",
+    "fire": [
+      "submit"
+    ],
     "local": [
       "fields"
     ]
@@ -211,6 +226,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -236,15 +252,12 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "src"
   },
   "input": {
     "attrs": {
-      "clearable": {
-        "default": false,
-        "type": "bool"
-      },
       "disabled": {
         "default": false,
         "type": "bool"
@@ -271,6 +284,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "value",
       "focus"
@@ -295,6 +311,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "nav",
+    "fire": [],
     "local": [],
     "primary": "href"
   },
@@ -315,6 +332,7 @@ COMPONENTS: dict = json.loads(
     "bind": [],
     "children": "none",
     "family": "input",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -339,6 +357,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "feedback",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -368,6 +387,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": [
       "scroll"
     ]
@@ -405,6 +425,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "select": {
@@ -421,6 +442,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "many",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "value"
     ]
@@ -458,6 +482,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "many",
     "family": "container",
+    "fire": [],
     "local": []
   },
   "switch": {
@@ -477,6 +502,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "checked"
     ]
@@ -514,6 +542,7 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "display",
+    "fire": [],
     "local": [],
     "primary": "value"
   },
@@ -541,6 +570,9 @@ COMPONENTS: dict = json.loads(
     ],
     "children": "none",
     "family": "input",
+    "fire": [
+      "change"
+    ],
     "local": [
       "value",
       "focus"

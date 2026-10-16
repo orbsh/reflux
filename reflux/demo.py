@@ -1,8 +1,12 @@
-"""Serve the reflux shell.
+"""Serve the shell by hand: the static assets plus the `/ws` channel.
 
     python3 -m reflux.demo                # 127.0.0.1:8000, the library's own shell/
     python3 -m reflux.demo --port 0       # free port, printed
     python3 -m reflux.demo --root ./site  # serve a produced site instead
+
+No view is registered, so the shell loads, connects and shows its probe: this is the dev loop's
+"serve the shell and drive the store by hand", not an application. To run an application, give
+it its own App (`reflux.demo_app` is one).
 
 uv is available but not required: the producer side has no dependencies.
 """
@@ -13,7 +17,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .server import make_server
+from .app import App
 
 SHELL_ROOT = Path(__file__).resolve().parent.parent / "shell"
 
@@ -30,9 +34,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    srv = make_server(args.root, args.port, args.host)
+    app = App(args.root)
+    srv = app.make_server(args.port, args.host)
     host, port = srv.server_address[0], srv.server_address[1]
-    print(f"[reflux] serving {args.root} on http://{host}:{port}/", flush=True)
+    print(f"[reflux] serving {args.root} on http://{host}:{port}/  (ws {host}:{port}/ws)", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

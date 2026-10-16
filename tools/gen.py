@@ -44,11 +44,14 @@ def load_spec(path: Path = SPEC) -> dict:
 
 
 def validate(spec: dict) -> None:
-    for key in ("spec_version", "reserved_prefix", "ops", "bind_keys", "components"):
+    for key in ("spec_version", "reserved_prefix", "ops", "bind_keys", "fire_events", "components"):
         if key not in spec:
             raise SpecError(f"spec is missing {key}")
     if not spec["reserved_prefix"].endswith(":"):
         raise SpecError("reserved_prefix must end with ':' (it is a namespace, not a word)")
+    fire_events = spec["fire_events"]
+    if not fire_events or len(set(fire_events)) != len(fire_events):
+        raise SpecError("fire_events must be non-empty and unique (the shell delegates over it)")
     for name, comp in spec["components"].items():
         where = f"component {name}"
         if comp.get("children") not in spec["children_cardinality"]:
@@ -57,6 +60,15 @@ def validate(spec: dict) -> None:
             raise SpecError(f"{where}: bind keys outside {spec['bind_keys']}")
         if not isinstance(comp.get("local"), list):
             raise SpecError(f"{where}: local must be a list")
+        fire = comp.get("fire")
+        if not isinstance(fire, list):
+            raise SpecError(f"{where}: fire must be a list (empty when the component uplinks nothing)")
+        if not set(fire) <= set(fire_events):
+            raise SpecError(f"{where}: fire events outside {fire_events}")
+        # the uplink timing is part of the contract: a component that accepts `event` must say
+        # when it fires, and a component that accepts no event must fire on nothing
+        if bool(fire) != ("event" in comp.get("bind", [])):
+            raise SpecError(f"{where}: fire must be non-empty exactly when bind accepts 'event'")
         for attr, dom in comp.get("attrs", {}).items():
             kind = domain_kind(dom)
             if kind is None:
@@ -89,6 +101,7 @@ def js_text(spec: dict) -> str:
     components = json.dumps(spec["components"], indent=2, ensure_ascii=False, sort_keys=True)
     ops = json.dumps(spec["ops"], ensure_ascii=False)
     binds = json.dumps(spec["bind_keys"], ensure_ascii=False)
+    fires = json.dumps(spec["fire_events"], ensure_ascii=False)
     return (
         "// GENERATED from spec/components.json — do not edit.\n"
         "// Regenerate: python3 tools/gen.py      Verify: python3 tools/gen.py --check\n"
@@ -97,6 +110,7 @@ def js_text(spec: dict) -> str:
         f"export const RESERVED_PREFIX = {json.dumps(spec['reserved_prefix'])};\n"
         f"export const OPS = {ops};\n"
         f"export const BIND_KEYS = {binds};\n"
+        f"export const FIRE_EVENTS = {fires};\n"
         f"export const COMPONENTS = {components};\n"
     )
 
@@ -165,7 +179,14 @@ def py_text(spec: dict) -> str:
         "from __future__ import annotations",
         "",
         "from .node import Node, make",
-        "from .tables_generated import BIND_KEYS, COMPONENTS, OPS, RESERVED_PREFIX, SPEC_VERSION",
+        "from .tables_generated import (",
+        "    BIND_KEYS,",
+        "    COMPONENTS,",
+        "    FIRE_EVENTS,",
+        "    OPS,",
+        "    RESERVED_PREFIX,",
+        "    SPEC_VERSION,",
+        ")",
         "",
         "__all__ = [",
         f"    {', '.join(repr(n) for n in sorted(spec['components']))},",
@@ -173,6 +194,7 @@ def py_text(spec: dict) -> str:
         '    "RESERVED_PREFIX",',
         '    "OPS",',
         '    "BIND_KEYS",',
+        '    "FIRE_EVENTS",',
         '    "COMPONENTS",',
         "]",
         "",
@@ -211,6 +233,7 @@ def tables_text(spec: dict) -> str:
         f"RESERVED_PREFIX = {spec['reserved_prefix']!r}\n"
         f"OPS = {spec['ops']!r}\n"
         f"BIND_KEYS = {spec['bind_keys']!r}\n"
+        f"FIRE_EVENTS = {spec['fire_events']!r}\n"
         "\n"
         "COMPONENTS: dict = json.loads(\n"
         '    """\n'

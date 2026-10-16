@@ -7,24 +7,44 @@ Layering, so imports never cycle:
   tables_generated   pure data — the vocabulary (generated)
   node               the wire shape + the validating boundary (`make`)
   components_generated  the builders (generated)
-  server / demo      serve the shell; the ops channel lands in T2
+  ui / ops           the writing layer: components addressed as one object, and frame builders
+  channel / events / app / server   the producer: the shell, the /ws channel, the registry
 
-    from reflux import stack, text, button
-    stack(text("hello", source="greeting"), button("+", event="counter.inc"))
+    from reflux import ops, ui
+
+    page = ui.stack(ui.text("hello", source="greeting"), ui.button("+", event="counter.inc"))
+    session.draw(ops.patch("/slots/greeting", "你好"))
 """
 
+from . import ops, ui
+from .app import App, Session
 from .components_generated import *  # noqa: F403  (the builders, generated from the spec)
+from .events import Registry, RegistryError
 from .node import Node, make
-from .tables_generated import BIND_KEYS, COMPONENTS, OPS, RESERVED_PREFIX, SPEC_VERSION
+from .tables_generated import (
+    BIND_KEYS,
+    COMPONENTS,
+    FIRE_EVENTS,
+    OPS,
+    RESERVED_PREFIX,
+    SPEC_VERSION,
+)
 
 __version__ = "0.0.0"
 
 __all__ = [
     "Node",
     "make",
+    "App",
+    "Session",
+    "Registry",
+    "RegistryError",
+    "ops",
+    "ui",
     "COMPONENTS",
     "OPS",
     "BIND_KEYS",
+    "FIRE_EVENTS",
     "RESERVED_PREFIX",
     "SPEC_VERSION",
 ]

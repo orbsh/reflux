@@ -5,6 +5,10 @@ minimal (CDP needs text frames and nothing more); the launcher gives every gate 
 hermetic setup: a dedicated profile, a free debug port, a same-origin server, and an error
 hook installed before any page script runs.
 
+The page is served through `reflux.app.App` (the static shell plus the `/ws` channel), so the
+shell's channel connects even when the gate drives the store by hand; a gate with a producer of
+its own passes `app=`.
+
 The gates keep only their assertions; everything reusable lives here.
 """
 
@@ -30,7 +34,7 @@ from typing import Iterator
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from reflux.server import make_server  # noqa: E402
+from reflux.app import App  # noqa: E402
 
 CHROMIUM = "chromium"
 IDLE = "data:text/html,<title>reflux-gate</title>"
@@ -160,6 +164,58 @@ class Cdp:
     def of(self, method: str) -> list[dict]:
         return [e["params"] for e in self.events if e.get("method") == method]
 
+    # --- real input (the browser's own event pipeline, not synthetic dispatches) -----------
+
+    def box(self, selector: str) -> dict:
+        """The centre of an element — the coordinate a real mouse event needs."""
+        return self.box_js(f"document.querySelector({json.dumps(selector)})")
+
+    def box_js(self, expression: str) -> dict:
+        """The centre of whatever `expression` resolves to (a JS expression, or null).
+
+        The element is scrolled into view first: a real mouse event lands at viewport
+        coordinates, and an element below the fold would swallow nothing.
+        """
+        rect = self.eval(
+            "(() => {"
+            f" const el = ({expression});"
+            " if (!el) return null;"
+            " el.scrollIntoView({ block: 'center', inline: 'center' });"
+            " const r = el.getBoundingClientRect();"
+            " return { x: r.left + r.width / 2, y: r.top + r.height / 2 };"
+            "})()"
+        )
+        if not rect:
+            raise RuntimeError(f"no element for {expression!r}")
+        return rect
+
+    def click(self, selector: str) -> None:
+        """A real mouse click at the element's centre; it also blurs whatever was focused."""
+        self._press(self.box(selector))
+
+    def click_js(self, expression: str) -> None:
+        """A real mouse click on whatever a JS expression resolves to."""
+        self._press(self.box_js(expression))
+
+    def _press(self, at: dict) -> None:
+        for kind, buttons in (("mousePressed", 1), ("mouseReleased", 0)):
+            self.call(
+                "Input.dispatchMouseEvent",
+                type=kind,
+                x=at["x"],
+                y=at["y"],
+                button="left",
+                buttons=buttons,
+                clickCount=1,
+            )
+
+    def type_text(self, text: str) -> None:
+        """Real keystrokes into whatever is focused, one key event per character."""
+        for char in text:
+            self.call("Input.dispatchKeyEvent", type="keyDown", text=char,
+                      unmodifiedText=char, key=char)
+            self.call("Input.dispatchKeyEvent", type="keyUp", key=char)
+
     def close(self) -> None:
         self.ws.close()
 
@@ -198,16 +254,19 @@ def _page_target(port: int, timeout: float = 15.0) -> dict:
 def shell_page(
     root: Path | None = None,
     *,
+    app: App | None = None,
     boot: str = "window.__reflux && window.__reflux.booted",
     settle: float = 0.5,
     timeout: float = 20.0,
 ) -> Iterator[tuple[Cdp, str]]:
-    """Serve `root` (default: this repo's shell/), load it in headless chromium, yield (cdp, base).
+    """Serve the shell (through `app`, else a fresh App over `root`), load it, yield (cdp, base).
 
     Waits for `boot` to become truthy (the shell announces it finished booting) and drains
-    late asset requests, so an external-request check is honest.
+    late asset requests, so an external-request check is honest. A gate with a producer of its
+    own passes `app=` and reads that app's `log` for the frames that crossed the channel.
     """
-    srv = make_server(root or (REPO / "shell"), 0)
+    app = app or App(root)
+    srv = app.make_server(0)
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
@@ -221,6 +280,9 @@ def shell_page(
             "--no-sandbox",
             "--no-first-run",
             "--no-default-browser-check",
+            # A viewport tall enough that the whole demo page is on screen; real mouse events
+            # land at viewport coordinates, so a short window would make clicks miss.
+            "--window-size=1280,1600",
             f"--user-data-dir={profile}",
             f"--remote-debugging-port={port}",
             IDLE,
@@ -262,12 +324,23 @@ def shell_page(
 
 
 def external_requests(cdp: Cdp, base: str) -> tuple[int, list[str]]:
-    """(total requests, the ones that left this origin)."""
+    """(total requests, the ones that left this origin).
+
+    The shell's channel handshake is the same origin wearing the ws scheme, so it is compared
+    as one (the design's "no network beyond this origin" is about origins, not schemes).
+    """
     urls = [p["request"]["url"] for p in cdp.of("Network.requestWillBeSent")]
     foreign = [
-        u for u in urls if not u.startswith(base) and not u.startswith(("data:", "blob:", "about:"))
+        u
+        for u in urls
+        if not _same_origin(u, base) and not u.startswith(("data:", "blob:", "about:"))
     ]
     return len(urls), foreign
+
+
+def _same_origin(url: str, base: str) -> bool:
+    normalized = url.replace("wss://", "https://").replace("ws://", "http://")
+    return normalized.startswith(base)
 
 
 def console_errors(cdp: Cdp) -> list[str]:
