@@ -11,7 +11,7 @@
 | T3 组件分派与本地态（21 个组件、规格↔实现相等、变更计数） | ✅ 2026-10-15 | `python3 tools/gate_t3.py` |
 | T4 绑定与事件（source / event / payload / fire、委托监听、通道与上行帧、拒收） | ✅ 2026-10-16 | `python3 tools/gate_t4.py` |
 | T5 路由（装饰器与注册器、发现、择优键、并列歧义、CLI 打印） | ✅ 2026-10-16 | `python3 -m unittest tests.test_routes` ＋ 全套 |
-| T6 导航 | ⏳ | — |
+| T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳 | ⏳ | — |
 | T8 故障注入 | ⏳ | — |
 | T9 Python SDK（demo 应用跑通四类交互） | ⏳ | — |
@@ -24,7 +24,7 @@
 spec/components.json              单一来源：组件/属性白名单/取值域/绑定/上行时机/操作/保留前缀
 tools/gen.py                      规格 → 三件产物；--check 做漂移门
 tools/gate_t0.py                  T0 门：真起 chromium，经 CDP 断言（stdlib-only）
-tools/gate_t2.py / t3.py / t4.py  各任务的门；共用 tools/cdp.py 的夹具（含真鼠标/真按键）
+tools/gate_t2.py / t3.py / t4.py  各任务的门；共用 tools/cdp.py 的夹具（含真鼠标/真按键/真历史）
 reflux/tables_generated.py        ← 生成：纯数据（壳与各 SDK 共用的词表，含 FIRE_EVENTS）
 reflux/components_generated.py    ← 生成：各组件构造器（签名由规格派生）
 reflux/node.py                    线上形状 + 校验边界 make()
@@ -33,7 +33,7 @@ reflux/ops.py                     写入层：四个操作与 draw 的构造器�
 reflux/server.py / demo.py        伺服壳（静态、无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
-reflux/app.py                     应用：壳 + /ws + 注册表；收到 hello 发首帧
+reflux/app.py                     应用：壳 + /ws + 注册表 + 一页钩子（hello 与 nav 走同一条）
 reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子）
 reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
 reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注册表
@@ -43,11 +43,13 @@ shell/js/validate.js              节点与取值域校验：不合词表的帧�
 shell/js/render.js                组件分派表 + 本地态 + source 读槽（T3/T4）
 shell/js/events.js                委托监听：认领规则、payload 收集、上行帧（T4）
 shell/js/channel.js               壳的通道：连上即 hello，下行交解释器（T4）
+shell/js/nav.js                   壳的导航：拦截同源点击、写 history、popstate 发同一种请求（T6）
 shell/css/main.css                壳自己持有的设计语言：层序 theme/base/layout/element/custom/style
                                   （框架与 fluxen 的 ui-assets 样式一致），变体走 data 属性改指令牌
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
 tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希、
-                                  事件注册表、通道编解码、写入层、路由（含 route_fixture 样例包）
+                                  事件注册表、通道编解码、写入层、路由（含 route_fixture 样例包）、
+                                  应用侧页面解析
 ```
 
 Python SDK 就是这个仓的 `reflux/` 包（语言无关的东西在 `spec/`，别的语言日后落在
@@ -240,3 +242,43 @@ path               source                           metadata
 **路由这一层第一跑就绿**（29/29），没抓到设计缺陷——表驱动把每一形状都写成了案例，包括「换 import 顺序
 匹配结果逐例一致」和「两个都能匹配同一路径且择优键相同 ⇒ 启动即报错」。`reflux events` 那一栏推迟到 T9，
 理由记在 DESIGN 的路由节（打印事件表要先有「从包装配出应用」的约定，路由表不需要）。
+
+## T6 门的实测结果（2026-10-16）
+
+```
+[1/12]  PASS  zero console errors                    none
+[2/12]  PASS  cold start: hello carries the deep link, that page is drawn
+        hello={'path': '/about', 'token': None} session.path='/about' location='/about' headings=['关于']
+[3/12]  PASS  a link click is a request, not a page load
+        nav frames=1 hellos=1 sessions=1 mark='alive' location='/'
+[4/12]  PASS  address bar, page and server-side route agree
+        session.path='/' location='/' route='/' last nav={'path': '/'}
+[5/12]  PASS  a page turn carries its slot seed in the same frame    rack rows=2
+[6/12]  PASS  back: the previous page, the same request    location='/about' headings=['关于'] nav frames=2
+[7/12]  PASS  forward: the page again, one more request    location='/' headings=['演示'] nav frames=3
+[8/12]  PASS  a ctrl-click is not intercepted        nav frames+0 location='/'
+[9/12]  PASS  a querystring link: the address keeps it, the frame does not
+        location='/about?x=1' nav={'path': '/about'}
+[10/12] PASS  unknown path: the built-in 404 structure, nothing else moved
+        location='/nope' headings=['404'] sessions=2 (was 2) session.path='/nope'
+[11/12] PASS  a registered {rest:path} answers instead of the 404    headings=['兜底'] location='/nope'
+[12/12] PASS  every nav frame is exactly {event, data:{path}}    6 frames
+```
+
+落地的形状：`shell/js/nav.js`（拦截判据、URL 真变才 pushState、popstate 是同一个请求）、`shell/js/main.js`
+（挂上导航，对开发回路露出 `navigate`）、`reflux/app.py`（`page(session, path)` 钩子、`App.routes`、
+`reflux:nav` 与 hello 走同一条、内置 404、`view` 退休）、`reflux/demo_app.py`（长出 `/` 与 `/about` 两条路由
+和一对链接）、`reflux/server.py`（页面路径交给壳）、`tools/gate_t6.py`、`tests/test_app.py`（10 例离线：页面
+解析、内置 404、尾兜底、钩子覆盖、demo 的帧形状）。
+
+门抓到的三件事：
+
+- **深链在门里根本起不来——伺服进程把 `/about` 当文件**：没有这个文件就 404，壳没机会启动。这是真漏项：
+  设计写了「冷启动直接打开 `/blog/x` 落在该页」，却没人规定伺服那一侧做什么。规则现在是「无扩展名且无对应
+  文件 ⇒ 回 `index.html`；有扩展名仍按文件处理（缺文件就是 404），绝不回一坨 HTML 冒充模块」。
+- **Ctrl+点击真的开了新标签页**，那个标签页自己也会连上来 ⇒ 多一个会话。于是「未知路径不改会话」不能写成
+  「会话数 == 1」（它被前一条检查合法地改掉了），要写成「这一击没有新增会话 + 原来那个还在、路径跟着客户端走」。
+- **地址栏先变、页面后到**：带查询串那条最初在 `location.search` 一变就断言，读到的是上一页的标题——还是
+  「等你要断言的东西」，这里要等的是 DOM。
+
+`reflux events`、重定向、路由中间件与数据 loader 仍按 DESIGN 的开放问题挂着，不在这一轮。

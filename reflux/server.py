@@ -1,8 +1,10 @@
 """Static file server for the reflux shell, plus the ``/ws`` channel when an app is attached.
 
 One process serves the shell's own modules and the vendored assets, same-origin, with caching
-off (a rebuilt shell must never need a hard refresh), and upgrades ``GET /ws`` to the channel
-the shell speaks on. Without an app it is a plain static server: the shell loads and shows its
+off (a rebuilt shell must never need a hard refresh), upgrades ``GET /ws`` to the channel the
+shell speaks on, and hands any *page path* (no file extension, no such file) to the shell itself
+— which is what makes a deep link or a reload work: the client boots and asks the producer what
+lives at that path. Without an app it is a plain static server: the shell loads and shows its
 probe, and holds no session.
 """
 
@@ -36,11 +38,18 @@ class ShellHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         app = getattr(self.server, "app", None)
-        if app is not None and self.path.split("?", 1)[0] == WS_PATH and is_upgrade(self.headers):
+        page = self.path.split("?", 1)[0]
+        if app is not None and page == WS_PATH and is_upgrade(self.headers):
             # The connection stops being HTTP here: the app reads frames until it closes.
             channel = upgrade(self)
             app.handle(channel)
             return
+        # A page path is served the shell: the client boots and asks the producer what lives
+        # there (that is what makes a deep link and a reload work at all). Anything that looks
+        # like a file is served — or 404s — as a file: a missing module must never come back as
+        # HTML, or the browser would fail on it in a way nobody can read.
+        if not Path(page).suffix and not Path(self.translate_path(self.path)).is_file():
+            self.path = "/index.html"
         super().do_GET()
 
     def log_message(self, format: str, *args) -> None:

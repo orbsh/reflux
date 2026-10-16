@@ -269,7 +269,7 @@ class TestDiscovery(unittest.TestCase):
             with self.subTest(module=expected):
                 self.assertIn(expected, imported)
         paths = [path for path, _, _ in DEFAULT.table()]
-        for expected in ("/blog/{slug}", "/posts", "/", "/admin"):
+        for expected in ("/blog/{slug}", "/posts", "/latest", "/admin"):
             with self.subTest(path=expected):
                 self.assertIn(expected, paths)
 

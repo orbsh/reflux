@@ -8,6 +8,8 @@
 // as the view until a tree arrives.
 // T4: the delegate (events.js) turns interaction into uplink frames, the channel (channel.js)
 // carries them, and the producer's answer comes back through the interpreter.
+// T6: navigation is the shell's too — a same-origin link click becomes a `reflux:nav` request
+// instead of a page load (nav.js), and back/forward are the same request.
 
 import { createEffect } from "solid-js";
 import h from "solid-js/h";
@@ -17,6 +19,7 @@ import { openChannel } from "./channel.js";
 import { COMPONENTS, FIRE_EVENTS } from "./components.generated.js";
 import { createDelegate } from "./events.js";
 import { createInterp } from "./interp.js";
+import { createNavigator } from "./nav.js";
 import { createRenderContext, implemented, renderNode } from "./render.js";
 
 const mount = document.getElementById("app");
@@ -52,6 +55,7 @@ createEffect(() => {
 const notes = [];
 const channel = openChannel({ onFrame: apply, onNote: (message) => notes.push(message) });
 const delegate = createDelegate(mount, channel.send);
+const navigator = createNavigator(mount, channel.send);
 
 // Exposed for the dev loop and for the gates: they assert on the very store and DOM the
 // components use, and `implemented` vs `components` is what keeps the spec honest.
@@ -68,6 +72,8 @@ window.reflux = {
   fireEvents: FIRE_EVENTS,
   send: channel.send,
   channel: channel.counters,
+  navigate: navigator.navigate,
+  nav: navigator.counters,
   notes,
   delegate,
 };
