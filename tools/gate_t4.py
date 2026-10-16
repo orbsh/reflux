@@ -78,7 +78,7 @@ def main() -> int:
     def check(name: str, ok: bool, evidence: str) -> None:
         checks.append((name, ok, evidence))
 
-    app = demo.Demo().app()
+    app = demo.make_app()
     # a registered name of the gate's own: `register(name)` alone only hands back the decorator
     app.events.register(PROBE, lambda session, frame: None)
 

@@ -1,8 +1,9 @@
-"""The demo app: the four interactions T4's gate drives, written with the SDK alone.
+"""The demo app: what T4's and T6's gates drive, written with the SDK alone.
 
 An echo (an input uplinks its buffer, a text watches the slot it lands in), a list (rows live in
-a list slot; the row's id rides the button that removes it), and a form (one submit carries
-every field it holds). The app keeps its business state and pushes exactly the change each
+a list slot; the row's id rides the button that removes it), a form (one submit carries every
+field it holds), and two pages behind routes reached by links — so navigation is exercised too,
+without a page load anywhere. The app keeps its business state and pushes exactly the change each
 handler made — the interface's working state stays in the shell.
 
     python3 -m reflux.demo_app --port 8000
@@ -16,12 +17,18 @@ import json
 from . import ops, ui
 from .app import App
 from .node import Node
+from .routes import route
 
 ECHO, ROWS, SUBMITTED = "echo", "rows", "submitted"
 ECHO_SLOT, ROWS_SLOT, SUBMITTED_SLOT = f"/slots/{ECHO}", f"/slots/{ROWS}", f"/slots/{SUBMITTED}"
 
 
-def row_node(row: dict) -> dict:
+def nav_row() -> Node:
+    """The two links on every page: the shell intercepts the click, the producer draws the page."""
+    return ui.row(ui.link("/", label="演示"), ui.link("/about", label="关于"), gap="md", align="start")
+
+
+def row_node(row: dict) -> Node:
     """One row: its text, and the button that removes it — the button carries the row's id."""
     return ui.row(
         ui.text(row["text"]),
@@ -40,19 +47,10 @@ class Demo:
         self.rows = [{"id": "row-1", "text": "第一行"}, {"id": "row-2", "text": "第二行"}]
         self.next_row = 3
 
-    def app(self) -> App:
-        app = App()
-        app.view = self.view
-        app.events.register("name.change")(self.on_name)
-        app.events.register("row.add")(self.on_add)
-        app.events.register("row.remove")(self.on_remove)
-        app.events.register("login.submit")(self.on_submit)
-        return app
-
-    # --- structure ------------------------------------------------------------------------
+    # --- the pages the routes below hand back ---------------------------------------------
 
     def view(self, session) -> list[dict]:
-        """First frame: the structure, plus the rows seeded into the slot the rack reads."""
+        """The demo page's frame: the structure, plus the rows seeded into the slot it reads."""
         return [
             ops.create(self.tree(), title="reflux demo"),
             ops.patch(ROWS_SLOT, [row_node(row) for row in self.rows]),
@@ -60,6 +58,7 @@ class Demo:
 
     def tree(self) -> Node:
         return ui.stack(
+            nav_row(),
             ui.heading("演示", level=1),
             ui.field(
                 ui.input(
@@ -89,6 +88,15 @@ class Demo:
             gap="lg",
         )
 
+    def about(self, session) -> Node:
+        return ui.stack(
+            nav_row(),
+            ui.heading("关于", level=1),
+            ui.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
+            ui.link("/", label="回到演示"),
+            gap="lg",
+        )
+
     # --- handlers: change the app's data, push exactly that change -------------------------
 
     def on_name(self, session, frame) -> None:
@@ -112,12 +120,36 @@ class Demo:
         session.draw(ops.patch(SUBMITTED_SLOT, f"已提交 {summary}"))
 
 
+demo = Demo()  # the routes are module-level declarations, so they attach to one application
+
+
+@route("/", title="演示")
+def home(session, match):
+    return demo.view(session)
+
+
+@route("/about", title="关于")
+def about_page(session, match):
+    return demo.about(session)
+
+
+def make_app() -> App:
+    """The demo's app: the routes declared above (a side effect of importing this module) and
+    this app's event handlers."""
+    app = App()
+    app.events.register("name.change")(demo.on_name)
+    app.events.register("row.add")(demo.on_add)
+    app.events.register("row.remove")(demo.on_remove)
+    app.events.register("login.submit")(demo.on_submit)
+    return app
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="reflux.demo_app", description="Serve the demo app.")
     ap.add_argument("--port", type=int, default=8000, help="0 picks a free port (default: 8000)")
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args(argv)
-    app = Demo().app()
+    app = make_app()
     if args.port == 0:
         server = app.make_server(0, args.host)
         print(f"[reflux] serving the demo on http://{args.host}:{server.server_address[1]}/", flush=True)

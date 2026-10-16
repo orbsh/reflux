@@ -1,21 +1,26 @@
-"""The producer: an app is the shell, the channel, and the registry of event names.
+"""The producer: an app is the shell, the channel, the registry of event names, and the pages.
 
     app = App()
+
+    @route("/blog/{slug}", title="文章")
+    def post(session, match): ...
 
     @app.events.register("name.change")
     def name_changed(session, frame):
         session.draw(ops.patch("/slots/echo", frame["data"]["value"]))
 
-    app.view = page            # a node, or the ops of the session's first frame
     app.serve(port=8000)
 
 The shell speaks first. Its ``reflux:hello`` carries the path it stands on (and, from T7, the
-previous session's token); the app answers with the session's first frame, so the client never
-sees a wrong tree first and a correction second. Every later uplink goes to the handler
-registered for its name.
+previous session's token), and every later page request is ``reflux:nav`` — a link click or the
+back button. Both go down the same road: the path lands on the session, one frame comes back, so
+the client never sees a wrong tree first and a correction second. Every other uplink goes to the
+handler registered for its name.
 
-Sessions hold their path and where their frames go — not the interface's state, which lives in
-the shell. A session is a small record; a hundred sessions are a hundred small records.
+A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
+default the route table answers; an app with a single page sets `app.page` instead of declaring
+routes. Sessions hold their path and where their frames go — not the interface's state, which
+lives in the shell. A session is a small record; a hundred sessions are a hundred small records.
 """
 
 from __future__ import annotations
@@ -27,13 +32,28 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from . import ops
+from . import ops, ui
 from .channel import Channel, ChannelClosed
 from .events import Registry
+from .node import Node
+from .routes import DEFAULT, Routes
 from .server import make_server
 from .tables_generated import RESERVED_PREFIX
 
 SHELL_ROOT = Path(__file__).resolve().parent.parent / "shell"
+
+
+def not_found(path: str) -> Node:
+    """What the framework answers with when nothing matched and nothing catches all.
+
+    A missing path is not the app's fault, and a blank page is not an answer. An app that wants its
+    own 404 registers a `{rest:path}` route: that is an ordinary match, and it wins like any other.
+    """
+    return ui.stack(
+        ui.heading("404", level=1),
+        ui.text(f"没有注册 {path} 这个地址", tone="muted"),
+        gap="md",
+    )
 
 
 class Session:
@@ -61,17 +81,19 @@ class Session:
 
 
 class App:
-    """A reflux producer: the static shell, the ``/ws`` channel, and the event registry."""
+    """A reflux producer: the static shell, the ``/ws`` channel, the registry, and the pages."""
 
-    def __init__(self, root: str | Path | None = None) -> None:
+    def __init__(self, root: str | Path | None = None, routes: Routes | None = None) -> None:
         self.root = Path(root) if root is not None else SHELL_ROOT
         self.events = Registry()
-        # view(session) -> a node, or the ops of the session's first frame (a node is shorthand
-        # for one `create`; ops are how a view also seeds the slots it reads).
-        self.view: Callable[[Session], Any] | None = None
+        self.routes: Routes = routes if routes is not None else DEFAULT
+        # page(session, path) -> a node, or the ops of this turn; left None the route table answers
+        # (which is the shape of a routed app; one page and no routes sets this instead).
+        self.page: Callable[[Session, str], Any] | None = None
         self.sessions: list[Session] = []
         self.log: list[tuple[str, Any]] = []  # every frame in and out, in order
         self.events.builtin(f"{RESERVED_PREFIX}hello", self._on_hello)
+        self.events.builtin(f"{RESERVED_PREFIX}nav", self._on_nav)
 
     # --- the framework's own protocol -----------------------------------------------------
 
@@ -80,14 +102,30 @@ class App:
         if isinstance(data, dict):
             session.path = data.get("path") or "/"
             session.token = data.get("token")
-        if self.view is not None:
-            session.draw(*self._first_frame(session))
+        self.draw_page(session)
 
-    def _first_frame(self, session: Session) -> list[dict]:
-        view = self.view
-        assert view is not None
-        frame = view(session)
-        return frame if isinstance(frame, list) else [ops.create(frame)]
+    def _on_nav(self, session: Session, frame: dict) -> None:
+        """The shell asked for another path: a link click, or back/forward."""
+        data = frame.get("data")
+        session.path = (data.get("path") if isinstance(data, dict) else None) or "/"
+        self.draw_page(session)
+
+    def draw_page(self, session: Session) -> None:
+        """One frame for the session's current path: a create, or the ops the app gave for it.
+
+        An app that declares neither a page nor any route draws nothing at all — that is the shell
+        served by hand (`reflux.demo`) and the gates that drive the store themselves; the shell
+        keeps whatever it has.
+        """
+        page = self.page
+        if page is None and len(self.routes) == 0:
+            return
+        if page is not None:
+            drawn = page(session, session.path)
+        else:
+            match = self.routes.match(session.path)
+            drawn = not_found(session.path) if match is None else match.resolve(session)
+        session.draw(*(drawn if isinstance(drawn, list) else [ops.create(drawn)]))
 
     # --- serving --------------------------------------------------------------------------
 

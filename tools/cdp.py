@@ -189,15 +189,16 @@ class Cdp:
             raise RuntimeError(f"no element for {expression!r}")
         return rect
 
-    def click(self, selector: str) -> None:
+    def click(self, selector: str, modifiers: int = 0) -> None:
         """A real mouse click at the element's centre; it also blurs whatever was focused."""
-        self._press(self.box(selector))
+        self._press(self.box(selector), modifiers)
 
-    def click_js(self, expression: str) -> None:
-        """A real mouse click on whatever a JS expression resolves to."""
-        self._press(self.box_js(expression))
+    def click_js(self, expression: str, modifiers: int = 0) -> None:
+        """A real mouse click on whatever a JS expression resolves to (modifiers: 1 alt, 2 ctrl,
+        4 meta, 8 shift — how a gate asks for the new-tab clicks the shell must not intercept)."""
+        self._press(self.box_js(expression), modifiers)
 
-    def _press(self, at: dict) -> None:
+    def _press(self, at: dict, modifiers: int = 0) -> None:
         for kind, buttons in (("mousePressed", 1), ("mouseReleased", 0)):
             self.call(
                 "Input.dispatchMouseEvent",
@@ -207,6 +208,7 @@ class Cdp:
                 button="left",
                 buttons=buttons,
                 clickCount=1,
+                modifiers=modifiers,
             )
 
     def type_text(self, text: str) -> None:
@@ -255,15 +257,17 @@ def shell_page(
     root: Path | None = None,
     *,
     app: App | None = None,
+    path: str = "/",
     boot: str = "window.__reflux && window.__reflux.booted",
     settle: float = 0.5,
     timeout: float = 20.0,
 ) -> Iterator[tuple[Cdp, str]]:
-    """Serve the shell (through `app`, else a fresh App over `root`), load it, yield (cdp, base).
+    """Serve the shell (through `app`, else a fresh App over `root`), load `path`, yield (cdp, base).
 
     Waits for `boot` to become truthy (the shell announces it finished booting) and drains
     late asset requests, so an external-request check is honest. A gate with a producer of its
-    own passes `app=` and reads that app's `log` for the frames that crossed the channel.
+    own passes `app=` and reads that app's `log` for the frames that crossed the channel; `path`
+    is how a gate opens a deep link (the shell's hello carries it).
     """
     app = app or App(root)
     srv = app.make_server(0)
@@ -298,7 +302,7 @@ def shell_page(
         for domain in ("Page", "Runtime", "Log", "Network"):
             cdp.call(f"{domain}.enable")
         cdp.call("Page.addScriptToEvaluateOnNewDocument", source=ERROR_HOOK)
-        cdp.call("Page.navigate", url=base + "/")
+        cdp.call("Page.navigate", url=base + path)
 
         deadline = time.time() + timeout
         while time.time() < deadline:

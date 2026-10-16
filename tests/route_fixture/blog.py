@@ -10,7 +10,7 @@ def post(session, match):
     return f"post:{match.params['slug']}"
 
 
-@route("/")  # an alias is a second decorator — the table gets the same handler on both paths
+@route("/latest")  # an alias is a second decorator — the table gets the same handler on both paths
 @route("/posts")
 def post_index(session, match):
     return f"index:{match.path}"

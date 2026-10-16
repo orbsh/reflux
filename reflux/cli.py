@@ -26,7 +26,7 @@ def print_routes(packages: Sequence[str], table: Routes | None = None) -> int:
     imported = discover(*packages)
     if imported:
         print(f"[routes] imported {len(imported)} module(s) from {', '.join(packages)}")
-    rows = (table or DEFAULT).table()
+    rows = (table if table is not None else DEFAULT).table()
     if not rows:
         print("[routes] nothing registered")
         return 0
