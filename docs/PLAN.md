@@ -3,6 +3,17 @@
 任务清单与理由在 [`DESIGN.md`](DESIGN.md)（「实施计划」一节）。本文件只记**状态**与**复验命令**——
 一条任务没跑过它的门槛命令，就不算完成。
 
+## 方向裁决（2026-10-16）
+
+- **壳退休，reflux 转成集成 fluxen 的 web 框架**（Next 之于 React 的分工）。渲染交给 fluxen 的渲染器；词表的单一来源变成 accrete 的类型——`cargo run -q -p stage -- schema` 导出 draft 2020-12 的 schema，SDK 由它生成。
+- 退场的是自带词表的 SolidJS 壳与手写的 `spec/components.json`；`tools/gen.py` 里的构造器生成逻辑留下，输入从规格换成那份 schema。
+- **封闭性与跨字段语义归 reflux**（生成的 SDK + 服务端入站校验 + 门）。accrete 刻意不拒未知字段（旧帧兼容），静默丢弃是那边的既定行为，不去改它——代价是绕过 SDK 手写 JSON 的生产者没有封闭性，这条写明。
+- **帧定义只有一套**：fluxen 的 `Message` / `Content` / `Outflow`。`ev = "draw"` 归渲染器，框架的会话与导航帧走别的取值。
+- 不作判据（已裁决，不再论证）：资产体积与跨边界开销；「JS 门槛低、便于外部参与」——实测不成立。
+- 迁移的缝（操作集差异、词表 profile、SDK 生成的命名）记在 `DESIGN.md` 的「开放问题」。
+
+已落地的 T0–T6 全跑在**退休前那套实现**上（规格 + SolidJS 壳），门槛命令照旧有效，退役不发生在它们身上；迁移任务见下表末尾。
+
 | 任务 | 状态 | 复验 |
 |------|------|------|
 | T0 骨架与零工具链证明 | ✅ 2026-10-15 | `python3 tools/gate_t0.py` |
@@ -12,11 +23,12 @@
 | T4 绑定与事件（source / event / payload / fire、委托监听、通道与上行帧、拒收） | ✅ 2026-10-16 | `python3 tools/gate_t4.py` |
 | T5 路由（装饰器与注册器、发现、择优键、并列歧义、CLI 打印） | ✅ 2026-10-16 | `python3 -m unittest tests.test_routes` ＋ 全套 |
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
-| T7 会话与心跳 | ⏳ | — |
+| T7 会话与心跳（token 签发、hello 复用、ping 判死回收） | ⏳ | — |
 | T8 故障注入 | ⏳ | — |
-| T9 Python SDK（demo 应用跑通四类交互） | ⏳ | — |
-| T10 第二个语言的 SDK（最小） | ⏳ | — |
+| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通四类交互） | ⏳ | — |
+| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ | — |
 | T11 测量 | ⏳ | — |
+| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 先决：操作集与帧归属的裁决（见 `DESIGN.md`「开放问题」） | — |
 
 ## 已落地的形状
 
@@ -52,8 +64,9 @@ tests/                            规格漂移、两边词表一致、边界校�
                                   应用侧页面解析
 ```
 
-Python SDK 就是这个仓的 `reflux/` 包（语言无关的东西在 `spec/`，别的语言日后落在
-`sdks/<lang>/`）。
+Python SDK 就是这个仓的 `reflux/` 包，别的语言日后落在 `sdks/<lang>/`。
+
+上表里**要退场的一组**（M1）：`spec/components.json`（词表来源换成 accrete 的 schema）、`shell/*`（壳本体、它的生成物、vendored SolidJS、壳自己那份 CSS）、`tools/gen.py` 里生成壳分派表的那一半。留下的是框架那一半：`reflux/` 的路由、会话、通道、伺服、应用，加生成器的构造器逻辑——输入换掉，逻辑不动。
 
 ## T0 门的实测结果（2026-10-15）
 
