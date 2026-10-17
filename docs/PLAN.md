@@ -8,10 +8,11 @@
 - **壳退休，reflux 转成集成 fluxen 的 web 框架**（Next 之于 React 的分工）。渲染交给 fluxen 的渲染器；词表的单一来源变成 accrete 的类型——`cargo run -q -p stage -- schema` 导出 draft 2020-12 的 schema，SDK 由它生成。
 - 退场的是自带词表的 SolidJS 壳与手写的 `spec/components.json`；`tools/gen.py` 里的构造器生成逻辑留下，输入从规格换成那份 schema。
 - **封闭性与跨字段语义归 reflux**（生成的 SDK + 服务端入站校验 + 门）。accrete 刻意不拒未知字段（旧帧兼容），静默丢弃是那边的既定行为，不去改它——代价是绕过 SDK 手写 JSON 的生产者没有封闭性，这条写明。
-- **帧定义只有一套**：fluxen 的 `Message` / `Content` / `Outflow`。`ev = "draw"` 归渲染器，框架的会话与导航帧走别的取值。
+- **帧定义只有一套**：fluxen 的 `Message` / `Content` / `Outflow`。`ev = "draw"` 归渲染器；`reflux:hello` 与 `reflux:nav` 走上行的 `Outflow`（它的 `data` 是自由的），回答是一次 `draw`——今天没有第二类 ev，要一类下行框架帧得先给那个信封加字段（没走这条路）。
 - 不作判据（已裁决，不再论证）：资产体积与跨边界开销；「JS 门槛低、便于外部参与」——实测不成立。
 - **词表用 accrete 的既有词表，不往外长**（2026-10-17）：新类型与枚举属性都不加进 accrete；profile 是 reflux 侧一份可读数据——选哪些类型进应用面、哪个属性值是默认、变体落成哪些 class 令牌。现有 21 项与那 30 个根变体不是包含关系（同名 8 项），那 13 项逐条落法在 `DESIGN.md` 的「组件词表」。
-- 迁移的缝（操作集差异、页内导航与 click 上行落空）记在 `DESIGN.md` 的「开放问题」；词表 profile 这一条已定，见上；SDK 生成这一条也已定并落地（见下表）。
+- **操作集取 accrete 的八个，逐字，四个平面各有各的寻址**（2026-10-17）：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`，不留翻译层；旧四个与它们的转换、以及代价（按 id 锚定的插入没了、结构数组里插一格要重写那一段、`title` 没有线上落点）写在 `DESIGN.md` 的「操作」。`payload`（声明带哪几件本地态）随之退场——送什么由组件自己定。
+- 迁移的缝只剩一条：页内导航与 click 上行落空（见 `DESIGN.md`「开放问题」）；词表 profile 与 SDK 生成已定并落地（见下表）。
 
 已落地的 T0–T6 全跑在**退休前那套实现**上（规格 + SolidJS 壳），门槛命令照旧有效，退役不发生在它们身上；迁移任务见下表末尾。
 
@@ -30,7 +31,7 @@
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
-| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 先决：操作集与帧归属的裁决、页内导航与 click 上行落空的裁定（见 `DESIGN.md`「开放问题」） | — |
+| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 先决：页内导航与 click 上行落空的裁定（见 `DESIGN.md`「开放问题」）；操作集与帧归属已裁（见上） | — |
 
 ## 已落地的形状
 
