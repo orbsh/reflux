@@ -44,9 +44,19 @@ def load_spec(path: Path = SPEC) -> dict:
 
 
 def validate(spec: dict) -> None:
-    for key in ("spec_version", "reserved_prefix", "ops", "bind_keys", "fire_events", "components"):
+    for key in (
+        "spec_version",
+        "reserved_prefix",
+        "ops",
+        "max_ops_per_frame",
+        "bind_keys",
+        "fire_events",
+        "components",
+    ):
         if key not in spec:
             raise SpecError(f"spec is missing {key}")
+    if not isinstance(spec["max_ops_per_frame"], int) or spec["max_ops_per_frame"] < 1:
+        raise SpecError("max_ops_per_frame must be a positive int — both sides refuse over it")
     if not spec["reserved_prefix"].endswith(":"):
         raise SpecError("reserved_prefix must end with ':' (it is a namespace, not a word)")
     fire_events = spec["fire_events"]
@@ -109,6 +119,7 @@ def js_text(spec: dict) -> str:
         f"export const SPEC_VERSION = {json.dumps(spec['spec_version'])};\n"
         f"export const RESERVED_PREFIX = {json.dumps(spec['reserved_prefix'])};\n"
         f"export const OPS = {ops};\n"
+        f"export const MAX_OPS_PER_FRAME = {spec['max_ops_per_frame']};\n"
         f"export const BIND_KEYS = {binds};\n"
         f"export const FIRE_EVENTS = {fires};\n"
         f"export const COMPONENTS = {components};\n"
@@ -232,6 +243,7 @@ def tables_text(spec: dict) -> str:
         f"SPEC_VERSION = {spec['spec_version']!r}\n"
         f"RESERVED_PREFIX = {spec['reserved_prefix']!r}\n"
         f"OPS = {spec['ops']!r}\n"
+        f"MAX_OPS_PER_FRAME = {spec['max_ops_per_frame']!r}\n"
         f"BIND_KEYS = {spec['bind_keys']!r}\n"
         f"FIRE_EVENTS = {spec['fire_events']!r}\n"
         "\n"

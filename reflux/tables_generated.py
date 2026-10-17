@@ -13,6 +13,7 @@ import json
 SPEC_VERSION = '0.2.0'
 RESERVED_PREFIX = 'reflux:'
 OPS = ['create', 'patch', 'insert', 'remove']
+MAX_OPS_PER_FRAME = 1024
 BIND_KEYS = ['source', 'event', 'payload']
 FIRE_EVENTS = ['change', 'submit', 'click']
 

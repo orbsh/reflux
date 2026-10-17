@@ -7,7 +7,7 @@
 // Only *structure* is validated this way. A patch that lands in `slots` carries free data,
 // so a value only gets node-checked when it sits under `tree`.
 
-import { BIND_KEYS, COMPONENTS, RESERVED_PREFIX } from "./components.generated.js";
+import { BIND_KEYS, COMPONENTS, MAX_OPS_PER_FRAME, RESERVED_PREFIX } from "./components.generated.js";
 
 function isPlainObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -146,6 +146,9 @@ function nodeAt(tree, steps) {
  * closed set; the same path on a slot is free data).
  */
 export function validateFrame(ops, tree = null) {
+  if (ops.length > MAX_OPS_PER_FRAME) {
+    return `${ops.length} ops in one frame — the cap is ${MAX_OPS_PER_FRAME} (a runaway producer is a defect, not something to apply halfway)`;
+  }
   for (const op of ops) {
     if (op.op === "create") {
       const err = validateNode(op.root, "/tree");

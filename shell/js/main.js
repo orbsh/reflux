@@ -54,7 +54,13 @@ createEffect(() => {
 // quietly — `notes` is where the reason lands.
 const notes = [];
 const channel = openChannel({ onFrame: apply, onNote: (message) => notes.push(message) });
-const delegate = createDelegate(mount, channel.send);
+// An uplink the shell refuses (a declared payload it cannot read) is counted and explained, never
+// sent as a frame with the key missing — the producer could not tell "missing" from "never there".
+const uplink = { refused: 0 };
+const delegate = createDelegate(mount, channel.send, (why) => {
+  uplink.refused += 1;
+  notes.push(why);
+});
 const navigator = createNavigator(mount, channel.send);
 
 // Exposed for the dev loop and for the gates: they assert on the very store and DOM the
@@ -75,6 +81,7 @@ window.reflux = {
   navigate: navigator.navigate,
   nav: navigator.counters,
   notes,
+  uplink,
   delegate,
 };
 window.__reflux = { booted: true };

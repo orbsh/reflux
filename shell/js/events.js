@@ -10,11 +10,13 @@
 // The frame is `{event, id, data}`. `id` is the claiming node's *own* id — a row's identity
 // reaches the frame by putting the row's id on that node, never by guessing an ancestor.
 // `data` carries exactly the local state the node's `payload` declared, in declaration order:
-// the declaration is a contract, not a hint.
+// the declaration is a contract, not a hint. A declared field the shell cannot read refuses the
+// uplink (counted) rather than sending the key missing — the producer could not tell "missing"
+// from "this field was never there".
 
 import { COMPONENTS, FIRE_EVENTS } from "./components.generated.js";
 
-export function createDelegate(root, send) {
+export function createDelegate(root, send, onRefuse = () => {}) {
   // Walk up from the target to the nearest host that fires on this DOM event type.
   function claim(target, domEvent) {
     for (let el = target; el && el !== root; el = el.parentElement) {
@@ -36,7 +38,19 @@ export function createDelegate(root, send) {
     if (!name) return;
     const locals = hit.handle.locals(hit.el);
     const data = {};
-    for (const key of hit.node.bind.payload ?? []) data[key] = locals[key];
+    for (const key of hit.node.bind.payload ?? []) {
+      // `key in locals`, not truthiness: "" and false are values, absence is a defect. The shell
+      // also cannot invent it: the declaration is the producer's, the locals are the shell's, and
+      // only this point sees both.
+      if (!(key in locals)) {
+        onRefuse(
+          `payload ${JSON.stringify(key)} of ${hit.node.type} ${hit.node.id ?? "(no id)"} ` +
+            `cannot be read — uplink refused`,
+        );
+        return;
+      }
+      data[key] = locals[key];
+    }
     send({ event: name, id: hit.node.id ?? null, data });
   }
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from .node import Node
-from .tables_generated import OPS
+from .tables_generated import MAX_OPS_PER_FRAME, OPS
 
 __all__ = ["create", "patch", "insert", "remove", "draw"]
 
@@ -81,9 +81,45 @@ def remove(path: str, id: str | None = None) -> dict:
     return op
 
 
+def _check_row_ids(value: Any, where: str) -> None:
+    """Refuse a duplicate row id inside any array of nodes this value carries.
+
+    Keyed rendering — and the client's own check — stands on "one id per array", so a duplicate is
+    a producer defect and the frame boundary is where it has to be loud. `value` may be a node, a
+    list of nodes (a slot's rows), or plain data a patch carries: free data is left alone, only
+    arrays of nodes are walked.
+    """
+    items = value if isinstance(value, list) else [value]
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("type"), str):
+            continue
+        row_id = item.get("id")
+        if isinstance(row_id, str):
+            if row_id in seen:
+                raise ValueError(f"{where}: duplicate row id {row_id!r} — one id per array")
+            seen.add(row_id)
+    for item in items:
+        if isinstance(item, dict) and isinstance(item.get("type"), str):
+            _check_row_ids(item.get("children") or [], f"{where}.children")
+
+
 def draw(*ops: dict) -> dict:
-    """One turn, one frame: every op a handler made travels together."""
+    """One turn, one frame: every op a handler made travels together.
+
+    Two rules live here rather than in each builder, because they are about the frame as a whole:
+    the op cap from the spec (a runaway producer is a defect, not something to apply halfway), and
+    one row id per array wherever the frame carries nodes.
+    """
+    if len(ops) > MAX_OPS_PER_FRAME:
+        raise ValueError(f"draw: {len(ops)} ops in one frame — the cap is {MAX_OPS_PER_FRAME}")
     for op in ops:
         if not isinstance(op, dict) or op.get("op") not in OPS:
             raise ValueError(f"draw: {op!r} is not an op ({', '.join(OPS)})")
+        if op["op"] == "create":
+            _check_row_ids(op["root"], "create")
+        elif op["op"] == "patch":
+            _check_row_ids(op["value"], op["path"])
+        elif op["op"] == "insert":
+            _check_row_ids(op["node"], op["path"])
     return {"ev": "draw", "ops": list(ops)}

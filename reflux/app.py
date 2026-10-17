@@ -26,6 +26,9 @@ holding nothing but the path its hello carried. Identity, when a deployment need
 an ordinary event on the live socket (`login`), not as a credential checked before it. Sessions
 hold their path and where their frames go — not the interface's state, which lives in the shell;
 a hundred sessions are a hundred small records.
+
+Frames queue per session and one writer thread drains each queue, so a client that stopped reading
+blocks its own writer and nobody else's.
 """
 
 from __future__ import annotations
@@ -63,21 +66,53 @@ def not_found(path: str) -> Node:
 
 
 class Session:
-    """One connection: the path it stands on, and where its frames go."""
+    """One connection: the path it stands on, and where its frames go.
 
-    def __init__(self, id: str, channel: Channel, record: Callable[[str, Any], None]) -> None:
+    Frames *queue* here instead of being written inline: a client that stopped reading must not be
+    able to hold the thread that produced a frame (that may be the app's own handler, another
+    session's, or a gate). The queue is bounded at enqueue — the only point that sees every frame a
+    slow client misses — and the writer thread (one per session, in `App._pump`) is what blocks.
+    """
+
+    def __init__(
+        self,
+        id: str,
+        channel: Channel,
+        record: Callable[[str, Any], None],
+        stats: dict[str, int],
+        outbox: int = 256,
+    ) -> None:
         self.id = id
         self.channel = channel
         self.path = "/"
         self.sent = 0
         self.draws = 0
+        self.capacity = outbox
+        self.outbox: list[dict] = []  # waiting for the writer thread, oldest first
+        self.stale = False  # frames were shed: the client has a hole (a resync repairs it)
         self._record = record
+        self._stats = stats
+        self._wake = threading.Event()
 
     def send(self, frame: dict) -> None:
-        """One frame out. Ordering is the caller's, and the channel is the caller's too."""
-        self.channel.send(json.dumps(frame, ensure_ascii=False))
+        """Queue one frame out. The writer writes it; nobody blocks on the socket here.
+
+        Over capacity the *middle* goes: the first frame (whatever established the tree) and the
+        newest state are the two ends a stale client can still use, and the resync replaces the rest.
+        """
+        if len(self.outbox) >= self.capacity:
+            del self.outbox[1]
+            self.stale = True
+            self._stats["shed"] += 1
+        self.outbox.append(frame)
         self.sent += 1
         self._record("send", frame)
+        self._wake.set()
+
+    def await_frames(self, timeout: float = 0.5) -> None:
+        """Block until a frame is queued — or the timeout, so a live session stays checked."""
+        self._wake.wait(timeout)
+        self._wake.clear()
 
     def draw(self, *operations: dict) -> None:
         """Send a batch of operations as one turn (one `draw` frame)."""
@@ -95,6 +130,7 @@ class App:
         *,
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
+        outbox: int = 256,
     ) -> None:
         self.root = Path(root) if root is not None else SHELL_ROOT
         self.events = Registry()
@@ -105,9 +141,10 @@ class App:
         # Live sessions, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a session that is not its own.
         self.sessions: dict[Any, Session] = {}
-        self.stats = {"issued": 0, "reclaimed": 0, "dead": 0}
+        self.stats = {"issued": 0, "reclaimed": 0, "dead": 0, "shed": 0, "resync": 0}
         self.heartbeat = heartbeat
         self.dead_after = dead_after
+        self.outbox = outbox  # frames a session may queue before the middle is shed
         self.log: list[tuple[str, Any]] = []  # every frame in and out, in order
         self._stop = threading.Event()
         self._watchdog: threading.Thread | None = None
@@ -192,7 +229,7 @@ class App:
         self._watchdog.start()
 
     def stop(self) -> None:
-        """End the watchdog: serving is over (the gates and tests call this on the way out)."""
+        """End the watchdog (the gates and tests call this on the way out)."""
         self._stop.set()
         self._watchdog = None
 
@@ -225,9 +262,13 @@ class App:
 
     def handle(self, channel: Channel) -> None:
         """Read this connection's frames until it goes away: the session lives and dies with it."""
-        session = Session(secrets.token_hex(4), channel, self._record)
+        session = Session(secrets.token_hex(4), channel, self._record, self.stats, self.outbox)
         self.sessions[channel] = session
         self.stats["issued"] += 1
+        # Writing is a thread of its own, so nothing that produces a frame can be held by a client
+        # that stopped reading (this reader thread included: a slow client must not be able to stall
+        # the very thread that would drain it).
+        threading.Thread(target=self._pump, args=(session,), name="reflux-writer", daemon=True).start()
         try:
             for raw in channel:
                 try:
@@ -247,5 +288,42 @@ class App:
                 self.stats["reclaimed"] += 1
                 self.events.log.append(f"session {session.id} reclaimed")
 
+    def _pump(self, session: Session) -> None:
+        """Write one session's frames until it is no longer live.
+
+        One thread per session, on purpose: writing is the only step that can block on a client, so
+        a slow client blocks *its own* writer and nobody else's. The loop ends when the session
+        leaves the table — the reader thread removes it on close, the watchdog on a dead peer.
+        """
+        while self.sessions.get(session.channel) is session:
+            session.await_frames()
+            self.flush_session(session)
+
+    def flush_session(self, session: Session) -> None:
+        """Write what this session has waiting, then repair it if frames were shed.
+
+        The repair only happens when the queue is *empty*: the client is reading again by then, so a
+        single fresh `create` for its current path goes out inline — a resync is one frame, not a
+        replay of everything the client missed.
+        """
+        while session.outbox:
+            if not self._write(session.channel, session.outbox.pop(0)):
+                return
+        if session.stale:
+            session.stale = False
+            self.draw_page(session)
+            frames, session.outbox = session.outbox, []
+            if all(self._write(session.channel, frame) for frame in frames):
+                self.stats["resync"] += 1
+
     def _record(self, direction: str, frame: Any) -> None:
         self.log.append((direction, frame))
+
+    def _write(self, channel: Channel, frame: dict) -> bool:
+        """One frame onto the socket. False when the client cannot take it — then it is its own."""
+        try:
+            channel.send(json.dumps(frame, ensure_ascii=False))
+            return True
+        except (ChannelClosed, OSError, ValueError) as exc:
+            self.events.log.append(f"write failed: {exc}")
+            return False
