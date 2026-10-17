@@ -1,0 +1,1987 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Accrete",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "case"
+        }
+      },
+      "$ref": "#/$defs/Case",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "placeholder"
+        }
+      },
+      "$ref": "#/$defs/Placeholder",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chart"
+        }
+      },
+      "$ref": "#/$defs/Chart",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "diagram"
+        }
+      },
+      "$ref": "#/$defs/Diagram",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "canvas"
+        }
+      },
+      "$ref": "#/$defs/Canvas",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "editor"
+        }
+      },
+      "$ref": "#/$defs/Editor",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "float"
+        }
+      },
+      "$ref": "#/$defs/Float",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "layer"
+        }
+      },
+      "$ref": "#/$defs/Layer",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "portal"
+        }
+      },
+      "$ref": "#/$defs/Portal",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "fold"
+        }
+      },
+      "$ref": "#/$defs/Fold",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "form"
+        }
+      },
+      "$ref": "#/$defs/Form",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "popup"
+        }
+      },
+      "$ref": "#/$defs/Popup",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "svg"
+        }
+      },
+      "$ref": "#/$defs/Svg",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "group"
+        }
+      },
+      "$ref": "#/$defs/Group",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "path"
+        }
+      },
+      "$ref": "#/$defs/Path",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "rack"
+        }
+      },
+      "$ref": "#/$defs/Rack",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "pages"
+        }
+      },
+      "$ref": "#/$defs/Pages",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "button"
+        }
+      },
+      "$ref": "#/$defs/Button",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "image"
+        }
+      },
+      "$ref": "#/$defs/Image",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "input"
+        }
+      },
+      "$ref": "#/$defs/Input",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "select"
+        }
+      },
+      "$ref": "#/$defs/Select",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "table"
+        }
+      },
+      "$ref": "#/$defs/Table",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "thead"
+        }
+      },
+      "$ref": "#/$defs/Thead",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "tbody"
+        }
+      },
+      "$ref": "#/$defs/Tbody",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "tr"
+        }
+      },
+      "$ref": "#/$defs/Tr",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "th"
+        }
+      },
+      "$ref": "#/$defs/Th",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "td"
+        }
+      },
+      "$ref": "#/$defs/Td",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "text"
+        }
+      },
+      "$ref": "#/$defs/Text",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "textarea"
+        }
+      },
+      "$ref": "#/$defs/TextArea",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "template"
+        }
+      },
+      "$ref": "#/$defs/Template",
+      "required": [
+        "type"
+      ]
+    }
+  ],
+  "$defs": {
+    "Bind": {
+      "type": "object",
+      "properties": {
+        "default": true,
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "source"
+            },
+            "path": {
+              "description": "可选 JSON Pointer（ADR 0008）：进槽内节点的 WIRE SHAPE 提取\n子值（与 ADR 0005 patch 路径同一词法）；省略 = 取槽节点自己的\n`bind[<key>].default`（同 key 直传惯例）。",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source"
+          ]
+        },
+        {
+          "description": "具名本地值槽（ADR 0008）：独立于 data（Accrete 展示形态）的\n裸 Value 平面——发射侧省略 `path`（整值写入），订阅侧带 `path`\n时进槽内 Value 的 JSON Pointer 提取子值（形状归生产端，\n与 wire-shape 无关）。\nADR 0010：落槽载荷与上行同形（`Outflow {event, id?, data}` 包装\n对象）——事件形状由事件定义、不由落点决定，`kind: event` 改绑\n`kind: local` 订阅方零改动。`event` 缺省 = 槽名（槽即频道）；\n`path` 仍是订阅侧字段，发射侧忽略。",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "local"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "slot": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "event"
+            }
+          },
+          "required": [
+            "kind",
+            "event"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "field"
+            },
+            "payload": true
+          },
+          "required": [
+            "kind",
+            "field"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "submit"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "default"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "Button": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ButtonAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ButtonAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "oneshot": {
+          "type": "boolean",
+          "default": false
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Canvas": {
+      "description": "外部渲染模块的原位挂载容器（ADR 0007）。\n核心不解释 `data`——载荷语义完全归模块；尺寸/样式走 `attrs`，\n与数据流的联动走现有 bind 槽协议（`set`/`patch` 按 `data_event` 寻址）。",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SizeAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "description": "`bind[\"value\"]`：载荷惯例与 Chart/diagram 同族——`kind: source` 指向\n具名数据槽（槽内节点的 `bind.value.default` 原始 JSON 即模块 data 区），\n流式喂数据 = 对该槽 `set`/`patch`（指针 `/bind/value/default/...`）。",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "CDN 上的 ES module 地址（导出 mount/update/resize/unmount 契约）。",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "Case": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CaseAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CaseAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "grid": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "horizontal": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Chart": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "description": "`bind[\"value\"]`：G2 spec（纯数据，GoG 词汇——type/data/encode/\ntransform/scale/interaction）。流式更新 = set/patch 指针进\n`/data` 等节点，封装模块整 spec 重设 + `chart.update()` 增量重绘。",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "G2 封装模块的 ES module 地址（ADR 0009：ADR 0007 契约，\nmount/update/resize/unmount）。默认指向自家静态资产——\n版本固定，换渲染实现/CDN 时显式覆盖。",
+          "type": "string",
+          "default": "/assets/g2chart/index.js"
+        }
+      }
+    },
+    "ClassAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "horizontal": {
+          "description": "容器自身的排布方向（同 CaseAttr 字段；ADR 0010 缺陷修复：\n此前只有 Case 认识 horizontal，select/rack 的 col 类无法被\n自己的 attrs 推翻——父 case 的 horizontal 只管父 div）。",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Diagram": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "U",
+        "D",
+        "L",
+        "R"
+      ]
+    },
+    "DirectionAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Editor": {
+      "description": "代码编辑器（ADR 0016）。走 ADR 0007 的模块通道——与 Canvas/Chart 同一条\n挂载路径，库（Monaco）在模块 `mount()` 里才拉（ADR 0015）。\n数据区（`bind[\"value\"]`）载荷 = `{code, lang?, event?}`：\n- `code`：源码文本（\"代码作为参数\"）；\n- `lang`：Monaco 语言 id（缺省 plaintext）；\n- `event`：保存时上行的对事件名（缺省 `submit`）——编辑器自己在 Ctrl/Cmd+S\n  里 `host.send(event, CBOR({code, lang}))`，与表单 submit 同一条上行腿。\n`{}`/Null = 尚无数据 → 不占位（ADR 0012）。",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SizeAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "封装模块的 ES module 地址（ADR 0007 契约）。默认指向自家静态资产。",
+          "type": "string",
+          "default": "/assets/editor/index.js"
+        }
+      }
+    },
+    "Float": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PositionAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Fold": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FoldAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "item": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        }
+      }
+    },
+    "FoldAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "float_body": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replace_header": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Form": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FormAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "FormAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "instant": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Group": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StyleAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Image": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ImageAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "desc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "height": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thumb": {
+          "type": "boolean",
+          "default": false
+        },
+        "width": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Input": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "JsType": {
+      "type": "string",
+      "enum": [
+        "bool",
+        "number",
+        "text",
+        "password",
+        "button",
+        "submit"
+      ]
+    },
+    "Layer": {
+      "description": "模态层（ADR 0014）：应用显式声明的全屏挂载点，portal 把内容传送进来。\n显隐只有一条规则——所绑 `bind[\"value\"]` 槽非空即显示（空即无，ADR 0012 复用）；\n`dismiss` 点层自身（模糊区）时清空该槽（清空即关）。几何内联在渲染侧，\n遮罩走 custom.css。",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "LayerAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "dismiss": {
+          "description": "dismiss（ADR 0014）：点层自身（模糊区，而非模态内容）清空所绑槽。\n本页瞬时状态：只写 local/data 平面，不上线协议。",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Pages": {
+      "description": "id 字典页面容器（ADR 0010）：`bind[\"value\"]`（source，list 平面）喂\n页面行——行 = 任意 Accrete 节点，其 `id` 即字典键（行身份在数据里，\n同 rack 纪律）；`bind[\"select\"]`（local 或 source，可带 `path`）是\n选中信号，tracked 读、按 path 提键（path 缺省 = 整值；提出来必须是\n字符串，否则 warn + 不切换）。命中键显示对应行，未命中 = warn + 空白。",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "display": {
+          "$ref": "#/$defs/PagesDisplay",
+          "default": "render"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "PagesDisplay": {
+      "oneOf": [
+        {
+          "description": "只挂载命中行：切页省内存，子树状态（滚动/输入/GL）随卸载丢失。",
+          "type": "string",
+          "const": "render"
+        },
+        {
+          "description": "所有行常驻 DOM，未命中行容器加 class `hide`（display:none）：\n状态全保，代价是全部行的渲染与内存常驻（生产端自选）。",
+          "type": "string",
+          "const": "dom"
+        }
+      ]
+    },
+    "Path": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Placeholder": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Popup": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DirectionAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Portal": {
+      "description": "渲染位置传送（ADR 0014）：children 渲染到 `to` 选中的元素里，就地只留一个空锚点。\n只做位置，不管显隐与遮罩——那是 layer 的语义。",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PortalAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        }
+      }
+    },
+    "PortalAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "description": "目标挂载点：CSS 选择器，选中应用显式声明的 layer 宿主（ADR 0014：挂载点由\n应用声明，渲染器不加固定逻辑；解析不到就不渲染 + warn）。",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ]
+    },
+    "PositionAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "left": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "left"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "right": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "right"
+                  ]
+                }
+              ]
+            },
+            {}
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "top": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "top"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bottom": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "bottom"
+                  ]
+                }
+              ]
+            },
+            {}
+          ]
+        }
+      ]
+    },
+    "Rack": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RackAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "item": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        }
+      }
+    },
+    "RackAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "scroll": {
+          "type": "boolean",
+          "default": false
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Select": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SizeAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "height": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "StyleAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Svg": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SizeAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Table": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Tbody": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Td": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Template": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "data"
+      ]
+    },
+    "Text": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TextArea": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bind": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Bind"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TextAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Th": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Thead": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Tr": {
+      "type": "object",
+      "properties": {
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
