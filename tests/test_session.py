@@ -18,6 +18,11 @@ from reflux.app import App
 from reflux.channel import JUDGED_DEAD, Channel
 
 
+def counts(**over: int) -> dict[str, int]:
+    """The whole stats shape, so a new counter has to show up in these tests too."""
+    return {"issued": 0, "reclaimed": 0, "dead": 0, "shed": 0, "resync": 0, **over}
+
+
 class FakeChannel(Channel):
     """A channel as the session table sees it, with a record of what was done to it.
 
@@ -80,7 +85,7 @@ class TestSessionLifecycle(unittest.TestCase):
         channel = FakeChannel()
         self.app.handle(channel)  # returns as soon as the connection ends
         self.assertEqual(len(self.app.sessions), 0)
-        self.assertEqual(self.app.stats, {"issued": 1, "reclaimed": 1, "dead": 0})
+        self.assertEqual(self.app.stats, counts(issued=1, reclaimed=1))
 
     def test_a_live_session_is_pinged_and_kept(self) -> None:
         channel = FakeChannel(hold=True)
@@ -110,13 +115,13 @@ class TestSessionLifecycle(unittest.TestCase):
         # Judged dead is not reclaimed: the dead one leaves the table by the deadline, and its
         # reader — still blocked in the fake's hold — must not count it a second time on the way
         # out. The live one is untouched by the pass.
-        self.assertEqual(self.app.stats, {"issued": 2, "reclaimed": 0, "dead": 1})
+        self.assertEqual(self.app.stats, counts(issued=2, dead=1))
         for channel in (live, quiet):
             channel.hold.set()
         for thread in threads:
             thread.join(timeout=2)
         self.assertEqual(len(self.app.sessions), 0)
-        self.assertEqual(self.app.stats, {"issued": 2, "reclaimed": 1, "dead": 1})
+        self.assertEqual(self.app.stats, counts(issued=2, reclaimed=1, dead=1))
 
     def test_the_watchdog_thread_ticks_the_pass(self) -> None:
         channel = FakeChannel(quiet_for=1.0, hold=True)

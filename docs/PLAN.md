@@ -24,7 +24,7 @@
 | T5 路由（装饰器与注册器、发现、择优键、并列歧义、CLI 打印） | ✅ 2026-10-16 | `python3 -m unittest tests.test_routes` ＋ 全套 |
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
-| T8 故障注入 | ⏳ | — |
+| T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
 | T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通四类交互） | ⏳ | — |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ | — |
 | T11 测量 | ⏳ | — |
@@ -326,3 +326,42 @@ path               source                           metadata
 
 门还抓出一处我漏判的影响面：**T4 与 T6 直接按列表下标读会话表**（`app.sessions[0]`），表换成身份键的 dict
 之后两门当场 `KeyError`。修法是给应用加一个读快照的 `App.live()`，两门改用它——门不该依赖容器的形状。
+
+## T8 门的实测结果（2026-10-16）
+
+```
+[1/6] PASS  a connection registers a session       live=1
+[2/6] PASS  bad JSON / unknown name / no event / raising handler: four refusals, one per frame
+      refused +4 traceback=True session answered
+[3/6] PASS  the producer refuses before the wire sees it: over the cap, duplicate row id
+      cap=True duplicate_id=True
+[4/6] PASS  a client that stopped reading sheds frames and holds nobody else
+      shed=8 resync=0 other session answered=True
+[5/6] PASS  an oversized frame is refused whole    rejected=0->1 tree 1935->1935
+[6/6] PASS  an unreadable declared payload refuses the uplink instead of sending a hole
+      rendered=True uplink.refused=1 sent=0 note=True
+```
+
+[1]–[4] 离线（真 socket + stdlib 客户端），[5]–[6] 真浏览器。[4] 里 `resync=0` 是这条检查的真实结果：真
+socket 的内核缓冲把 8 帧都收下了，队列没停在排空状态，所以没触发重同步——那条路（丢帧 → 陈旧 → 排空后一帧
+`create`）由 `tests/test_failure_modes.py` 用会阻塞的假 channel 确定性地测（断言 `stats["resync"] >= 1`），
+门这一条证明的是**隔离**：慢的那个客户端没能按住别人的帧。
+
+落地的形状：`reflux/app.py`（`Session.outbox` 入队时有界、丢中间帧标 `stale`、`_pump` 每会话一条写线程、
+`flush_session` 排空后写一帧重同步、计数 shed/resync）、`reflux/channel.py`（`_take` 把 RST 归成
+`ChannelClosed`）、`shell/js/events.js`（载荷声明的键在 locals 里取不到就拒发 + `onRefuse`）、
+`shell/js/main.js`（`uplink.refused`）、`shell/js/validate.js`（一帧超过上限整帧拒收）、`reflux/ops.py`
+（`draw` 上：上限与"一帧之内每个节点数组 id 唯一"）、`spec/components.json` 与生成物（`max_ops_per_frame:
+1024`，一处定义两边用）、`tests/test_failure_modes.py`（5 例）、`tools/gate_t8.py`（6 条）。
+
+这一轮改的设计，都是门顶出来的：
+
+- **写线程改成每会话一条**。第一版是"一条共享 flusher 遍历所有会话"，门当场顶住：慢客户端把那条共享线程按在
+  它自己的 `send` 里，别的会话的帧就卡住了——而"别的会话不受影响"正是这一条要保证的。写是唯一会被客户端拖住
+  的一步，所以它必须是每会话自己的线程。
+- **队列在入队时有界**，不是由写线程事后裁剪：写线程阻塞时它自己都不会再跑，事后裁剪等于没有上限。
+- **上限进规格**（`max_ops_per_frame`）而不是两侧各写一个常量：壳与写入层读同一份，改一处两边同时动。
+- **id 唯一性检查放在 `draw`**（帧级规则），不是每个建造器各查一遍：一支 op 还没成帧，谈不上"同一帧里唯一"。
+- **RST 与正常关闭归成同一条账**：门第一次跑时，客户端 `close()` 让服务端读线程把 `ConnectionResetError`
+  抛到了 socketserver，打出一大坨 traceback——突然消失是正常情况，不是异常；现在是 `ChannelClosed`，会话照常
+  回收并计数。

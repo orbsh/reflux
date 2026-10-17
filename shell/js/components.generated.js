@@ -4,6 +4,7 @@
 export const SPEC_VERSION = "0.2.0";
 export const RESERVED_PREFIX = "reflux:";
 export const OPS = ["create", "patch", "insert", "remove"];
+export const MAX_OPS_PER_FRAME = 1024;
 export const BIND_KEYS = ["source", "event", "payload"];
 export const FIRE_EVENTS = ["change", "submit", "click"];
 export const COMPONENTS = {

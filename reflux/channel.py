@@ -68,7 +68,12 @@ class Channel:
     # --- reading -------------------------------------------------------------------------
 
     def _take(self, count: int) -> bytes:
-        data = self.rfile.read(count)
+        try:
+            data = self.rfile.read(count)
+        except OSError as exc:
+            # A peer that vanished with an RST is gone just like one that closed: callers get a
+            # single exception to handle, and the session's accounting stays in one place.
+            raise ChannelClosed(f"the peer reset the connection: {exc}") from exc
         if data is None or len(data) < count:
             raise ChannelClosed("the peer closed mid-frame")
         self.last_seen = time.monotonic()
