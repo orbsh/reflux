@@ -3,7 +3,12 @@ name = "reflux"
 version = "0.0.0"
 description = "A spec plus a static shell: write frontend UI in any language"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    # The generated SDK's type layer (reflux/sdk/types.py) is pydantic models: the type layer is an
+    # off-the-shelf JSON-Schema consumer's output, not something we hand-write (see docs/DESIGN.md
+    # 「生产者」). Only the SDK needs it — the rest of reflux stays stdlib-only.
+    "pydantic>=2",
+]
 
 [tool.uv]
 # The producer side is code you run from the repo, not a wheel to install.

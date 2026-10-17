@@ -10,7 +10,8 @@
 - **封闭性与跨字段语义归 reflux**（生成的 SDK + 服务端入站校验 + 门）。accrete 刻意不拒未知字段（旧帧兼容），静默丢弃是那边的既定行为，不去改它——代价是绕过 SDK 手写 JSON 的生产者没有封闭性，这条写明。
 - **帧定义只有一套**：fluxen 的 `Message` / `Content` / `Outflow`。`ev = "draw"` 归渲染器，框架的会话与导航帧走别的取值。
 - 不作判据（已裁决，不再论证）：资产体积与跨边界开销；「JS 门槛低、便于外部参与」——实测不成立。
-- 迁移的缝（操作集差异、词表 profile、SDK 生成的命名）记在 `DESIGN.md` 的「开放问题」。
+- **词表用 accrete 的既有词表，不往外长**（2026-10-17）：新类型与枚举属性都不加进 accrete；profile 是 reflux 侧一份可读数据——选哪些类型进应用面、哪个属性值是默认、变体落成哪些 class 令牌。现有 21 项与那 30 个根变体不是包含关系（同名 8 项），那 13 项逐条落法在 `DESIGN.md` 的「组件词表」。
+- 迁移的缝（操作集差异、页内导航与 click 上行落空）记在 `DESIGN.md` 的「开放问题」；词表 profile 这一条已定，见上；SDK 生成这一条也已定并落地（见下表）。
 
 已落地的 T0–T6 全跑在**退休前那套实现**上（规格 + SolidJS 壳），门槛命令照旧有效，退役不发生在它们身上；迁移任务见下表末尾。
 
@@ -25,10 +26,11 @@
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
-| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通四类交互） | ⏳ | — |
-| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ | — |
+| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互，导航待裁） | ⏳ 先决：M1 | — |
+| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
 | T11 测量 | ⏳ | — |
-| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 先决：操作集与帧归属的裁决（见 `DESIGN.md`「开放问题」） | — |
+| M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
+| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 先决：操作集与帧归属的裁决、页内导航与 click 上行落空的裁定（见 `DESIGN.md`「开放问题」） | — |
 
 ## 已落地的形状
 
@@ -49,6 +51,14 @@ reflux/app.py                     应用：壳 + /ws + 注册表 + 一页钩子�
 reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子）
 reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
 reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注册表
+schema/accrete.schema.json        fluxen 导出物的快照（sha256 与导出命令记在 schema/README.md）
+profile/profile.json              reflux 的 profile：选择、默认、class 令牌表（里面没有类型定义）
+tools/sync_schema.py              重新导出并逐项对拍（要 fluxen 那个仓；不进默认门）
+tools/gen_sdk.py                  schema + profile → 下面两件产物；--check 做漂移门
+reflux/sdk/types.py               ← 生成：每个线类型一个类 + discriminated 的 Accrete／Bind
+reflux/sdk/builders.py            ← 生成：暴露类型的构造器（签名与默认来自 schema）
+reflux/sdk/_parse.py              手写：parse／dump 边界与 bind 条目组装
+reflux/sdk/profile.py             手写：读 profile/profile.json
 shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
 shell/js/interp.js                壳的 store 与四个操作（T2）
 shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）

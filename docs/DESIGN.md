@@ -14,7 +14,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 ## 定位
 
 - **用宿主语言写 UI**：开发者在自己的语言里写组件树、绑定与事件处理器。Python 起步；任何能发 JSON 的语言都能接——SDK 由 accrete 的类型导出的 schema 生成（见 I5）。
-- **组件是粗粒度的**：线上传的是 `input`、`table`、`form`、`rack` 这类有语义的组件，不是 `div`/`span`。组件语义、元素映射、可访问性、本地行为（输入缓冲、展开、选中、校验）在渲染器里写一次；**哪些组件进应用面、哪个变体是默认**由 reflux 的 profile 定——accrete 的词表比这更宽，而且允许自由 class。
+- **组件是粗粒度的**：线上传的是 `input`、`table`、`form`、`rack` 这类有语义的组件，不是 `div`/`span`。组件语义、元素映射、可访问性、本地行为（输入缓冲、展开、选中、校验）在渲染器里写一次；**哪些类型进应用面、哪个属性值是默认**由 reflux 的 profile 定——profile 是 accrete 那 30 个根变体上的逐项选择（见「组件词表」），两边不是包含关系：我们现在这 21 项里只有 8 项与它同名。
 - **消费方零工具链**：资产是静态的（钉版本的 wasm 包加框架那一小段 runtime），消费方不用 npm、不用打包器、不用 wasm 工具链、没有构建步骤、运行时也不依赖 CDN。构建那一步只在维护者这边发生，一次。
 - **服务端不画界面**：没有「服务端重渲染 + 全树 diff」这条默认路径（为什么否掉见「Why Not」）。服务端发的是**结构与数据**，界面由渲染器按组件语义自己画。
 
@@ -24,7 +24,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 
 - **I1——线上是数据，不是代码。** 没有 eval、没有生产者下发的 JS、没有 HTML 字符串。给界面挂行为的只有渲染器自己的组件实现。
 - **I2——更新是操作，不是快照。** 一帧携带针对客户端当前状态的操作增量（结构或数据）；除（重）连接那次，不重发整棵界面。
-- **I3——词表封闭，而且封闭在编译期。** 组件集、每组件的属性集、事件集、操作集都收在 accrete 的类型里（闭枚举、穷举匹配）；reflux 侧是它上面的一份 profile——选哪些组件进应用面、默认值是什么。扩展词表等于改那一处类型、重导一次 schema，没有运行时注册，也没有第二份手写词表。新的产品能力是既有词表上的新数据。
+- **I3——词表封闭。** 组件集、每类型的属性集、事件集、操作集都收在 accrete 的类型里（闭枚举、穷举匹配），渲染器对全部类型有实现；reflux 侧是它上面的一份 profile——选哪些类型进应用面、默认值是什么、变体的闭集合落成哪些 class 令牌。扩展词表等于改那一处类型、重导一次 schema，没有运行时注册，也没有第二份手写词表。新的产品能力是既有词表上的新数据。**代价写明**：变体这类闭集合在 accrete 的属性空间里没有字段可放，只能收在 profile 的数据里、落成 class；这一层的封闭靠 profile 的数据、生成器的门与服务端入站校验，不再靠编译期类型。
 - **I4——工作态住在前端；服务端只在事件边界拿到事件携带的那份。** 输入缓冲、展开、选中、表单暂存、焦点、滚动都是渲染器的。服务端要某份状态，就必须由组件声明它随事件上行——不允许出现「服务端悄悄持有一份界面工作态」这种影子状态。
 - **I5——词表的单一来源是 accrete 的类型。** SDK 的类型层（类型、枚举、变体、必填与默认）由它导出的 schema 生成，构造器面在生成物上加一层薄的命名与手感；不手写第二份词表。N 个 SDK 手写 N 份词表，必然漂移。
 - **I6——一个 socket 只有一套帧定义。** 就是 fluxen 那套（`Message` / `Content` / `Outflow`），reflux 的 Python 侧说它的话。`ev = "draw"` 是渲染器的通道，其余取值渲染器忽略——会话、导航这类框架的帧走别的取值，同一条线上分家。
@@ -76,10 +76,10 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
  "children": []}
 ```
 
-- **`attrs` 是每组件自己的白名单**，取值是枚举或受限值域，不是自由字符串——**没有任意 class 字符串**。外形与样式是组件自带的（见「组件词表」）。
+- **`attrs` 是每类型的白名单**（accrete 那份的形状），取值是枚举或受限值域；reflux 的 profile 在它上面选与设默认。生产端见不到自由 class 字符串——变体的闭集合由 profile 落成 class 令牌；accrete 的线上是允许 class 的，收窄落在 profile 与 SDK 上（见「组件词表」）。本节示例仍是退休前线上的那份形状，换成 accrete 的节点形状随 M1 落。
 - **`bind` 是组件与事件流之间的唯一接口**：`source` 是读（数据槽的名字，壳盯着它），`event` 是写（事件名，壳上行它），`payload` 声明这次上行要带上哪几件本地态（`value`、`selection`、`fields`…）。I4 的落点就在这一行：**要什么状态，组件自己声明带上去。**
   - `source` 怎么用由组件语义定：叶把它当自己的 `primary` 画出来（`text` 的文字、`image` 的 src、`link` 的 href……），带值的输入把它当自己的值，容器把槽值当子节点挂（一轮数组＝列表槽，单个节点＝片段）。槽还没写过时回退到构造时的属性值，所以「先出结构、再补数据」和「一帧里都发」都成立。
-  - 上行**时机**写在规格的 `fire` 里（`⊆ fire_events`：`change` / `submit` / `click`）：接受 `event` 的组件必须声明它，不接受的一个也不声明。时机是契约的一部分——生产者不该靠读壳的实现才知道自己声明的事件什么时候响；`change` 是提交/失焦语义，于是「每次按键一次往返」在构造上就不存在。
+  - 上行**时机**写在规格的 `fire` 里（`⊆ fire_events`：`change` / `submit` / `click`）：接受 `event` 的组件必须声明它，不接受的一个也不声明。时机是契约的一部分——生产者不该靠读壳的实现才知道自己声明的事件什么时候响；`change` 是提交/失焦语义，于是「每次按键一次往返」在构造上就不存在。accrete 侧能上行事件的只有 input／textarea／select 与 `form` 的 submit，`click` 那一档的落点见「组件词表」。
 - **上行帧是 `{event, id, data}`**：`id` 取认领该事件的那个节点自己的 id（不是祖先）——行的身份要上行，就把行的 id 给行里那个交互节点；`data` 按 `payload` 声明的顺序逐个取本地态，不多不少。
 - **不需要 id 也能更新**：数据的地址是槽名，不是节点名。id 只为身份存在（行身份、跨结构变动的存活）。
 
@@ -112,31 +112,50 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - 保留前缀 `reflux:` 归壳（`reflux:hello`、`reflux:nav`）；生产者把处理器注册到保留前缀上，启动即报错。
 - 事件名可打印、可核对（`reflux events` 列出注册表）。名字里不塞业务参数——参数在 `data` 里。
 
-## 组件词表：封闭，而且必须够厚
+## 组件词表：accrete 的类型，加一份 profile
 
-组件集是**有限封闭**的粗粒度集合，四个家族：
+词表的单一来源是 accrete 的类型（I5）：30 个根变体，每个变体自己的属性白名单、闭枚举。渲染器对**全部 30 个**都有实现（`ui_leptos` 的 30 个分派函数，`template_` 是个空 view），所以 profile 从整个集合里挑，不存在「声明了没实现」的坑。
 
-- **容器**：stack / row / grid / card / panel / tabs / modal / form / fieldset
-- **输入**：input / textarea / select / checkbox / radio / switch / slider / date / file
-- **展示**：text / heading / image / icon / badge / code / markdown / chart / table / rack
-- **导航与反馈**：link / button / breadcrumb / pager / toast / progress / empty
+profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（类型来自 schema），只记三件事：
 
-每个组件声明四件事，都写进规格：
+- **选**：哪些类型进应用面。
+- **默认**：哪个属性值是默认。
+- **收**：生产端见不到自由 class——变体收成闭集合，由 profile 低成 class 令牌（accrete 的线上允许 class，令牌就是 `attrs.class` 里的那些字符串）。
 
-- **本地态**：它内部维护什么（输入缓冲、是否展开、当前选中、滚动位置）。
-- **绑定**：读哪个槽、上行哪个事件、上行时带哪些本地态。
-- **上行时机**（`fire`）：在哪类 DOM 事件上上行（`change` / `submit` / `click` 的一个子集）。
-- **属性白名单**：枚举或受限值域，含变体（variant / size / tone）——不是自由 class 字符串。
+现有那 21 项（`spec/components.json`）与它不是包含关系：同名 8 项——form / rack / input / textarea / select / button / image / text；另外 13 项是 reflux 自己的词，逐个落成：
 
-上面是**目标词表**；已落地的是规格里那一份（`spec/components.json`，当前 21 个：容器
-stack / row / card / rack / field / form，输入 input / textarea / select / option / checkbox /
-switch，展示 text / heading / badge / code / image，导航与反馈 link / button / progress / empty）。
-词表按任务逐节补齐——一个还没落地的组件不是实现缺失，是还没到那一步。规格与实现之间有一道
-相等断言（规格里有而实现里没有，门就红），所以「目标」与「已落地」不会被读混。
+| 我们这一项 | 落点 |
+|---|---|
+| stack | `case`（默认竖排；`attrs.horizontal` 决定要不要 `col` 类） |
+| row | `case` + `attrs.horizontal` |
+| card | `case` + class 令牌（`tone` 三个值是令牌） |
+| field | 不是类型：表单字段是 `form` 的 `bind.field` 寻址，标签与提示是同级 `text` |
+| option | 不是类型：`select` 的选项来自它绑的列表槽的行，行 `id` 即键 |
+| checkbox | `input` + `bind.type = bool`（渲染器据此给 `type="checkbox"`） |
+| switch | 同 checkbox，只差 class 令牌；`label` 降成同级 `text`，`disabled` 那边没有字段、只有 class |
+| heading | `text` + class 令牌（`level` 1–3 是令牌） |
+| badge | `text` + class 令牌（`tone` 五个值是令牌） |
+| code | `text` + `attrs.format = "md"`：GFM 出围栏代码块，样式在 `main.css` 的 `pre`/`code` |
+| empty | 表达得出来，但落点要核：`placeholder` 的空槽分支是现成的相反规则（槽非空渲染那个节点、空渲染 `children`），不过它看的是 data 平面，列表空不空它看不见 |
+| progress | 不进词表：纯展示、无交互，自绘部件走 `canvas` 的模块通道 |
+| link | **无载体，跟着没的还有整个 click 上行**：accrete 没有锚点类型，渲染器也从不导航；更要紧的是渲染器能上行事件的只有 input／textarea／select 与 `form` 的 submit——**没有一个元素能被点一下就把事件送上去**（那边的 `button` 只在 form 里当提交器，自己不发）。所以页内导航不是「换成生产端驱动」，而是连生产端驱动都做不到：只剩浏览器自己发起的那些（后退/前进、地址栏、深链）。要保住页内导航与 click 上行，得让 accrete 里有一个通用可点击元素、或一个带 URL 的字段 |
+
+同名那 8 项里还有两处不能按名字对：`button` 在那边只在 form 里当提交器（`bind["value"]` 不是 `Submit` 就渲染成空 div）；`input` 的类型来自 `bind.type`（`JsType`），不在属性上。
+
+accrete 那侧比我们宽的另外 22 项（case / placeholder / chart / diagram / canvas / editor / float / layer / portal / fold / popup / svg / group / path / pages / table 一族 / template）是 fluxen 自己的语义面（版面容器与栅格、图层与模态、挂载外部模块、表格、SVG）；进不进应用面是 profile 的选择，不是缺项。
+
+每个类型声明四件事，前两件在类型里，后两件在 profile 里：
+
+- **本地态**：它内部维护什么（输入缓冲、是否展开、当前选中、滚动位置）——渲染器的。
+- **绑定**：读哪个槽、上行哪个事件、上行时带哪些本地态——形状来自 accrete 的 `bind`。
+- **上行时机**：在哪类事件上上行——渲染器与 profile 一起定。
+- **属性**：类型自己的白名单（闭枚举、受限值域）；变体的闭集合收在 profile 里、落成 class 令牌。
+
+属性侧有几处是这次裁决认下的落空（逐项核过 accrete 的属性空间）：`placeholder`（input／textarea）与 `disabled`（input／textarea／select／button／form）在那边没有字段，只有 class；`input.kind` 里的 email／search 没有对应（`JsType` 只有 bool／number／text／password／button／submit）；`textarea.rows`、`form.submit_label`、`rack` 的 density／empty_text／follow 同样没有字段（accrete 的 rack 只有 `scroll`）；`image.fit`、`text.wrap`、`text`／`button`／`badge` 的 size／tone／variant 都走 class 令牌。这些不构成加词表的理由——要么是外观（令牌），要么是渲染器的行为细节；真装不下的在落 profile 时逐条列出来。**还有一处落空不是属性而是机制**：我们的 `payload`（组件声明这次上行要带哪几件本地态）在那边没有位置——送什么由组件自己定（输入送它的值、表单送它收集到的字段），所以构造器不提供这个参数。
 
 **词表的厚度就是交互逻辑的表达力。** 这个模型的复杂度不在服务端，在这里：应用里凡是「依赖状态的界面行为」，只有两个去处——落进某个组件的声明式语义（本地态 + 事件 + 变体），或者走一次事件上行交给生产者。所以加组件时的判据是「有哪类交互逻辑现在无处表达」，不是「界面还缺哪种元素」。
 
-*为什么不给自由 class／工具类字符串*：那等于把样式决策交回生产者，外形开始漂移，生成的界面不再可穷举，还得在壳里挂一个运行时 CSS 合成器。样式归壳，生产者只选组件与变体——换来的是确定性，代价是生产者的样式自由。（逃生门留作开放问题，要有实测需求才开。）
+*为什么不给生产端自由 class／工具类字符串*：那等于把样式决策交回生产者，外形开始漂移，生成的界面不再可穷举，还得在客户端挂一个运行时 CSS 合成器。样式归类型与 profile，生产者只选类型与变体——换来的是确定性，代价是生产者的样式自由。accrete 的线上是允许 class 的，所以这条纪律落在 profile 与 SDK 上、不落在类型里：生产者见到的是一份闭集合，落到线上才是令牌。（逃生门留作开放问题，要有实测需求才开。）
 
 ## 生产者（各语言 SDK）
 
@@ -148,7 +167,7 @@ SDK 的职责只有三件：
 
 处理器收到的是一整帧：`handler(session, frame)`，`frame.data` 就是 `payload` 那一份，`frame.event`／`frame.id` 是要送达的名字与行身份。会话用它这一回合的改动组一帧发出（`session.draw(*ops)`）——一个处理器改了几处，客户端看到的就是一个回合。
 
-**SDK 的构造器与类型由规格生成**，不由人手写——这是 I5 的落点，也是「换个语言就能用」的前提。
+**SDK 的构造器与类型由 schema 与 profile 生成**，不由人手写——这是 I5 的落点，也是「换个语言就能用」的前提。落地的形状（Python 是第一个）：`schema/accrete.schema.json` 是 fluxen 导出物的快照（`tools/sync_schema.py` 在对拍；它要那个仓，所以不进默认门），`profile/profile.json` 是 reflux 的选择与默认；`tools/gen_sdk.py` 用它调 datamodel-codegen 出类型层、再对着实测修形，构造器面按 schema 的类型与 profile 的选择生成，落在 `reflux/sdk/`（`types.py`、`builders.py` 生成；`_parse.py`、`profile.py` 手写）。**为什么要修形**：那份原始输出把 30 个臂里 18 个的 `type` 判别式丢了（实测 `{"type":"float"}` 验成 `Case`），`bind` 压成了 `dict[str, Any]`，`PositionAttr` 的扁平键整批消失——修形是对着实测的，不是口味。门：`python3 tools/gen_sdk.py --check` 与 `python3 -m unittest tests.test_sdk_generated`。
 
 ### 写入层（Python 侧）
 
@@ -314,6 +333,7 @@ def post_index(session, match): ...
 - **壳里再放一张路由表**：两张表必然漂移，而只有生产者知道有哪些视图——匹配必须在它那侧。
 - **一次上齐路由全家桶**（可选段、命名路由、嵌套 outlet、中间件、数据 loader）：词表越大越难学、越难校验；每项都要有实测出的需求才进（触发条件见「开放问题」）。
 - **两个词表各自维护**（旧形态写的「规格另立，不强行共用」）：两份手写词表必然漂移，而 fluxen 那侧的类型加 schema 导出已经能当单一来源；另立买到的只是「不必对齐」的短暂自由，代价是永久的一致税，也让「任意语言生产者」这个卖点停在一句口号上。
+- **让 accrete 为 reflux 长出组件与枚举属性**（把那 13 项、以及 variant／tone／size 这类闭集合加进那 30 个根变体）：单一来源不是把来源变宽，而是在那套词表上做选择——宽出来的每一分都是渲染器要多实现、多维护的面，而变体的闭集合本来就可以收在 profile 里。判据是归属：外观与默认是框架的策略（profile），词表是渲染器的能力（accrete 的类型）。代价认下：变体这一层的封闭退成 profile 的数据 + 生成器的门 + 服务端入站校验，不再靠编译期类型。
 - **把渲染器再写一份（JS 载体）**：这不是风格问题——动态类型里没有地方放「封闭词表」这个不变量，它只能落成数据加运行时断言，那些类型检测与防御性断言是载体决定的。判据是结果：本仓的门抓到的失败全是**静默**的那一类（`render()` 只求值一次、取值函数、深读、假绿 wait、深链 404），静默正是类型本该拦下的；AI 改动场景下差距更大，编译器是默认开着的那层验证。
 - **以「静态资产、无构建」当 JS 壳的结构性理由**：一条都站不住。wasm 产物同样是静态资产（维护者构建一次、钉版本伺服，消费方不编译）；任意语言的生产者本来就靠 accrete 的 JSON，schema 导出加生成补齐了类型那一侧。剩下的只有「用 JS 写渲染器」本身。
 - **以「JS 门槛低、便于外部参与」为理由**：实测不成立，代码没有变得可读，这条作废。
@@ -334,8 +354,8 @@ def post_index(session, match): ...
 - `move` 值不值得进词表？触发：200 行以上列表的重排代价实测（T11）。
 - 组件表长到多大就不再对生成器可学？不是阻塞项；重审 I3 的触发是一张不再能放在一屏里的表。
 - **操作集怎么合？** 我们的四个操作与渲染器的 action 组只对上三个：`create`／`patch`／`remove` 有对应（那边 `patch` 多带 `op: replace|append` 与靠 `event`／`id` 选平面的机制），**`insert` 没有**——那边 `append` 是往列表槽加一行，不是往结构数组按锚点插；`set`／`tmpl`／`inject` 我们这边没有。触发：M1 的第一件，逐条裁决取哪一侧，并把解释器与门一起搬过去。
-- **词表 profile 写成什么**：accrete 有 30 个根变体（我们的集合是它的子集），而且允许自由 class。要定：选哪些组件进应用面、哪个体积／色调是默认、checkbox／switch 这类在那边是 `JsType::bool` 的怎么命名——这份 profile 是落在生成器里，还是落在一份可读的数据里。
-- **SDK 生成的命名**：schema 的根联合分支是匿名的，生成器的联合成员因此是编号的（`Accrete1..12`），组件类名本身齐全。已实测：给变体加 `schemars(title=…)` 不解决问题（生成器不拿 arm 的 title 命名）。要定的是这层改名（按 `const` 值）与构造器手感（`ctor()`）怎么叠在生成物之上，才不至于改一次 schema 就手改一次。
+- **页内导航与 click 上行落空**：accrete 没有锚点类型，渲染器从不导航，能上行事件的只有 input／textarea／select 与 `form` 的 submit——「点一下就把事件送上去」无处表达（见「组件词表」）。触发：M1 把 T4／T6 重新对到 wasm 侧之前——要么认下这两条断掉（导航只剩后退/前进、地址栏、深链），要么在 accrete 里补一个通用可点击元素或一个带 URL 的字段（与「不给 accrete 长组件」那条裁决冲突，得显式重开）。
+- **SDK 生成的后处理**（已定，2026-10-17）：不是「按 `const` 事后改名」——那 12 个匿名臂是被**展开**了，改名会和已有的同名类（`Chart`／`Text` 这些）撞车；修法是补 `type` 判别式、把根联合重建为 discriminated union、`bind` 收成 `dict[str, Bind]`、`PositionAttr` 的扁平键补齐。落在 `tools/gen_sdk.py` 的后处理里，形状见「生产者」。
 - **框架帧的 `ev` 取值**：`draw` 归渲染器是那边定死的，其余取值渲染器忽略。会话与导航用哪些取值、发出去就是契约——`reflux:hello`／`reflux:nav` 要不要顺着改。
 
 ## 实施计划
@@ -351,7 +371,7 @@ def post_index(session, match): ...
 - **T6——导航。**（已落地）壳侧链接拦截（带修饰键/中键/`external`/跨源四类放行）、`popstate`、history 写入、hello 带路径；生产者侧 `reflux:nav` → 匹配 → `create`，应用侧 `app.page(session, path)` 钩子，匹配不到回内置 404（有 `{rest:path}` 就用它）；伺服进程把无扩展名、无对应文件的页面路径交给壳（深链与刷新成立的前提）。门槛：点链接与前进后退各一次，地址栏／界面／服务端路由三者一致；未知路径走 404 结构；冷启动直接打开 `/blog/x` 落在该页。
 - **T7——会话与心跳。**（已落地）会话即连接：连接打开即登记、断线即回收；心跳线程按默认 10s 发协议层 ping、30s 没有入站活动即判死并回收（关 socket 让阻塞的读线程退出）；计数 issued / reclaimed / dead，看现在的会话用 `App.live()`。门槛：一次刷新后表里只剩一个会话（旧连接被回收）；客户端不发 FIN 就消失时判死并回收、表归零，且那条算 `dead` 而不是 `reclaimed`。没有 token 这一层——「跨连接复用」随「会话即连接」一起作废，「伪造 token」那条门槛随之退休。
 - **T8——故障注入。** 坏帧（未知操作、未知路径、未知组件、未注册事件名、载荷缺字段、超大批次、重复行 id、慢客户端）各自产生「失败模式」里规定的行为，且会话存活。
-- **T9——Python SDK。** 由规格生成的构造器与事件注册；`@route`；处理器签名 `handler(session, frame)`；出帧走每会话单队列（顺序由构造保证）。门槛：demo 应用（`reflux/demo_app.py` 是 T4 留下的种子）只用 SDK 写出来，能跑通输入／列表／表单／导航四类交互（导航那一类随 T6）。
+- **T9——Python SDK。**（先决：M1）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成命名一条）；事件注册；`@route`；处理器签名 `handler(session, frame)`；出帧走每会话单队列（顺序由构造保证）。门槛：demo 应用（`reflux/demo_app.py` 是 T4 留下的种子）只用 SDK 写出来，能跑通输入／列表／表单三类交互；导航那一类要看「页内导航与 click 上行落空」那条怎么裁。
 - **T10——第二个语言的 SDK（最小）。** 只生成构造器与上行，证明「规格是产品」不是口号。门槛：同一个 demo 结构在第二语言里写出来，线上帧与 Python 版逐字一致（同一份规格）。
 - **T11——测量。** 每回合帧字节数、壳侧重渲染范围（DOM 变更计数）、首屏与资产体积、100 会话 × N 事件/秒的服务端 CPU。门槛：数字记进 `docs/PERF.md`；本文档里每一条性能断言要么有测量，要么被显式标为未测量。
 
