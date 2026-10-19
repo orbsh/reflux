@@ -34,7 +34,7 @@
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
 | M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 可开（已拆成 M1.1–M1.6，见下） | — |
-| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ⏳ | — |
+| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；需 fluxen 的 dist） |
 | M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ⏳ | — |
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ⏳ | — |
 | M1.4 服务端入站校验（封闭性与跨字段语义的落点） | ⏳ | — |
@@ -63,6 +63,7 @@ reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注
 schema/accrete.schema.json        fluxen 导出物的快照（sha256 与导出命令记在 schema/README.md）
 profile/profile.json              reflux 的 profile：选择、默认、class 令牌表（里面没有类型定义）
 tools/sync_schema.py              重新导出并逐项对拍（要 fluxen 那个仓；不进默认门）
+tools/gate_m1_1.py                M1.1 门：入口把手的探针页（fluxen 的 dist + App 伺服 + CDP；同样要那个仓）
 tools/gen_sdk.py                  schema + profile → 下面两件产物；--check 做漂移门
 reflux/sdk/types.py               ← 生成：每个线类型一个类 + discriminated 的 Accrete／Bind
 reflux/sdk/builders.py            ← 生成：暴露类型的构造器（签名与默认来自 schema）
@@ -384,3 +385,29 @@ socket 的内核缓冲把 8 帧都收下了，队列没停在排空状态，所�
 - **RST 与正常关闭归成同一条账**：门第一次跑时，客户端 `close()` 让服务端读线程把 `ConnectionResetError`
   抛到了 socketserver，打出一大坨 traceback——突然消失是正常情况，不是异常；现在是 `ChannelClosed`，会话照常
   回收并计数。
+
+## M1.1 门的实测结果（2026-10-19）
+
+```
+[1/5] PASS  the renderer mounts into #main         children=yes
+[2/5] PASS  the socket lands on the host's path and codec urls=['ws://127.0.0.1:38233/ws?codec=json']
+[3/5] PASS  the page-level handle reaches the producer frame={'event': 'probe', 'data': {'v': 1}}
+[4/5] PASS  a call before the socket opened is not lost frame={'event': 'early', 'data': {'at': 'before-open'}}
+[5/5] PASS  zero console errors                    none
+```
+
+驱动的形态：探针页（`#main` 带 `data-codec="json"`／`data-path="/ws"`，一段 module 脚本 await 完
+`init()` 就调把手）与渲染器 dist 的三件资产在临时目录里拼起来，由 `App` 伺服（`/ws` 是它自己的通道），
+`tools/cdp.py` 驱动 chromium。断言读的是**过 socket 的帧**（`app.log`）与 `Network.webSocketCreated`。
+
+落地的形状：fluxen `crates/ui_leptos/src/lib.rs`（入口多读 `data-path`／`data-codec`；挂载后发布
+`window.fluxen.send`，走 `Ctx::send`——与 canvas 的 `host.send` 同一条腿）；reflux `tools/gate_m1_1.py`。
+
+门抓到的一件：**装配要留在 `mount_to` 的闭包里**。第一版把 transport 与 `Ctx::new` 提到 mount 之前
+（外面只留 `ctx.clone()` 去发布把手），页面白屏、`#main` 空着，控制台一条
+`spawn_local before a global executor was initialized`——`Ctx::new` 的读循环要 Leptos 的 executor。
+修法是把装配搬回闭包，发布那行跟着进去。
+
+还欠一件（M1.2 决）：这份 dist 没有进仓，门读 `REFLUX_FLUXEN_DIST`（默认
+`~/world/fluxen/crates/ui_leptos/dist`），所以它和 `sync_schema.py` 同级、不在默认门里；wasm 一件
+8.0 MB，钉版本与进不进 git 是 M1.2 的第一个决定。
