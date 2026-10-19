@@ -12,7 +12,9 @@
 - 不作判据（已裁决，不再论证）：资产体积与跨边界开销；「JS 门槛低、便于外部参与」——实测不成立。
 - **词表用 accrete 的既有词表，不往外长**（2026-10-17）：新类型与枚举属性都不加进 accrete；profile 是 reflux 侧一份可读数据——选哪些类型进应用面、哪个属性值是默认、变体落成哪些 class 令牌。现有 21 项与那 30 个根变体不是包含关系（同名 8 项），那 13 项逐条落法在 `DESIGN.md` 的「组件词表」。
 - **操作集取 accrete 的八个，逐字，四个平面各有各的寻址**（2026-10-17）：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`，不留翻译层；旧四个与它们的转换、以及代价（按 id 锚定的插入没了、结构数组里插一格要重写那一段、`title` 没有线上落点）写在 `DESIGN.md` 的「操作」。`payload`（声明带哪几件本地态）随之退场——送什么由组件自己定。
-- 迁移的缝只剩一条：页内导航与 click 上行落空（见 `DESIGN.md`「开放问题」）；词表 profile 与 SDK 生成已定并落地（见下表）。
+- **导航：link 退场，URL 与标题归客户端 runtime**（2026-10-17）：accrete 没有带 URL 的类型，也没有 click 发射面（能上行的只有 input／textarea／select 与 form 的 submit）；「点一下就做事」只剩 canvas 的模块通道。URL 与标题由 runtime 从树里的两个保留 id（`reflux:path`／`reflux:title`）镜像——代价是地址栏与标题成了生产者声明的投影，漏写就停在旧值（进失败模式表，门对着它断言）。
+- 迁移的缝已清零：词表 profile、SDK 生成、操作集与帧归属、页内导航都已裁完（见上两条与下表）；M1 可开。
+- **迁移期的入口**（2026-10-19）：socket 留在渲染器里开（它已经在做 codec 与 URL 的协商），额外只开两扇小门——`#main` 的 `data-codec`／`data-path`，以及挂载后发布的一个页面级上行把手（与 canvas 的 `host.send` 同形状）。reflux 不自带 wasm 入口（判据在 `DESIGN.md` 的「Why Not」）。迁移期两个页面并存：壳在 `/`、新页在 `/__next`，各跑各的门；M1.6 把 `/__next` 提到 `/` 并删壳。
 
 已落地的 T0–T6 全跑在**退休前那套实现**上（规格 + SolidJS 壳），门槛命令照旧有效，退役不发生在它们身上；迁移任务见下表末尾。
 
@@ -27,11 +29,17 @@
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
-| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互，导航待裁） | ⏳ 先决：M1 | — |
+| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ⏳ 先决：M1 | — |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
-| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 先决：页内导航与 click 上行落空的裁定（见 `DESIGN.md`「开放问题」）；操作集与帧归属已裁（见上） | — |
+| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 可开（已拆成 M1.1–M1.6，见下） | — |
+| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ⏳ | — |
+| M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ⏳ | — |
+| M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ⏳ | — |
+| M1.4 服务端入站校验（封闭性与跨字段语义的落点） | ⏳ | — |
+| M1.5 交互门重对（T2／T3 退场换两条；T4／T8 改写） | ⏳ | — |
+| M1.6 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`） | ⏳ | — |
 
 ## 已落地的形状
 
