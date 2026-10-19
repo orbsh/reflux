@@ -137,7 +137,7 @@ def fold(
     """Build a `fold` node (the wire type `fold`)."""
     attrs = drop_none(float_body=float_body, replace_header=replace_header)
     bind = drop_none(value=bind_value(default=value))
-    return parse(drop_none(type='fold', attrs=attrs, bind=bind, id=id, children=list(children) or None, item=list(item) or None), Fold)
+    return parse(drop_none(type='fold', attrs=attrs, bind=bind, id=id, children=list(children) or None, item=list(item) if item else None), Fold)
 
 
 def form(
@@ -209,7 +209,7 @@ def rack(
     """Build a `rack` node (the wire type `rack`)."""
     attrs = drop_none(scroll=scroll)
     bind = drop_none(value=bind_value(source=source))
-    return parse(drop_none(type='rack', attrs=attrs, bind=bind, id=id, item=list(item) or None), Rack)
+    return parse(drop_none(type='rack', attrs=attrs, bind=bind, id=id, item=list(item) if item else None), Rack)
 
 
 def pages(

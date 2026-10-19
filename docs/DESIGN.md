@@ -187,7 +187,7 @@ SDK 的职责只有三件：
 
 处理器收到的是一整帧：`handler(session, frame)`，`frame.data` 就是组件送上来的那份（`Outflow` 的 `data`），`frame.event`／`frame.id` 是要送达的名字与行身份。会话用它这一回合的改动组一帧发出（`session.draw(*ops)`）——一个处理器改了几处，客户端看到的就是一个回合。
 
-**SDK 的构造器与类型由 schema 与 profile 生成**，不由人手写——这是 I5 的落点，也是「换个语言就能用」的前提。落地的形状（Python 是第一个）：`schema/accrete.schema.json` 是 fluxen 导出物的快照（`tools/sync_schema.py` 在对拍；它要那个仓，所以不进默认门），`profile/profile.json` 是 reflux 的选择与默认；`tools/gen_sdk.py` 用它调 datamodel-codegen 出类型层、再对着实测修形，构造器面按 schema 的类型与 profile 的选择生成，落在 `reflux/sdk/`（`types.py`、`builders.py` 生成；`_parse.py`、`profile.py` 手写）。**为什么要修形**：那份原始输出把 30 个臂里 18 个的 `type` 判别式丢了（实测 `{"type":"float"}` 验成 `Case`），`bind` 压成了 `dict[str, Any]`，`PositionAttr` 的扁平键整批消失——修形是对着实测的，不是口味。门：`python3 tools/gen_sdk.py --check` 与 `python3 -m unittest tests.test_sdk_generated`。
+**SDK 的构造器与类型由 schema 与 profile 生成**，不由人手写——这是 I5 的落点，也是「换个语言就能用」的前提。落地的形状（Python 是第一个）：`schema/accrete.schema.json` 是 fluxen 导出物的快照（`tools/sync_schema.py` 在对拍；它要那个仓，所以不进默认门），`profile/profile.json` 是 reflux 的选择与默认；`tools/gen_sdk.py` 用它调 datamodel-codegen 出类型层、再对着实测修形，构造器面按 schema 的类型与 profile 的选择生成，落在 `reflux/sdk/`（`types.py`、`builders.py` 生成；`_parse.py`、`profile.py` 手写）。**为什么要修形**：那份原始输出把 30 个臂里 18 个的 `type` 判别式丢了（实测 `{"type":"float"}` 验成 `Case`），`bind` 压成了 `dict[str, Any]`，`PositionAttr` 的扁平键整批消失——修形是对着实测的，不是口味。生成器自己也有过一处：列表参数（`rack.item`）缺省 `None` 时被写成 `list(item)`，一建 rack 就 TypeError——现在是 `list(item) if item else None`（M1.4 的门第一次建 rack 时撞上的）。门：`python3 tools/gen_sdk.py --check` 与 `python3 -m unittest tests.test_sdk_generated`。
 
 ### 写入层（Python 侧）
 
@@ -207,7 +207,7 @@ SDK 的职责只有三件：
 - **标题也是它的**：同一个机制，换一个标记。
 - **握手**：连上即上行 `reflux:hello`（`data` 只有 `path`）——连接那一刻生产者还不知道客户端站在哪条路径上，先发会先出一棵错的树（见「连接与握手」）。它自己不持 socket：上行走渲染器在页面上发布的那个把手（见「实施计划」M1.1），runtime 是它的调用者，不是第二条连接。
 
-**它读树的两条约定**（这是它与渲染器之间唯一的接口）：两个**保留 id** 的节点——`reflux:path`（当前路径）与 `reflux:title`（标题）。`placeholder` 会把节点 id 落到 DOM 上，所以这两个标记就是普通节点；它们由 SDK 的糖生成（名字与签名在写 SDK 时定），应用不直接写这个约定；两个 id 由 reflux 自己的样式表藏起来。
+**它读树的两条约定**（这是它与渲染器之间唯一的接口）：两个**保留 id** 的节点——`reflux:path`（当前路径）与 `reflux:title`（标题）。`placeholder` 会把节点 id 落到 DOM 上，所以这两个标记就是普通节点；它们由 SDK 的糖生成（名字与签名在写 SDK 时定），应用不直接写这个约定；两个 id 由 reflux 自己的样式表藏起来。标记里写的是**应用路径**（`/b`）——页面挂在哪条前缀下由页面的 `<base href>` 说，地址栏与应用路径的换算只在 runtime 里（迁移期前缀是 `/__next/`，之后是 `/`）。
 
 *为什么是 DOM 而不是帧*：下行信封（`Message`）没有自由字段，框架的载荷在帧里放不下；而这两件本来就是浏览器的、本来就只有 runtime 能写。判据与「标题和 URL 一样是浏览器的事实」是同一条。**代价写明**：生产者漏写标记（或写错）时，地址栏与标题停在旧值——runtime 只镜像，不猜；这是「失败模式」里的一条，门对着它断言。
 
@@ -396,7 +396,7 @@ def post_index(session, match): ...
 - 组件表长到多大就不再对生成器可学？不是阻塞项；重审 I3 的触发是一张不再能放在一屏里的表。
 - **操作集**（已定，2026-10-17）：取 accrete 的八个逐字，四个平面各有各的寻址，逐条转换与代价见「操作」；解释器与门随 M1 一起搬过去。
 - **页内导航与 click 上行**（已定，2026-10-17）：link 退场、锚点语义不要；URL 与标题由客户端 runtime 从树里的两个保留 id 镜像；「点一下就做事」只剩 canvas 的模块通道。做法与代价见「客户端 runtime」与「组件词表」。
-- **SDK 生成的后处理**（已定，2026-10-17）：不是「按 `const` 事后改名」——那 12 个匿名臂是被**展开**了，改名会和已有的同名类（`Chart`／`Text` 这些）撞车；修法是补 `type` 判别式、把根联合重建为 discriminated union、`bind` 收成 `dict[str, Bind]`、`PositionAttr` 的扁平键补齐。落在 `tools/gen_sdk.py` 的后处理里，形状见「生产者」。
+- **SDK 生成的后处理**（已定，2026-10-17）：不是「按 `const` 事后改名」——那 12 个匿名臂是被**展开**了，改名会和已有的同名类（`Chart`／`Text` 这些）撞车；修法是补 `type` 判别式、把根联合重建为 discriminated union、`bind` 收成 `dict[str, Bind]`、`PositionAttr` 的扁平键补齐，外加列表参数缺省不能 `list(None)`。落在 `tools/gen_sdk.py` 的后处理里，形状见「生产者」。
 - **框架帧的 `ev` 取值**（已定，2026-10-17）：今天没有第二类——`reflux:hello`／`reflux:nav` 都走上行的 `Outflow`，回答是一次 `draw`，存活走协议层 ping。别的取值是留着的通道（渲染器整帧跳过），但 `Message` 里放不下载荷：真要一类下行框架帧，得先给那个信封加字段（见「Why Not」）。
 
 ## 实施计划
@@ -416,16 +416,17 @@ def post_index(session, match): ...
 - **T10——第二个语言的 SDK（最小）。** 只生成构造器与上行，证明「规格是产品」不是口号。门槛：同一个 demo 结构在第二语言里写出来，线上帧与 Python 版逐字一致（同一份规格）。
 - **T11——测量。** 每回合帧字节数、壳侧重渲染范围（DOM 变更计数）、首屏与资产体积、100 会话 × N 事件/秒的服务端 CPU。门槛：数字记进 `docs/PERF.md`；本文档里每一条性能断言要么有测量，要么被显式标为未测量。
 
-### 迁移：M1 拆成六件
+### 迁移：M1 拆成七件
 
-迁移期**两个页面并存**：退休的壳继续伺服 `/`（T0–T8 的旧门对着它跑），新页面在 `/__next/`、它的资产在 `/static/`——每一轮落地时它自己的门同轮改到新侧，全套不留红窗。页面里的资源用源站绝对路径，所以 M1.6 把 `/__next/` 提到 `/` 时页面一行不改，只改挂载表。判据：迁移中任何一次落地，全套门都能跑绿；两页同夹具，T11 的数字直接可比。
+迁移期**两个页面并存**：退休的壳继续伺服 `/`（T0–T8 的旧门对着它跑），新页面在 `/__next/`、它的资产在 `/static/`——每一轮落地时它自己的门同轮改到新侧，全套不留红窗。页面里的资源用源站绝对路径，所以 M1.7 把 `/__next/` 提到 `/` 时页面一行不改，只改挂载表。判据：迁移中任何一次落地，全套门都能跑绿；两页同夹具，T11 的数字直接可比。
 
 - **M1.1——入口把手。** 渲染器今天自己建 transport（`mount()` 里 `WsTransport::new`，路径写死 `/channel`，codec 默认 CBOR），整仓没有一处 `#[wasm_bindgen]`——页面上没有可调的把手，runtime 的 hello 与 nav 就没有出口；而把 `?codec=json` 挂在页面 URL 上，会让「标记 == 地址栏」这条断言自带噪音。落法：渲染器入口多读 `#main` 的 `data-codec` / `data-path`（`data-host`／`data-token` 已有先例），挂载后发布**一个页面级上行把手**——与 canvas 拿到的 `host.send` 同形状、同一条 uplink；连接还没打开时调用也不会丢（`emit` 是 future，gloo 的 `Sink::poll_ready` 在 `readyState == 0` 时挂起、`open` 时唤醒），把手只负责 `spawn_local` 它。reflux 的页面带 `data-codec="json"`，路径留 `/ws`。**装配必须留在 `mount_to` 的闭包里**：`Ctx::new` 用 Leptos 的 executor，早于它调用会 panic（实测：把 transport 与 `Ctx` 提到 mount 之前，页面白屏、`#main` 空着、控制台一条 `spawn_local before a global executor was initialized`）。门槛：真 chromium 打开页面，连接落在 `/ws` 且帧是 JSON；从页面里调一次那个把手，生产者收到一帧 `{event, id?, data}`。
-- **M1.2——资产与伺服。**（已落地 2026-10-19）`www/` 是页面树、`www/static/` 是它的资产树，两个挂载：`/__next/` → `www/`、`/static/` → `www/static/`。页面是**静态文件**：`#main` 带 `data-codec="json"` / `data-path="/ws"`；资源一律从源站绝对路径取（`/static/…`——相对路径会被深链解析到深链目录底下，实测 `/__next/blog/a/post` 就是这么白屏的）；js/wasm 的名字从 `versions.json` 读，页面里不写死（trunk 的产物名带内容哈希）。`versions.json` 记渲染器构建的 rev 与逐文件 sha256／大小，升版＝`trunk build --release` → 拷四件 → 刷哈希 → 门重跑；它既是资产清单，也是 `tests/test_page.py` 与门的对拍对象。reflux 的样式表现在只有一件：藏两个标记（用 `[id="reflux:path"]` 这类属性选择器，冒号让 `#id` 很别扭）；profile 的 class 令牌随词表接线（M1.5）。门槛：T0 改写（`gate_t0_next.py`）——零 console error、零外部请求、请求清单恰好等于钉住的那几件、每件的 sha256 与 manifest 一致（**过 HTTP 取**，能抓到挂载错位）、`/` 仍是壳、深链回页面。
-- **M1.3——客户端 runtime。** 两个标记的镜像（路径真变才 `pushState`，`document.title` 同理；标记用 `getElementById` 读——`text` 把 id 塞进 class 列表，只有 `placeholder` 一类把 id 落到 DOM 上）、hello 带 `location.pathname`、`popstate` 上行 `reflux:nav`；地址栏手输靠的是**没有代码**：浏览器整页加载。它不认识树、不认识帧、不碰 socket。门槛：T6 改写——地址栏与标题分别等于两个标记；后退一次 → 一帧 nav → 回来的帧带新标记；无标记的页面停在旧值（不猜）；冷启动 `/blog/x` 的 hello 带那条路径；未知路径落 404。
-- **M1.4——服务端入站校验。** 落在应用收帧处：八个 action 的形状、事件名注册表、上行 `id`、`max_ops`、行 id 唯一，以及 profile 的闭集合（类型／属性／取值域）——未知字段拒收由 schema 与 profile 生成，不手写第二份。一条边界写明：「这个槽名声明过吗」在入站判不了（判它就得让会话持着它发出去的树，那是影子状态），这条留在 SDK 的构造期。门槛：离线表驱动（每类拒一次、一帧合法通过、计数与日志字段齐全），加一条绕过 SDK 的手写坏帧端到端。
-- **M1.5——交互门重对。** T2（壳的 store 与解释器）与 T3（分派表与本地态）退场——它们是壳的内部，渲染器那边有实现；换成两条端到端：八个 action 各自的落点、profile 里每个类型至少画出来一次。T4 改写：`input` 失焦上行、`form` 一次提交带上 `fields`、`id` 认领规则；`payload` 那几条断言删掉。T8 的坏帧清单以入站为准（渲染器的降级只 `warn`，不计数）。门槛：改写后的 T4′／T8′，加 T5／T7 的离线门，全套绿。
-- **M1.6——退场。** 删 `spec/`、`shell/*`（vendored SolidJS、壳 CSS、壳侧生成物）、`tools/gen.py` 里生成壳分派表的那一半、对着规格与壳写的用例；`/__next` 提到 `/`；`gen_sdk.py --check` 留作词表门。门槛：`rg 'spec/components.json|shell/js|SolidJS'` 零命中，全套绿。
+- **M1.2——资产与伺服。**（已落地 2026-10-19）`www/` 是页面树、`www/static/` 是它的资产树，两个挂载：`/__next/` → `www/`、`/static/` → `www/static/`。页面是**静态文件**：`#main` 带 `data-codec="json"` / `data-path="/ws"`；资源一律从源站绝对路径取（`/static/…`——相对路径会被深链解析到深链目录底下，实测 `/__next/blog/a/post` 就是这么白屏的）；js/wasm 的名字从 `versions.json` 读，页面里不写死（trunk 的产物名带内容哈希）。`versions.json` 记渲染器构建的 rev 与逐文件 sha256／大小，升版＝`trunk build --release` → 拷四件 → 刷哈希 → 门重跑；它既是资产清单，也是 `tests/test_page.py` 与门的对拍对象。reflux 的样式表现在只有一件：藏两个标记（用 `[id="reflux:path"]` 这类属性选择器，冒号让 `#id` 很别扭）；profile 的 class 令牌随词表接线（M1.6）。门槛：T0 改写（`gate_t0_next.py`）——零 console error、零外部请求、请求清单恰好等于钉住的那几件、每件的 sha256 与 manifest 一致（**过 HTTP 取**，能抓到挂载错位）、`/` 仍是壳、深链回页面。
+- **M1.3——客户端 runtime。**（已落地 2026-10-19）`www/static/reflux.js`（约 90 行）只碰浏览器的事实：读两个保留 id 的 textContent（`getElementById`——冒号让 `#id` 很难读）、与地址栏比、不同才 `pushState`、标题同规矩；启动先上行 `reflux:hello`（`data` 只有 `path`），`popstate` 上行 `reflux:nav`。触发是**只读**的 MutationObserver（childList／characterData／subtree，微任务合并；不看 attributes——输入框的 class 天天在变），不向 rust 要钩子：响应式渲染没有单一「画完了」点。它不认识树、不认识帧、不碰 socket。**挂载前缀走 `<base>`**：标记是应用路径（`/b`）、地址栏是挂载后的路径（`/__next/b`），换算只在 `toApp`／`toBrowser` 两处；M1.7 把 `<base>` 与挂载表一起改成 `/`，runtime 一行不改（`tests/test_page.py` 把 `<base>` 与 `App.NEXT_PREFIX` 钉在一起）。门槛：T6 改写（`gate_t6_next.py`）——标记移动地址栏且同一条路径不堆历史、标题标记写 `document.title`、后退是一帧 `reflux:nav`（`data` 只有 path）、深链的 hello 带那条路径、没有标记的页面地址栏与标题停在旧值、零 console error。
+- **M1.4——出帧层。**（已落地 2026-10-19）`reflux/wire.py`：accrete 的八个 action 逐字——`create(event: "", data)`／`set(slot, data)`／`append(slot, data, position 缺省不写)`／`remove(slot, id)`／`patch(slot, path, op: replace|append)`／`inject(slot, data)`／`tmpl(name, body)`／`empty()`——加帧信封 `draw(sender, *ops)`（`ev: "draw"`、`sender` 必填、`created` 不写）。边界校验：JSON Pointer；`position` 必须是整数，**但域外只有渲染器判得了**（它要知道列表多长），所以那条是渲染器的拒收加门的断言，不是构造器的；节点必须是 accrete 形状（裸 dict 先 `parse` 再 `dump`）。它与 `ops` 的分界是**方言**：同一个 socket 只有一套帧，新页只说 accrete、壳只说旧的，App 不猜。门槛：T2 改写（`gate_t2_next.py`）——八个 action 各一条 DOM 断言（含 `+1` 落点、`patch append` 续写、vals 平面取值要带 `path: "/data"`），加「域外 position 拒收不夹取」「`empty` 解码后同帧其余照常应用」「零 console error」。
+- **M1.5——服务端入站校验。** 落在应用收帧处：八个 action 的形状、事件名注册表、上行 `id`、`max_ops`、行 id 唯一，以及 profile 的闭集合（类型／属性／取值域）——未知字段拒收由 schema 与 profile 生成，不手写第二份。一条边界写明：「这个槽名声明过吗」在入站判不了（判它就得让会话持着它发出去的树，那是影子状态），这条留在 SDK 的构造期。门槛：离线表驱动（每类拒一次、一帧合法通过、计数与日志字段齐全），加一条绕过 SDK 的手写坏帧端到端。
+- **M1.6——交互门重对。** T2（壳的 store 与解释器）与 T3（分派表与本地态）退场——它们是壳的内部，渲染器那边有实现；换成两条端到端：八个 action 各自的落点、profile 里每个类型至少画出来一次。T4 改写：`input` 失焦上行、`form` 一次提交带上 `fields`、`id` 认领规则；`payload` 那几条断言删掉。T8 的坏帧清单以入站为准（渲染器的降级只 `warn`，不计数）。门槛：改写后的 T4′／T8′，加 T5／T7 的离线门，全套绿。
+- **M1.7——退场。** 删 `spec/`、`shell/*`（vendored SolidJS、壳 CSS、壳侧生成物）、`tools/gen.py` 里生成壳分派表的那一半、对着规格与壳写的用例；`/__next` 提到 `/`；`App.draw_page`／`not_found` 切到 `wire`（壳没了，没有第二个方言要迁就）；`gen_sdk.py --check` 留作词表门。门槛：`rg 'spec/components.json|shell/js|SolidJS'` 零命中，全套绿。
 
 ## 词汇
 

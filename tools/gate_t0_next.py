@@ -63,6 +63,7 @@ def main() -> int:
     expected = set(assets) | {
         PREFIX,
         STATIC + "reflux.css",
+        STATIC + "reflux.js",
         STATIC + "vendor/fluxen/versions.json",
     }
     checks: list[tuple[str, bool, str]] = []

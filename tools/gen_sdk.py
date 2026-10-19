@@ -375,7 +375,7 @@ def builders_text(schema: dict, profile: dict) -> str:
         if positional == "children":
             node_args.append("children=list(children) or None")
         if entry.get("item"):
-            node_args.append("item=list(item) or None")
+            node_args.append("item=list(item) if item else None")
         node_args += [f"{name}={name}" for name in extra]
         body.append(f"    return parse(drop_none({', '.join(node_args)}), {cls})")
         parts += [*body, "", ""]
