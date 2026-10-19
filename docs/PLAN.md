@@ -33,13 +33,14 @@
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
-| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 可开（已拆成 M1.1–M1.6，见下） | — |
+| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 可开（已拆成 M1.1–M1.7，见下） | — |
 | M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用仓里钉住的包，无需 fluxen 检出） |
 | M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ✅ 2026-10-19 | `python3 tools/gate_t0_next.py`（7 条）＋ `python3 -m unittest tests.test_page` |
-| M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ⏳ | — |
-| M1.4 服务端入站校验（封闭性与跨字段语义的落点） | ⏳ | — |
-| M1.5 交互门重对（T2／T3 退场换两条；T4／T8 改写） | ⏳ | — |
-| M1.6 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`） | ⏳ | — |
+| M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ✅ 2026-10-19 | `python3 tools/gate_t6_next.py`（8 条）＋ `python3 -m unittest tests.test_page` |
+| M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |
+| M1.5 服务端入站校验（封闭性与跨字段语义的落点） | ⏳ | — |
+| M1.6 交互门重对（T2／T3 退场换两条；T4／T8 改写；profile 令牌接线） | ⏳ | — |
+| M1.7 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`；`draw_page`／`not_found` 切到 `wire`） | ⏳ | — |
 
 ## 已落地的形状
 
@@ -52,7 +53,8 @@ reflux/tables_generated.py        ← 生成：纯数据（壳与各 SDK 共用�
 reflux/components_generated.py    ← 生成：各组件构造器（签名由规格派生）
 reflux/node.py                    线上形状 + 校验边界 make()
 reflux/ui.py                      写入层：规格词表寻址成一个模块（ui.stack(...)）
-reflux/ops.py                     写入层：四个操作与 draw 的构造器（形状在边界校验）
+reflux/ops.py                     写入层：四个操作与 draw 的构造器（壳的方言，M1.7 随壳退场）
+reflux/wire.py                    出帧层：accrete 的八个 action + draw 信封（新页的方言）
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
@@ -71,9 +73,13 @@ reflux/sdk/_parse.py              手写：parse／dump 边界与 bind 条目组
 reflux/sdk/profile.py             手写：读 profile/profile.json
 www/index.html                    页面：静态；`#main` 钉通道与编码，资源走 /static/ 绝对路径
 www/static/reflux.css             框架自己的样式表（今天只藏两个保留标记）
+www/static/reflux.js              客户端 runtime：两个标记的镜像、hello、popstate（约 90 行）
 www/static/vendor/fluxen/         钉版本的渲染器包：versions.json + js + wasm + assets/*.css
 www/static/vendor/fluxen/versions.json  ← 资产清单：rev、逐文件 sha256 与大小（升版只改这里）
 tools/gate_t0_next.py             T0′ 门：请求清单 == 清单、逐件哈希（过 HTTP）、深链、壳仍在 /
+tools/gate_t6_next.py             T6′ 门：门自己当生产者画页，断言镜像/历史/后退/深链/无标记
+tools/gate_t2_next.py             T2′ 门：八个 action 各一条 DOM 断言 + 域外 position + empty + 零错误
+tests/test_wire.py                八种 action 形状逐字对表 + 四类拒收（指针/position/op/节点）
 shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
 shell/js/interp.js                壳的 store 与四个操作（T2）
 shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
@@ -439,7 +445,7 @@ M1.2 落地后这道门改了取材：探针页围绕**仓里钉住的**那份�
 
 - **相对路径在深链上必死**：第一版页面写 `./vendor/…`，`/__next/` 正常、`/__next/blog/a/post` 白屏——
   `fetch("./vendor/fluxen/versions.json")` 解析到 `/__next/blog/a/post/vendor/…`，服务端按「无扩展名 → 页面」
-  回了 HTML，控制台是 `Unexpected token '<'`。修法是资源一律源站绝对路径（`/static/…`），顺带让 M1.6 只改挂载表。
+  回了 HTML，控制台是 `Unexpected token '<'`。修法是资源一律源站绝对路径（`/static/…`），顺带让 M1.7 只改挂载表。
 - **资产挂载没有 `index.html`**：`make_server` 原来要求每个挂载都有页面，`/static/` 当场起不来。规则改成
   「只有基础挂载必须有页面」——资产前缀下的页面路径 404，这才是诚实答案。
 
@@ -447,5 +453,70 @@ M1.2 落地后这道门改了取材：探针页围绕**仓里钉住的**那份�
 一棵树装不下两件事，两棵树又要给服务器加一条回退链）；「装配时填模板」改成「静态页 + `versions.json`」
 （模板会造出只在伺服时存在的第二种页面形态，而清单让名字只有一个来源）。
 
-体积：4 件资产 2 420 114 B（wasm 2 348 320 B）；一次开页 7 条请求（页面、清单、js、wasm、main.css、
-custom.css、reflux.css）。
+体积：4 件资产 2 420 114 B（wasm 2 348 320 B）；当时一次开页 7 条请求（M1.3 把 runtime 加进来之后是 8 条，
+见下一节）。
+
+## M1.3 门的实测结果（2026-10-19）
+
+```
+[1/8] PASS  the path marker moves the address bar  location=/__next/a history=2->3
+[2/8] PASS  the title marker writes document.title title='A'
+[3/8] PASS  drawing the same path again adds no entry history=3->3
+[4/8] PASS  a page turn pushes exactly one entry   location=/__next/b history=3->4
+[5/8] PASS  back is one reflux:nav with the app path frame={'event': 'reflux:nav', 'data': {'path': '/a'}} location=/__next/a
+[6/8] PASS  a deep link is one hello with the app path hello={'path': '/deep/link'} location=/__next/deep/link
+[7/8] PASS  a page without markers changes nothing location=/__next/deep/link title='Deep'
+[8/8] PASS  zero console errors                    none
+```
+
+落地的形状：`www/static/reflux.js`（约 90 行，零依赖）——`base` 从 `<base href>` 取，`toApp`／`toBrowser` 是
+唯一的换算处；`mirror()` 读两个保留 id，路径不同才 `pushState`；`start()` 先 hello、再挂 `popstate`、再挂只读
+MutationObserver（childList／characterData／subtree，`queueMicrotask` 合并）。页面的 bootstrap 在
+`await init(...)` 之后 `import("/static/reflux.js")` 并 `start()`。
+
+门自己的形态：**门当生产者**——`App()` 不设 page／routes（hello 不回帧），门等会话出现后用 `sdk.builders`
+建页（标记 = `placeholder(b.text(…), id="reflux:path")`）、`dump()` 成线形状、手写一帧
+`{"ev":"draw","sender":…,"content":[{"action":"create","event":"","data":…}]}`，收到 `reflux:nav` 再画下一页。
+理由：当时出帧层还是退休形状（M1.4 才落地），而「绕过 SDK 手写帧的生产者」是设计明确承认的一类。
+
+这一轮抓到的两件：
+
+- **前缀要在某处换算，而唯一不撒谎的源是 `<base>`**：标记写应用路径，地址栏写挂载后的路径。第一版直接把
+  `location.pathname` 当应用路径——在 `/__next/` 上 hello 送的是 `/__next/`，而标记写 `/` 又与地址栏不等，
+  于是来回推。改成从 `document.baseURI` 取前缀、换算只在 `toApp`／`toBrowser` 两处；M1.7 只改 `<base>` 一行
+  （`tests/test_page.py` 把两者钉在一起）。
+- **不看 attributes**：MutationObserver 只观察 childList／characterData／subtree。加上 attributes 的话，输入框的
+  class 每次变化都会触发一次镜像读——等于给每一次按键加一趟活。
+
+## M1.4 门的实测结果（2026-10-19）
+
+```
+[1/12]  PASS  create draws the layout root           root present
+[2/12]  PASS  tmpl expands {{label}} inside create   expanded
+[3/12]  PASS  set replaces the node in a data slot   echo='set-value'
+[4/12]  PASS  append lands at the tail               rows=['row-1', 'row-3']
+[5/12]  PASS  append +1 lands before the last row    rows=['row-1', 'row-2', 'row-3']
+[6/12]  PASS  remove drops the row by identity       rows=['row-1', 'row-3']
+[7/12]  PASS  patch replace rewrites the pointed value echo='patched'
+[8/12]  PASS  patch append extends a string          echo='patched!'
+[9/12]  PASS  inject writes the vals plane           local-echo='injected'
+[10/12] PASS  an out-of-range position is refused, not clamped rows=['row-1', 'row-3', 'row-4']
+[11/12] PASS  empty decodes and changes nothing      rows=['row-1', 'row-3', 'row-4', 'row-5']
+[12/12] PASS  zero console errors                    none
+```
+
+离线：`python3 -m unittest tests.test_wire`（20 例）——八种 action 的形状逐字对表，加四类拒收（不是指针的
+路径、不是整数的 position、未知的 patch op、不是 accrete 的节点）。
+
+落地的形状：`reflux/wire.py`（八个构造器 + `draw(sender, *ops)`；节点走 `parse` → `dump` 的边界；`position: 0`
+不写；`created` 不写）。门 `tools/gate_t2_next.py` 自己当生产者：`wire` 组帧、`session.send` 发出，逐条读 DOM。
+
+这一轮抓到的三件（都已改）：
+
+- **生成器的 `list(None)`**：`b.rack(source="rows")` 的 `item` 缺省 `None`，生成的 `item=list(item) or None`
+  当场 TypeError。生成器改成 `list(item) if item else None` 并重出（`builders.py` 两行变化）。
+- **`text`／`case` 的 id 是 class 不是 DOM id**：`case` 把 id 塞进 class 列表，只有 `placeholder` 一类
+  （`rack`／`pages`／`layer`／`fold`／`diagram`／`canvas`）才 `.id()`。门的读数因此按 class 取——这也是「标记
+  必须是 `placeholder`」那条的同一个事实。
+- **`inject` 落的是 Outflow 形状的包装**：vals 槽里是 `{event, data}`（与页面自己 emit 写入的完全同形），
+  订阅方要 `bind.path = "/data"` 才拿到载荷本体。门里那个 local 绑定因此手写了 `path`。

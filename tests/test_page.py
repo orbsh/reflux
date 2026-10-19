@@ -73,6 +73,12 @@ class TestPinnedRenderer(unittest.TestCase):
     def test_page_names_no_hashed_asset_itself(self) -> None:
         self.assertNotIn("ui_leptos-", INDEX.read_text(encoding="utf-8"))
 
+    def test_the_base_matches_the_mount_prefix(self) -> None:
+        """The runtime translates markers with <base>; it must name the prefix the app mounts."""
+        from reflux.app import NEXT_PREFIX
+
+        self.assertIn(f'<base href="{NEXT_PREFIX}">', INDEX.read_text(encoding="utf-8"))
+
     def test_page_references_are_origin_absolute(self) -> None:
         """A relative reference would resolve against the deep-link path, not the mount root."""
         for ref in ASSET_REF.findall(INDEX.read_text(encoding="utf-8")):
