@@ -1,4 +1,5 @@
-"""The producer: an app is the shell, the channel, the registry of event names, and the pages.
+"""The producer: an app is the pages it serves, the channel, the registry of event names, and the
+routing.
 
     app = App()
 
@@ -50,6 +51,13 @@ from .server import make_server
 from .tables_generated import RESERVED_PREFIX
 
 SHELL_ROOT = Path(__file__).resolve().parent.parent / "shell"
+PAGE_ROOT = Path(__file__).resolve().parent.parent / "www"
+# Where the fluxen-backed page lives while the shell is still the served root. M1.6 promotes it to
+# "/" and the shell disappears; until then both are mounted so every gate stays runnable.
+NEXT_PREFIX = "/__next/"
+# The page's assets are addressed from the origin root, so the page works at any mount prefix and a
+# deep link cannot drag its own references into a subdirectory. M1.6 needs no page change.
+STATIC_PREFIX = "/static/"
 
 
 def not_found(path: str) -> Node:
@@ -128,11 +136,14 @@ class App:
         root: str | Path | None = None,
         routes: Routes | None = None,
         *,
+        next_root: str | Path | None = PAGE_ROOT,
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
         outbox: int = 256,
     ) -> None:
         self.root = Path(root) if root is not None else SHELL_ROOT
+        # The page a mount table serves beside the shell; None leaves the server single-rooted.
+        self.next_root = Path(next_root) if next_root is not None else None
         self.events = Registry()
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(session, path) -> a node, or the ops of this turn; left None the route table answers
@@ -236,7 +247,11 @@ class App:
     # --- serving --------------------------------------------------------------------------
 
     def make_server(self, port: int = 0, host: str = "127.0.0.1") -> ThreadingHTTPServer:
-        server = make_server(self.root, port, host, app=self)
+        mounts: dict[str, str | Path] = {"/": self.root}
+        if self.next_root is not None:
+            mounts[NEXT_PREFIX] = self.next_root
+            mounts[STATIC_PREFIX] = self.next_root / "static"
+        server = make_server(self.root, port, host, app=self, mounts=mounts)
         self.start_watchdog()
         return server
 
@@ -249,7 +264,11 @@ class App:
     def serve_forever(self, port: int = 8000, host: str = "127.0.0.1") -> None:
         server = self.make_server(port, host)
         address, bound = server.server_address[0], server.server_address[1]
-        print(f"[reflux] serving {self.root} on http://{address}:{bound}/  (ws {address}:{bound}/ws)", flush=True)
+        print(
+            f"[reflux] serving {self.root} on http://{address}:{bound}/  (ws {address}:{bound}/ws)"
+            + (f"; page {self.next_root} at {NEXT_PREFIX}" if self.next_root is not None else ""),
+            flush=True,
+        )
         try:
             server.serve_forever()
         except KeyboardInterrupt:

@@ -34,8 +34,8 @@
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
 | M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 可开（已拆成 M1.1–M1.6，见下） | — |
-| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；需 fluxen 的 dist） |
-| M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ⏳ | — |
+| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用仓里钉住的包，无需 fluxen 检出） |
+| M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ✅ 2026-10-19 | `python3 tools/gate_t0_next.py`（7 条）＋ `python3 -m unittest tests.test_page` |
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ⏳ | — |
 | M1.4 服务端入站校验（封闭性与跨字段语义的落点） | ⏳ | — |
 | M1.5 交互门重对（T2／T3 退场换两条；T4／T8 改写） | ⏳ | — |
@@ -53,10 +53,10 @@ reflux/components_generated.py    ← 生成：各组件构造器（签名由规
 reflux/node.py                    线上形状 + 校验边界 make()
 reflux/ui.py                      写入层：规格词表寻址成一个模块（ui.stack(...)）
 reflux/ops.py                     写入层：四个操作与 draw 的构造器（形状在边界校验）
-reflux/server.py / demo.py        伺服壳（静态、无缓存、同源）＋ /ws 升级
+reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
-reflux/app.py                     应用：壳 + /ws + 注册表 + 一页钩子（hello 与 nav 走同一条）
+reflux/app.py                     应用：两个挂载（壳在 /、新页在 /__next/）+ /ws + 注册表 + 一页钩子
 reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子）
 reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
 reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注册表
@@ -69,6 +69,11 @@ reflux/sdk/types.py               ← 生成：每个线类型一个类 + discri
 reflux/sdk/builders.py            ← 生成：暴露类型的构造器（签名与默认来自 schema）
 reflux/sdk/_parse.py              手写：parse／dump 边界与 bind 条目组装
 reflux/sdk/profile.py             手写：读 profile/profile.json
+www/index.html                    页面：静态；`#main` 钉通道与编码，资源走 /static/ 绝对路径
+www/static/reflux.css             框架自己的样式表（今天只藏两个保留标记）
+www/static/vendor/fluxen/         钉版本的渲染器包：versions.json + js + wasm + assets/*.css
+www/static/vendor/fluxen/versions.json  ← 资产清单：rev、逐文件 sha256 与大小（升版只改这里）
+tools/gate_t0_next.py             T0′ 门：请求清单 == 清单、逐件哈希（过 HTTP）、深链、壳仍在 /
 shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
 shell/js/interp.js                壳的 store 与四个操作（T2）
 shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
@@ -81,7 +86,7 @@ shell/css/main.css                壳自己持有的设计语言：层序 theme/
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
 tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希、
                                   事件注册表、通道编解码、写入层、路由（含 route_fixture 样例包）、
-                                  应用侧页面解析
+                                  应用侧页面解析、新页面的清单与挂载规则（test_page）
 ```
 
 Python SDK 就是这个仓的 `reflux/` 包，别的语言日后落在 `sdks/<lang>/`。
@@ -408,6 +413,39 @@ socket 的内核缓冲把 8 帧都收下了，队列没停在排空状态，所�
 `spawn_local before a global executor was initialized`——`Ctx::new` 的读循环要 Leptos 的 executor。
 修法是把装配搬回闭包，发布那行跟着进去。
 
-还欠一件（M1.2 决）：这份 dist 没有进仓，门读 `REFLUX_FLUXEN_DIST`（默认
-`~/world/fluxen/crates/ui_leptos/dist`），所以它和 `sync_schema.py` 同级、不在默认门里；wasm 一件
-8.0 MB，钉版本与进不进 git 是 M1.2 的第一个决定。
+M1.2 落地后这道门改了取材：探针页围绕**仓里钉住的**那份包拼（`www/static/vendor/fluxen/`，名字按
+`versions.json`），不再读兄弟仓——渲染器升级把它弄丢了，这道门就会红。
+
+## M1.2 门的实测结果（2026-10-19）
+
+```
+[1/7] PASS  the page boots under its prefix         #main children=1
+[2/7] PASS  zero external requests                  7 requests, all same-origin
+[3/7] PASS  the request set is exactly the pinned set extra=[] missing=[]
+[4/7] PASS  every served byte matches its pinned sha256 4 assets
+[5/7] PASS  the retiring shell still owns /        shell at /, page at /__next/
+[6/7] PASS  a deep link under the prefix gets the page #main children=1
+[7/7] PASS  zero console errors                    none
+```
+
+离线那一半：`python3 -m unittest tests.test_page`（13 例）——清单 ↔ 磁盘 ↔ 页面的三方对拍，加挂载规则
+（前缀、深链、裸前缀 301、缺文件 404）。
+
+落地的形状：`www/` 是页面树、`www/static/` 是资产树，挂载表 `/__next/` → `www/`、`/static/` → `www/static/`
+（`reflux/server.py` 按前缀表匹配、最长前缀优先；只有基础挂载必须有 `index.html`）。`versions.json` 是资产
+清单（rev + 逐文件 sha256／大小），页面从它读 js/wasm 的名字。门的请求清单、逐件哈希、离线测试对着同一份清单。
+
+门抓到的两件：
+
+- **相对路径在深链上必死**：第一版页面写 `./vendor/…`，`/__next/` 正常、`/__next/blog/a/post` 白屏——
+  `fetch("./vendor/fluxen/versions.json")` 解析到 `/__next/blog/a/post/vendor/…`，服务端按「无扩展名 → 页面」
+  回了 HTML，控制台是 `Unexpected token '<'`。修法是资源一律源站绝对路径（`/static/…`），顺带让 M1.6 只改挂载表。
+- **资产挂载没有 `index.html`**：`make_server` 原来要求每个挂载都有页面，`/static/` 当场起不来。规则改成
+  「只有基础挂载必须有页面」——资产前缀下的页面路径 404，这才是诚实答案。
+
+计划里改了两处形态（判据）：页面树从 `reflux/page/` 挪到 `www/`、资产放 `www/static/`（页面与资产是两个挂载，
+一棵树装不下两件事，两棵树又要给服务器加一条回退链）；「装配时填模板」改成「静态页 + `versions.json`」
+（模板会造出只在伺服时存在的第二种页面形态，而清单让名字只有一个来源）。
+
+体积：4 件资产 2 420 114 B（wasm 2 348 320 B）；一次开页 7 条请求（页面、清单、js、wasm、main.css、
+custom.css、reflux.css）。

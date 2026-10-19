@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """M1.1 gate — the renderer's page-level uplink handle (`window.fluxen.send`).
 
-The renderer opens the socket itself (`mount()` builds the transport from `#main`), so until now
-the page's own JS had no way to send anything up. M1.1 adds the door: `#main` carries
-`data-path` / `data-codec`, and after mounting the renderer publishes `window.fluxen.send`.
+The renderer opens the socket itself (`mount()` builds the transport from `#main`), so the page's
+own JS had no way to send anything up. M1.1 adds the door: `#main` carries `data-path` /
+`data-codec`, and after mounting the renderer publishes `window.fluxen.send`.
 
-This gate runs the real bundle: it assembles a probe page around fluxen's dist, serves it through
-`App` (so the `/ws` channel is the one the renderer reaches), and asserts on what crossed the wire.
+The probe is assembled around the **vendored** bundle (`www/static/vendor/fluxen/`, named by its
+`versions.json`), so this gate needs no sibling checkout and runs against exactly the bytes the
+page ships: losing the handle in a renderer bump fails here.
 
     python3 tools/gate_m1_1.py
-    REFLUX_FLUXEN_DIST=~/world/fluxen/crates/ui_leptos/dist python3 tools/gate_m1_1.py
-
-The probe needs the renderer's built bundle and this repo does not vendor it yet (M1.2 decides that
-form), so — same class as `tools/sync_schema.py` — the gate reads a sibling checkout and is not part
-of the default gate set. A missing bundle is a loud failure, never a skip.
 """
 
 from __future__ import annotations
 
-import os
+import json
 import shutil
 import sys
 import tempfile
@@ -30,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import console_errors, report, shell_page  # noqa: E402
 from reflux.app import App  # noqa: E402
 
-DEFAULT_DIST = Path.home() / "world/fluxen/crates/ui_leptos/dist"
+REPO = Path(__file__).resolve().parent.parent
+VENDOR = REPO / "www" / "static" / "vendor" / "fluxen"
 
 # The probe page is the smallest thing that exercises the door: `#main` pins the host's path and
 # codec, the module waits for the wasm to boot, then calls the handle while the socket is still
@@ -56,37 +53,32 @@ PAGE = """<!DOCTYPE html>
 """
 
 
-def probe_root(dist: Path) -> Path:
-    """A throwaway document root: the renderer's bundle, its stylesheet, and the probe page."""
-    if not dist.is_dir():
-        raise SystemExit(
-            f"no renderer bundle at {dist} — build it first "
-            f"(cd crates/ui_leptos && trunk build) or point REFLUX_FLUXEN_DIST at one"
-        )
-    wasm = sorted(dist.glob("*_bg.wasm"))
-    if len(wasm) != 1:
-        raise SystemExit(f"expected exactly one *_bg.wasm under {dist}, found {len(wasm)}")
-    wasm = wasm[0]
-    js = dist / wasm.name.replace("_bg.wasm", ".js")
-    if not js.is_file():
-        raise SystemExit(f"no js glue beside {wasm.name} (expected {js.name})")
+def probe_root(vendor: Path) -> Path:
+    """A throwaway document root: the pinned bundle, its stylesheets, and the probe page."""
+    versions_path = vendor / "versions.json"
+    if not versions_path.is_file():
+        raise SystemExit(f"no pinned bundle at {vendor} — run the M1.2 bump procedure first")
+    entry = json.loads(versions_path.read_text(encoding="utf-8"))["entry"]
+    for name in (entry["js"], entry["wasm"]):
+        if not (vendor / name).is_file():
+            raise SystemExit(f"{name} is in versions.json but not on disk ({vendor})")
 
     root = Path(tempfile.mkdtemp(prefix="reflux-m1-1-"))
-    shutil.copy2(wasm, root / wasm.name)
-    shutil.copy2(js, root / js.name)
+    shutil.copy2(vendor / entry["js"], root / entry["js"])
+    shutil.copy2(vendor / entry["wasm"], root / entry["wasm"])
     (root / "assets").mkdir()
     # 渲染器自带的样式表（main.css 还会引到 custom.css）：缺一件就是一条 404，而 404 在这道门里
-    # 算一条 console error —— 所以按 dist 里真有的那几件挂上去，不猜。
+    # 算一条 console error —— 所以按清单里真有的那几件挂上去，不猜。
     links: list[str] = []
-    for name in ("main.css", "custom.css"):
-        src = dist / "assets" / name
+    for rel in ("assets/main.css", "assets/custom.css"):
+        src = vendor / rel
         if src.is_file():
-            shutil.copy2(src, root / "assets" / name)
-            links.append(f'  <link rel="stylesheet" href="/assets/{name}" />')
+            shutil.copy2(src, root / rel)
+            links.append(f'  <link rel="stylesheet" href="/{rel}" />')
     (root / "index.html").write_text(
         PAGE.replace("@@CSS@@", "\n".join(links))
-        .replace("@@JS@@", js.name)
-        .replace("@@WASM@@", wasm.name),
+        .replace("@@JS@@", entry["js"])
+        .replace("@@WASM@@", entry["wasm"]),
         encoding="utf-8",
     )
     return root
@@ -112,8 +104,7 @@ def wait_frame(app: App, event: str, timeout: float = 10.0) -> list[dict]:
 
 
 def main() -> int:
-    dist = Path(os.environ.get("REFLUX_FLUXEN_DIST", str(DEFAULT_DIST))).expanduser()
-    root = probe_root(dist)
+    root = probe_root(VENDOR)
     app = App(root)
     checks: list[tuple[str, bool, str]] = []
 
