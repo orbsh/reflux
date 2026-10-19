@@ -1,0 +1,9 @@
+/* reflux 自己的样式表。渲染器（`vendor/fluxen/assets/*.css`）负责组件外观与令牌；
+   这里只放「只有框架知道」的那几件，且顺序在它之后。
+
+   两个保留标记是树里的普通节点（客户端 runtime 从 DOM 上读它们写 URL 与标题），
+   它们不该占位置。用属性选择器而不是 `#reflux\:path`：冒号让 id 选择器很难读。 */
+[id="reflux:path"],
+[id="reflux:title"] {
+  display: none;
+}

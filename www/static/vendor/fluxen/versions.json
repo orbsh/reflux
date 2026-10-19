@@ -1,0 +1,27 @@
+{
+  "renderer": "fluxen",
+  "rev": "0bf166d08f95fb716cc6cc9d33e411b463c9861f",
+  "built": "trunk build --release (crates/ui_leptos)",
+  "entry": {
+    "js": "ui_leptos-927db3adffbbe485.js",
+    "wasm": "ui_leptos-927db3adffbbe485_bg.wasm"
+  },
+  "files": {
+    "vendor/fluxen/ui_leptos-927db3adffbbe485.js": {
+      "sha256": "7eee5b7780951e1758ee93a8cec84aa9c43a8801168839d43bfbf4ba9ee38aa5",
+      "size": 50609
+    },
+    "vendor/fluxen/ui_leptos-927db3adffbbe485_bg.wasm": {
+      "sha256": "b09fde992183361d8cbaa6fea3b2b28aec07042718456a2eca0da76d9d431d1c",
+      "size": 2348320
+    },
+    "vendor/fluxen/assets/main.css": {
+      "sha256": "201997bcb878a4dcb0db45629066f774101536f5c1a56ffcbf79507580af2161",
+      "size": 19580
+    },
+    "vendor/fluxen/assets/custom.css": {
+      "sha256": "fd0d78dd071dc666d96480f5a8575a45e5d71b0d2f8cbf1755151b31c4188941",
+      "size": 1605
+    }
+  }
+}
