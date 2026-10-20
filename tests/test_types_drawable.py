@@ -1,12 +1,12 @@
 """Every exposed accrete type is drawable: one legal node each, and the set is the profile's.
 
-T3 retired with the shell (its subject was the shell's dispatch table). What the framework still
-owes is the fact that table used to prove: **the vocabulary a producer may address is complete and
-every member of it survives the boundary**. That is a closed-set question, so it is answered
-offline — `profile.exposed()` against `tests/types_fixture.NODES`, each node through the closure and
-through `parse`, then all of them together through one frame.
+What the framework owes is the fact the old T3 (the shell's dispatch table) used to prove: **the
+vocabulary a producer may address is complete and every member of it survives the boundary**. That
+is a closed-set question, so it is answered offline — `profile.exposed()` against
+`tests/types_fixture.NODES`, each node through the closure and through `parse`, then all of them
+together through one frame.
 
-The live half (that the renderer draws them) is `tools/gate_t3_next.py`, which imports the same
+The live half (that the renderer draws them) is `tools/gate_t3.py`, which imports the same
 fixture; the three module-backed types stay out of it on purpose (see the fixture's docstring).
 """
 

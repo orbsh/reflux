@@ -3,7 +3,7 @@
 
 Two phases, because they want different clocks.
 
-The browser phase drives the real shell through a reload with the *default* heartbeat, so nothing
+The browser phase drives the real page through a reload with the *default* heartbeat, so nothing
 races: the check is that the old connection's session is gone and exactly one remains. A refresh
 must not leave a string of sessions behind, and that is a claim about reclamation, not about
 resuming anything — nothing crosses connections.
@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cdp import Ws, report, shell_page  # noqa: E402
+from cdp import Ws, report, open_page  # noqa: E402
 
 import reflux.demo_app as demo  # noqa: E402
 from reflux.app import App  # noqa: E402
@@ -47,7 +47,7 @@ def wait_for(condition, timeout: float = 5.0) -> bool:
 def browser_phase() -> list[tuple[str, bool, str]]:
     app = demo.make_app()
     checks: list[tuple[str, bool, str]] = []
-    with shell_page(app=app) as (cdp, base):
+    with open_page(app=app) as (cdp, base):
         opened = wait_for(lambda: app.stats["issued"] == 1 and len(app.live()) == 1)
         session = next(iter(app.live()), None)
         checks.append(

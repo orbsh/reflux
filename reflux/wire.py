@@ -1,10 +1,6 @@
-"""The outbound frame layer for the new page: accrete's eight actions, verbatim.
+"""The outbound frame layer: accrete's eight actions, verbatim.
 
-This is the dialect of the fluxen-backed page. The retiring shell's dialect (`{"op": "create", "root": …}`)
-still lives in `reflux/ops.py`; the two never meet on one socket — each page gets frames in the shape it
-can read, and the app picks the builder. When the shell retires (M1.7), `ops` goes with it.
-
-Field names are the wire's, taken from the renderer's `content` crate: `create` / `set` carry
+Fields are the wire's, taken from the renderer's `content` crate: `create` / `set` carry
 `Influx{event, data}`, `append` `AppendOp{event, position, data}`, `remove` `RemoveOp{event, id}`,
 `patch` `PatchOp{event, id?, path, op, value}`, `inject` `InjectOp{slot, event?, id?, data}`, `tmpl`
 `InfluxTmpl{name, data}`, and `empty` carries nothing. The frame is `Message{ev, sender, created?,
@@ -19,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .protocol import MAX_OPS_PER_FRAME
 from .sdk import closed
 from .sdk._parse import dump, parse
 
@@ -43,20 +40,47 @@ def _node(node: Any, what: str) -> dict:
 
     A dict goes through the same two checks the server's boundary runs — closure (`closed.problem`,
     one vocabulary shared with the ingest side) and domains (`parse`) — so a producer's typo fails
-    where it is built instead of being dropped silently inside the renderer.
+    where it is built instead of being dropped silently inside the renderer. A tree also owes one
+    id per node: keyed rendering needs it, and a repeat is a half-drawn list, not a list.
     """
     if isinstance(node, dict):
         bad = closed.problem(node, what)
         if bad is not None:
             raise ValueError(bad)
-        return dump(parse(node))
-    try:
-        out = dump(node)
-    except AttributeError:
-        raise ValueError(f"{what}: expected an accrete node, got {type(node).__name__}") from None
-    if not isinstance(out, dict) or not isinstance(out.get("type"), str):
-        raise ValueError(f"{what}: expected an accrete node, got {node!r}")
+        out = dump(parse(node))
+    else:
+        try:
+            out = dump(node)
+        except AttributeError:
+            raise ValueError(f"{what}: expected an accrete node, got {type(node).__name__}") from None
+        if not isinstance(out, dict) or not isinstance(out.get("type"), str):
+            raise ValueError(f"{what}: expected an accrete node, got {node!r}")
+    _unique_ids(out, what, {})
     return out
+
+
+def _unique_ids(node: Any, where: str, seen: dict[str, str]) -> None:
+    """One id per node in one tree — the producer-side half of the rule in DESIGN's failure table.
+
+    A list renders by key, so two nodes sharing an id make the renderer drop or reuse a row; a
+    frame is cheaper to refuse here than to debug in a page. Ids ride `children` (every container)
+    and `item` (a rack's or fold's row template) and nowhere else: `attrs` and `bind` hold values,
+    not nodes.
+    """
+    if not isinstance(node, dict):
+        return
+    ident = node.get("id")
+    if isinstance(ident, str) and ident:
+        if ident in seen:
+            raise ValueError(
+                f"{where}: id {ident!r} appears twice in one tree (also at {seen[ident]})"
+            )
+        seen[ident] = where
+    for key in ("children", "item"):
+        kids = node.get(key)
+        if isinstance(kids, list):
+            for i, kid in enumerate(kids):
+                _unique_ids(kid, f"{where}.{key}[{i}]", seen)
 
 
 def _slot(name: Any, what: str) -> str:
@@ -179,6 +203,10 @@ def draw(sender: str, *operations: dict) -> dict:
         raise ValueError("draw: sender must be a non-empty string (the session id)")
     if not operations:
         raise ValueError("draw: a turn carries at least one operation")
+    if len(operations) > MAX_OPS_PER_FRAME:
+        raise ValueError(
+            f"draw: {len(operations)} operations in one frame — the cap is {MAX_OPS_PER_FRAME}"
+        )
     for op in operations:
         if not isinstance(op, dict) or op.get("action") not in ACTIONS:
             raise ValueError(f"draw: {op!r} is not one of accrete's actions")

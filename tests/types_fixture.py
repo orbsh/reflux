@@ -61,7 +61,7 @@ NODES: dict[str, dict] = {
     "button": {"type": "button", "bind": {"value": {"kind": "submit"}}},
     # `image` renders an `<img>` only when it has a `default` value **and** some attrs
     # (`&& let Some(x) = accrete.attrs` in the renderer) — without attrs it draws an empty div.
-    "image": {"type": "image", "attrs": {"desc": "a dot"}, "bind": {"value": {"kind": "default", "default": "/favicon.svg"}}},
+    "image": {"type": "image", "attrs": {"desc": "a dot"}, "bind": {"value": {"kind": "default", "default": "/static/logo.svg"}}},
     # No `bind.value` prefill: the renderer starts an input from its js-kind's default ("" for
     # text) and reads neither `default` nor `source` for display — measured, and the reason the
     # profile no longer offers them for `input`.

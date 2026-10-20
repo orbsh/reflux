@@ -3,7 +3,7 @@
 An event name is an address, not a label (§事件名就是寻址契约): an unregistered name is
 refused, counted and logged, and never dispatched dynamically (``getattr(module, name)`` is an
 arbitrary-attribute surface, and it cannot be checked before the run either). The reserved
-prefix belongs to the shell, so an application registering on it is a startup error; the
+prefix belongs to the framework, so an application registering on it is a startup error; the
 framework's own protocol names come in through :meth:`Registry.builtin`, which is the one
 legitimate use of that prefix.
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 import traceback
 from typing import Any, Callable, overload
 
-from .tables_generated import RESERVED_PREFIX
+from .protocol import RESERVED_PREFIX
 
 Handler = Callable[[Any, dict], None]
 
@@ -64,7 +64,7 @@ class Registry:
             raise RegistryError(f"{name!r}: handler must be callable, got {type(handler).__name__}")
         if name.startswith(RESERVED_PREFIX) and not builtin:
             raise RegistryError(
-                f"{name!r} uses the reserved prefix {RESERVED_PREFIX!r} — the shell owns that "
+                f"{name!r} uses the reserved prefix {RESERVED_PREFIX!r} — the framework owns that "
                 "namespace; register it under a name of your own"
             )
         if name in self._handlers:

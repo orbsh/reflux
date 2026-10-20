@@ -1,12 +1,12 @@
-"""Serve the shell by hand: the static assets plus the `/ws` channel.
+"""Serve the page by hand: the static tree plus the `/ws` channel.
 
-    python3 -m reflux.demo                # 127.0.0.1:8000, the library's own shell/
+    python3 -m reflux.demo                # 127.0.0.1:8000, the library's own www/
     python3 -m reflux.demo --port 0       # free port, printed
     python3 -m reflux.demo --root ./site  # serve a produced site instead
 
-No view is registered, so the shell loads, connects and shows its probe: this is the dev loop's
-"serve the shell and drive the store by hand", not an application. To run an application, give
-it its own App (`reflux.demo_app` is one).
+No page is declared, so the page loads, connects and draws nothing: this is the dev loop's
+"serve the page and drive the planes by hand", not an application. To run an application, give it
+its own App (`reflux.demo_app` is one).
 
 uv is available but not required: the producer side has no dependencies.
 """
@@ -17,20 +17,18 @@ import argparse
 import sys
 from pathlib import Path
 
-from .app import App
-
-SHELL_ROOT = Path(__file__).resolve().parent.parent / "shell"
+from .app import PAGE_ROOT, App
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="reflux.demo", description="Serve the reflux shell.")
+    ap = argparse.ArgumentParser(prog="reflux.demo", description="Serve the reflux page.")
     ap.add_argument("--port", type=int, default=8000, help="0 picks a free port (default: 8000)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument(
         "--root",
         type=Path,
-        default=SHELL_ROOT,
-        help="assets root (default: this library's shell/)",
+        default=PAGE_ROOT,
+        help="assets root (default: this library's www/)",
     )
     args = ap.parse_args(argv)
 

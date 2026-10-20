@@ -1,228 +1,163 @@
 #!/usr/bin/env python3
-"""T8 gate — every failure mode the design lists, each one refusable without losing the session.
+"""T8 gate — the page's side of the failure table (what `gate_ingest` does not already pin).
 
-Two phases again. The offline phase drives a real socket with a stdlib client: bad JSON, an
-unregistered name, a frame with no `event`, a handler that raises — four refusals counted, and
-after each one the session still answers. It also proves the two producer-side refusals (the op cap
-and one row id per array) and the isolation claim that matters most here: a client that stopped
-reading must not hold anybody else's frames.
+The *frame*-level half of this subject lives in `tools/gate_ingest.py` (two doors, one count each):
+the server refuses a bad frame and counts it. What this gate asserts on the real page is what a
+user's screen does when the producer or the page misbehaves:
 
-The browser phase proves the shell's half: a hand-built frame over the cap is refused *whole* (the
-store does not move), and an uplink whose declared payload the shell cannot read is not sent at all.
+- an event name nobody registered is refused and counted, and the page keeps working;
+- a handler that raises leaves a traceback, the session alive, and the page answering;
+- a frame with one bad operation is refused **whole** — the page never shows half a turn — and the
+  next frame still lands.
 
     python3 tools/gate_t8.py
-
-Exit code 0 = gate passed.
 """
 
 from __future__ import annotations
 
+import json
 import sys
-import threading
 import time
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cdp import Ws, report, shell_page  # noqa: E402
-
-import reflux.demo_app as demo  # noqa: E402
-from reflux import ops, ui  # noqa: E402
+from cdp import Cdp, console_errors, report, open_page  # noqa: E402
+from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.routes import Routes  # noqa: E402
-from reflux.tables_generated import MAX_OPS_PER_FRAME  # noqa: E402
+from reflux.sdk import builders as b  # noqa: E402
+
+PAGE = "/"
 
 
-def wait_for(condition, timeout: float = 5.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if condition():
-            return True
-        time.sleep(0.02)
-    return condition()
-
-
-def offline_phase() -> list[tuple[str, bool, str]]:
-    app = App(routes=Routes(), heartbeat=10.0, dead_after=30.0, outbox=4)
-    app.events.register("ok.ping")(
-        lambda session, frame: session.draw(ops.patch("/slots/x", "pong"))
+def tree() -> Any:
+    return b.case(
+        {"type": "input", "bind": {"value": {"kind": "event", "event": "gate.nowhere", "type": "text"}}},
+        {"type": "input", "bind": {"value": {"kind": "event", "event": "gate.boom", "type": "text"}}},
+        # an emitter for the refused-frame case: bound to the `echo` data slot
+        {"type": "text", "id": "echo", "bind": {"value": {"kind": "source", "source": "echo"}}},
     )
 
-    def boom(session, frame):
-        raise RuntimeError("handler defect")
 
-    app.events.register("boom")(boom)
-    srv = app.make_server(0)
-    port = srv.server_address[1]
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-
-    client = Ws(f"ws://127.0.0.1:{port}/ws")
-    check: list[tuple[str, bool, str]] = []
-
-    def round_trip() -> bool:
-        """One good turn: the session answers, so it survived whatever came before."""
-        client.send({"event": "ok.ping", "data": {}})
-        try:
-            frame = client.recv()
-        except (EOFError, TimeoutError):
-            return False
-        return bool(frame.get("ops")) and frame["ops"][0]["op"] == "patch"
-
-    try:
-        client.send({"event": "reflux:hello", "data": {"path": "/"}})
-        check.append(
-            ("a connection registers a session", wait_for(lambda: len(app.live()) == 1), f"live={len(app.live())}")
+def press_enter(cdp: Cdp) -> None:
+    for kind in ("keyDown", "keyUp"):
+        cdp.call(
+            "Input.dispatchKeyEvent",
+            type=kind,
+            key="Enter",
+            code="Enter",
+            windowsVirtualKeyCode=13,
+            nativeVirtualKeyCode=13,
+            text="\r" if kind == "keyDown" else "",
         )
 
-        registry_before, ingest_before = app.events.refused, app.stats["refused"]
-        client._send_frame(0x1, b"this is not json")  # a frame that never parses
-        client.send({"event": "no.such.handler", "data": {}})  # unregistered: never dispatched
-        client.send({"data": {}})  # no event key at all — the ingest boundary's, not the registry's
-        client.send({"event": "boom", "data": {}})  # a handler that raises
-        counted = wait_for(
-            lambda: app.events.refused + app.stats["refused"] == registry_before + ingest_before + 4
-        )
-        traceback_logged = any("handler for 'boom' raised" in line for line in app.events.log)
-        check.append(
-            (
-                "bad JSON / unknown name / no event / raising handler: four refusals, one per frame",
-                counted and traceback_logged and round_trip(),
-                f"registry +{app.events.refused - registry_before} "
-                f"ingest +{app.stats['refused'] - ingest_before} "
-                f"traceback={traceback_logged} session answered",
-            )
-        )
 
-        cap_refused = dup_refused = False
-        try:
-            ops.draw(*[ops.patch("/slots/x", 1)] * (MAX_OPS_PER_FRAME + 1))
-        except ValueError:
-            cap_refused = True
-        try:
-            ops.draw(ops.patch("/slots/rows", [ui.text("a", id="r"), ui.text("b", id="r")]))
-        except ValueError:
-            dup_refused = True
-        check.append(
-            (
-                "the producer refuses before the wire sees it: over the cap, duplicate row id",
-                cap_refused and dup_refused,
-                f"cap={cap_refused} duplicate_id={dup_refused}",
-            )
-        )
-
-        # A client that reads nothing: big frames fill its socket, the (tiny) outbox starts shedding,
-        # and the point of the check is that the *other* session keeps flowing meanwhile.
-        deaf = Ws(f"ws://127.0.0.1:{port}/ws")
-        deaf.send({"event": "reflux:hello", "data": {"path": "/deaf"}})
-        wait_for(lambda: any(s.path == "/deaf" for s in app.live()))
-        deaf_session = next((s for s in app.live() if s.path == "/deaf"), None)
-        assert deaf_session is not None, "the deaf client's session should be registered"
-        reader_before = app.events.calls
-        big = "x" * 200_000
-        for _ in range(12):
-            deaf_session.draw(ops.patch("/slots/big", big))
-        shed = wait_for(lambda: app.stats["shed"] >= 1, timeout=3.0)
-        isolated = round_trip()
-        check.append(
-            (
-                "a client that stopped reading sheds frames and holds nobody else",
-                shed and isolated and app.stats["shed"] >= 1,
-                f"shed={app.stats['shed']} resync={app.stats['resync']} "
-                f"other session answered={isolated}",
-            )
-        )
-        deaf.sock.close()
-    finally:
-        client.sock.close()
-        app.stop()
-        srv.shutdown()
-        srv.server_close()
-    return check
+def uplink(cdp: Cdp, index: int, text: str) -> None:
+    """Type into the index-th input and press Enter — the page's own way of sending a frame."""
+    cdp.eval(f"document.querySelectorAll('input')[{index}].focus()")
+    cdp.type_text(text)
+    press_enter(cdp)
 
 
-def shell_phase() -> list[tuple[str, bool, str]]:
-    app = demo.make_app()
-    check: list[tuple[str, bool, str]] = []
-    with shell_page(app=app) as (cdp, base):
-        wait_for(lambda: len(app.live()) == 1)
-        session = next(iter(app.live()), None)
-
-        # 1. a hand-built frame over the cap (the SDK would never produce one) is refused whole
-        rejected_before = cdp.eval("window.reflux.counters.rejected") or 0
-        tree_before = cdp.eval("JSON.stringify(window.reflux.state.tree ?? null).length")
-        app._write(
-            session.channel,
-            {"ev": "draw", "ops": [{"op": "patch", "path": "/slots/x", "value": 1}] * (MAX_OPS_PER_FRAME + 1)},
-        )
-        counted = wait_for(
-            lambda: (cdp.eval("window.reflux.counters.rejected") or 0) > rejected_before
-        )
-        tree_after = cdp.eval("JSON.stringify(window.reflux.state.tree ?? null).length")
-        errors = cdp.eval("JSON.stringify(window.reflux.errors ?? [])") or ""
-        check.append(
-            (
-                "an oversized frame is refused whole",
-                counted and tree_after == tree_before and "ops in one frame" in errors,
-                f"rejected={rejected_before}->{cdp.eval('window.reflux.counters.rejected')} "
-                f"tree {tree_before}->{tree_after}",
-            )
-        )
-
-        # 2. a declared payload the shell cannot read refuses the uplink (and says why)
-        #    The defect has to be the same lie on both sides: the frame is built against the Python
-        #    tables, the uplink is refused against the shell's — so a bogus local goes into both.
-        from reflux.tables_generated import COMPONENTS
-
-        COMPONENTS["input"]["local"].append("nonsense")
-        cdp.eval(
-            "(async () => { const m = await import('/js/components.generated.js');"
-            " m.COMPONENTS.input.local.push('nonsense'); return true; })()"
-        )
-        uplink_before = cdp.eval("window.reflux.uplink.refused") or 0
-        app.live()[0].draw(
-            ops.insert(
-                "/tree/children",
-                ui.field(
-                    ui.input(
-                        placeholder="probe",
-                        source="name",
-                        event="probe.change",
-                        payload=["nonsense"],
-                        id="probe-input",
-                    ),
-                    label="probe",
-                ),
-                anchor="end",
-            )
-        )
-        probe = ".rx-input[placeholder=\"probe\"]"
-        rendered = wait_for(lambda: cdp.eval(f"!!document.querySelector('{probe}')"))
-        if rendered:
-            cdp.eval(
-                f"document.querySelector('{probe}').dispatchEvent(new Event('change', {{ bubbles: true }}))"
-            )
-        refused = wait_for(
-            lambda: (cdp.eval("window.reflux.uplink.refused") or 0) > uplink_before
-        )
-        notes = cdp.eval("JSON.stringify(window.reflux.notes ?? [])") or ""
-        errors = cdp.eval("JSON.stringify(window.reflux.errors ?? [])") or ""
-        sent = [f for f in (f for d, f in app.log if d == "recv") if f.get("event") == "probe.change"]
-        check.append(
-            (
-                "an unreadable declared payload refuses the uplink instead of sending a hole",
-                rendered and refused and not sent and "cannot be read" in notes,
-                f"rendered={rendered} uplink.refused={cdp.eval('window.reflux.uplink.refused')} "
-                f"sent={len(sent)} note={'cannot be read' in notes} errors={errors[:120]}",
-            )
-        )
-    app.stop()
-    return check
+def wait_for(predicate, timeout: float = 3.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return False
 
 
 def main() -> int:
-    checks = offline_phase() + shell_phase()
-    return report(checks, gate="T8 gate")
+    app = App()
+    checks: list[tuple[str, bool, str]] = []
+
+    @app.events.register("gate.boom")
+    def boom(session, frame):
+        raise RuntimeError("the producer's own defect")
+
+    @app.events.register("gate.half")
+    def half(session, frame):
+        # One legal operation and one that is not a wire type: the whole frame must be refused, so
+        # "half-way" can never reach the page — and the frame after it still must.
+        session.send(
+            wire.draw(
+                session.id,
+                wire.set("echo", b.text("half-way")),
+                {"action": "create", "event": "", "data": {"type": "widget"}},
+            )
+        )
+        session.send(wire.draw(session.id, wire.set("echo", b.text("whole"))))
+
+    with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
+        session = next(iter(app.live()), None)
+        if session is None:
+            print("no session: the page never connected")
+            return 1
+
+        session.send(wire.draw(session.id, wire.create(tree())))
+        drawn = wait_for(lambda: cdp.eval("document.querySelectorAll('input').length === 2"))
+        cdp.drain()
+        if not drawn:
+            print("the fixture never drew: expected two inputs")
+            return 1
+
+        # 1 — an unregistered name: counted by the registry, never dispatched, page untouched.
+        before = app.events.refused
+        uplink(cdp, 0, "hello")
+        wait_for(lambda: app.events.refused == before + 1)
+        counted = app.events.refused == before + 1
+        alive = bool(app.live()) and bool(cdp.eval("document.querySelectorAll('#main *').length > 0"))
+        checks.append(
+            (
+                "an unregistered event name is refused and counted",
+                counted and alive,
+                f"registry +{app.events.refused - before} live={len(app.live())}",
+            )
+        )
+
+        # 2 — a handler that raises: a traceback in the log, the session alive, the page answering.
+        before = app.events.refused
+        uplink(cdp, 1, "boom")
+        # The counter moves before the traceback is formatted, so wait for the line, not the number.
+        traceback_logged = wait_for(
+            lambda: any("handler for 'gate.boom' raised" in line for line in app.events.log)
+        )
+        checks.append(
+            (
+                "a raising handler is logged and the session survives",
+                app.events.refused == before + 1 and traceback_logged and bool(app.live()),
+                f"registry +{app.events.refused - before} traceback={traceback_logged} live={len(app.live())}",
+            )
+        )
+
+        # 3 — one bad operation refuses the frame whole: no half turn, and the next frame lands.
+        before = app.stats["refused"]
+        half(session, {})  # the handler directly: a `local` inject would not call it
+        wait_for(lambda: "whole" in (cdp.eval("document.body.innerText") or ""))
+        time.sleep(0.2)
+        body = cdp.eval("document.body.innerText") or ""
+        checks.append(
+            (
+                "a frame with one bad operation is refused whole",
+                "half-way" not in body and app.stats["refused"] == before + 1,
+                f"half_way={'half-way' in body} refused +{app.stats['refused'] - before}",
+            )
+        )
+        checks.append(
+            (
+                "the frame after the refused one still lands",
+                "whole" in body,
+                "whole" if "whole" in body else "missing",
+            )
+        )
+
+        errors = console_errors(cdp)
+        checks.append(("zero console errors", not errors, "none" if not errors else str(errors)))
+
+    return report(checks, gate="T8 GATE")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

@@ -1,8 +1,8 @@
-"""Static file server for reflux's pages, plus the ``/ws`` channel when an app is attached.
+"""Static file server for reflux's page, plus the ``/ws`` channel when an app is attached.
 
-A server is one or more **mounts** — a URL prefix mapped to a directory. Today that serves the
-retiring shell at ``/`` and the fluxen-backed page at ``/__next/`` from one origin, so both speak
-the same channel and the migration keeps every gate runnable. Prefixes are matched longest first.
+A server is one or more **mounts** — a URL prefix mapped to a directory. The page is the root mount
+and its assets are a second one (``/static/``), which is what keeps a deep link from resolving an
+asset reference against the deep-link directory. Prefixes are matched longest first.
 
 Each mount serves its own modules and pinned assets, same-origin, with caching off (a rebuilt page
 must never need a hard refresh), upgrades ``GET /ws`` to the channel, and hands any *page path*
@@ -32,7 +32,7 @@ _TYPES = {
 }
 
 
-class ShellHandler(SimpleHTTPRequestHandler):
+class PageHandler(SimpleHTTPRequestHandler):
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, **_TYPES}
 
     def end_headers(self) -> None:
@@ -53,7 +53,7 @@ class ShellHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "nothing mounted here")
             return
         if prefix == "/" and page + "/" in self._mounts():
-            # "/__next" without its slash: send the browser to the mounted root, or every
+            # "/static" without its slash: send the browser to the mounted root, or every
             # relative reference on that page would resolve against "/" instead.
             self.send_response(301)
             self.send_header("Location", page + "/")
@@ -102,8 +102,8 @@ def make_server(
     `port=0` picks a free port; read it back from ``server.server_address[1]``. Passing `app`
     attaches the channel at `/ws` (it needs only ``handle(channel)``).
 
-    `mounts` maps a URL prefix to a directory — ``{"/": shell, "/__next/": page}`` serves both
-    pages from one origin, which is what keeps one session model during the migration. Prefixes
+    `mounts` maps a URL prefix to a directory — ``{"/": page, "/static/": assets}`` serves the page
+    and its assets from one origin. Prefixes
     are matched longest first; every mount needs its own `index.html`.
     """
     if mounts is None:
@@ -122,7 +122,7 @@ def make_server(
             f"the page mount {base_prefix!r} has no index.html ({table[base_prefix]})"
         )
     base = table[base_prefix]
-    handler = functools.partial(ShellHandler, directory=str(base))
+    handler = functools.partial(PageHandler, directory=str(base))
     server = ThreadingHTTPServer((host, port), handler)
     server.app = app  # type: ignore[attr-defined]
     server.mounts = table  # type: ignore[attr-defined]

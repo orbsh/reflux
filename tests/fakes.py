@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reflux import ops
+from reflux import wire
 
 
 class FakeSession:
@@ -18,4 +18,4 @@ class FakeSession:
         self.frames.append(frame)
 
     def draw(self, *operations: dict) -> None:
-        self.send(ops.draw(*operations))
+        self.send(wire.draw(self.id, *operations))

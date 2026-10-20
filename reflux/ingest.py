@@ -18,10 +18,10 @@ Two boundaries stated rather than hidden:
 
 - **A slot name cannot be checked here.** "Was this slot declared?" needs the tree the session sent
   — shadow state — so it stays where it can be judged: the SDK's construction time.
-- **The retiring shell's dialect is not this layer's business.** A frame carrying `ops` instead of
-  `content` belongs to the shell, whose own validator refuses what it cannot render, and which
-  retires in M1.7. This boundary recognizes the accrete envelope by `content` and leaves the rest
-  alone.
+- **There is one dialect.** Every outbound frame carries `content` — accrete's eight actions — so a
+  frame without it is an envelope defect like any other. The shell's four-op `ops` dialect retired
+  in M1.7 and this boundary stopped tolerating it in the same change: a frame the renderer would
+  silently skip is not a frame this server should put on a socket.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from typing import Any, NoReturn
 
 from .sdk import closed
 from .sdk._parse import parse
-from .tables_generated import MAX_OPS_PER_FRAME
+from .protocol import MAX_OPS_PER_FRAME
 
 __all__ = ["Refused", "check_frame", "check_uplink", "ENVELOPE_KEYS", "UPLINK_KEYS", "OP_KEYS"]
 
@@ -83,15 +83,9 @@ def _names(keys: Any) -> str:
 
 
 def check_frame(frame: Any) -> None:
-    """Refuse a frame the server is about to send, or return None.
-
-    The shell's dialect (`{"ev": "draw", "ops": [...]}`) carries no `content` and is left alone —
-    see the module docstring.
-    """
+    """Refuse a frame the server is about to send, or return None."""
     if not isinstance(frame, dict):
         _refuse("frame is %s, not an object", type(frame).__name__)
-    if "content" not in frame:
-        return
 
     extra = set(frame) - ENVELOPE_KEYS
     if extra:
@@ -102,6 +96,8 @@ def check_frame(frame: Any) -> None:
     if not isinstance(sender, str) or not sender:
         _refuse("envelope: sender is %r, not a non-empty string", sender)
 
+    if "content" not in frame:
+        _refuse("envelope: content is missing — a frame carries its operations")
     content = frame.get("content")
     if not isinstance(content, list):
         _refuse("envelope: content is %s, not a list", type(content).__name__)

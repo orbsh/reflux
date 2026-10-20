@@ -21,7 +21,7 @@ from reflux.channel import Channel
 from reflux.ingest import Refused
 from reflux.sdk import builders as b
 from reflux.sdk._parse import dump
-from reflux.tables_generated import MAX_OPS_PER_FRAME
+from reflux.protocol import MAX_OPS_PER_FRAME
 
 
 def frame(*ops: dict, sender: str = "s-1") -> dict:
@@ -55,9 +55,11 @@ class TestTheFrame(unittest.TestCase):
         ingest.check_frame(good)  # returns: nothing to report
         self.assertEqual(good["ev"], "draw")
 
-    def test_the_retiring_shell_dialect_is_not_this_layers_business(self) -> None:
-        # The shell's own validator refuses what it cannot render; M1.7 retires it.
-        ingest.check_frame({"ev": "draw", "ops": [{"op": "patch", "path": "/slots/x", "value": 1}]})
+    def test_a_frame_without_content_is_refused(self) -> None:
+        # One dialect: the shell's `ops` frames retired with the shell (M1.7). A frame that is not
+        # shaped like a `draw` frame is an envelope defect, not somebody else's dialect.
+        refused(self, {"ev": "draw", "sender": "s-1"}, "content is missing")
+        refused(self, {"ev": "draw", "ops": [wire.empty()]}, "envelope: 'ops'")
 
     def test_the_envelope_shape(self) -> None:
         cases = [

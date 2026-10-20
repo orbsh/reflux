@@ -1,13 +1,13 @@
-"""Shared harness for the reflux gates: serve the shell, drive headless chromium over CDP.
+"""Shared harness for the reflux gates: serve the page, drive headless chromium over CDP.
 
 stdlib only, on purpose — the gate must run anywhere the library runs. The CDP client is
 minimal (CDP needs text frames and nothing more); the launcher gives every gate the same
 hermetic setup: a dedicated profile, a free debug port, a same-origin server, and an error
 hook installed before any page script runs.
 
-The page is served through `reflux.app.App` (the static shell plus the `/ws` channel), so the
-shell's channel connects even when the gate drives the store by hand; a gate with a producer of
-its own passes `app=`.
+The page is served through `reflux.app.App` (the page tree plus the `/ws` channel), so the
+renderer connects even when the gate drives the planes by hand; a gate with a producer of its
+own passes `app=`.
 
 The gates keep only their assertions; everything reusable lives here.
 """
@@ -195,7 +195,7 @@ class Cdp:
 
     def click_js(self, expression: str, modifiers: int = 0) -> None:
         """A real mouse click on whatever a JS expression resolves to (modifiers: 1 alt, 2 ctrl,
-        4 meta, 8 shift — how a gate asks for the new-tab clicks the shell must not intercept)."""
+        4 meta, 8 shift)."""
         self._press(self.box_js(expression), modifiers)
 
     def _press(self, at: dict, modifiers: int = 0) -> None:
@@ -253,21 +253,21 @@ def _page_target(port: int, timeout: float = 15.0) -> dict:
 
 
 @contextmanager
-def shell_page(
+def open_page(
     root: Path | None = None,
     *,
     app: App | None = None,
     path: str = "/",
-    boot: str = "window.__reflux && window.__reflux.booted",
+    boot: str = "!!(window.fluxen && typeof window.fluxen.send === 'function')",
     settle: float = 0.5,
     timeout: float = 20.0,
 ) -> Iterator[tuple[Cdp, str]]:
-    """Serve the shell (through `app`, else a fresh App over `root`), load `path`, yield (cdp, base).
+    """Serve the page (through `app`, else a fresh App over `root`), load `path`, yield (cdp, base).
 
-    Waits for `boot` to become truthy (the shell announces it finished booting) and drains
-    late asset requests, so an external-request check is honest. A gate with a producer of its
-    own passes `app=` and reads that app's `log` for the frames that crossed the channel; `path`
-    is how a gate opens a deep link (the shell's hello carries it).
+    Waits for `boot` to become truthy (the renderer is mounted and its uplink handle is published)
+    and drains late asset requests, so an external-request check is honest. A gate with a producer
+    of its own passes `app=` and reads that app's `log` for the frames that crossed the channel;
+    `path` is how a gate opens a deep link (the page's hello carries it).
     """
     app = app or App(root)
     srv = app.make_server(0)
