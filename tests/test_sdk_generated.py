@@ -147,6 +147,26 @@ class ProfileTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             sdk.text("x", selector="#nope")
 
+    def test_the_token_lane_is_a_closed_set_of_names(self):
+        """`variant=` is a name the profile declares; the class behind it is the profile's."""
+        node = sdk.text("Title", variant="heading-2")
+        self.assertEqual(sdk.dump(node)["attrs"], {"class": ["rx-heading-2"]})
+        self.assertEqual(sdk.dump(sdk.case(sdk.text("x"), variant="card"))["attrs"], {"class": ["rx-card"]})
+        with self.assertRaises(ValueError) as caught:
+            sdk.text("x", variant="heading-9")
+        self.assertIn("heading-1", str(caught.exception))  # the refusal lists the set
+
+    def test_only_declared_types_offer_a_variant(self):
+        """A type the profile gives no variants has no `variant=` at all — not an inert one."""
+        self.assertIn("variant", inspect.signature(sdk.text).parameters)
+        self.assertNotIn("variant", inspect.signature(sdk.image).parameters)
+        # Every declared token belongs to a type the builders expose, and vice versa.
+        self.assertEqual(sorted(PROFILE["tokens"]), ["case", "text"])
+        for tag, variants in PROFILE["tokens"].items():
+            self.assertTrue(PROFILE["types"][tag]["expose"], tag)
+            self.assertTrue(variants, tag)
+            self.assertTrue(all(isinstance(v, str) and v for v in variants.values()), tag)
+
     def test_builder_defaults_are_the_schema_defaults(self):
         for const, cls in ARMS:
             entry = PROFILE["types"][const]

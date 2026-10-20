@@ -20,8 +20,9 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from .types import Accrete
+from . import profile
 
-__all__ = ["parse", "dump", "drop_none", "bind_value", "bind_options", "bind_select"]
+__all__ = ["parse", "dump", "drop_none", "token_attrs", "bind_value", "bind_options", "bind_select"]
 
 
 @lru_cache(maxsize=None)
@@ -61,6 +62,25 @@ def drop_none(**kw: Any) -> dict[str, Any] | None:
     """The keyword arguments minus the `None`s; empty collapses to `None`."""
     out = {k: v for k, v in kw.items() if v is not None}
     return out or None
+
+
+def token_attrs(attrs: dict[str, Any] | None, variant: str | None, tag: str) -> dict[str, Any] | None:
+    """`variant=` → `attrs.class`, the token lane.
+
+    The producer picks a **name** from the profile's closed set for its type; the class string
+    behind it is the profile's, and it is the only way a class ever reaches the wire (the builders
+    have no `class` keyword otherwise). An unknown variant is refused here, listing the set — the
+    alternative is a class the stylesheet does not know and a page that silently looks wrong.
+    """
+    if variant is None:
+        return attrs
+    tokens = profile.tokens().get(tag) or {}
+    if variant not in tokens:
+        known = ", ".join(sorted(tokens)) or "none declared"
+        raise ValueError(f"{tag}: {variant!r} is not a variant of this type ({known})")
+    out = dict(attrs or {})
+    out["class"] = [tokens[variant], *out.get("class", [])]
+    return out
 
 
 def bind_entry(

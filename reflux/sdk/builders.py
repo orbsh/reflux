@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._parse import bind_entry, bind_value, drop_none, parse
+from ._parse import bind_entry, bind_value, drop_none, parse, token_attrs
 from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
@@ -14,9 +14,10 @@ def case(
     grid: dict[str, Any] | None = None,
     horizontal: bool | None = None,
     id: str | None = None,
+    variant: str | None = None,
 ) -> Case:
     """Build a `case` node (the wire type `case`)."""
-    attrs = drop_none(grid=grid, horizontal=horizontal)
+    attrs = token_attrs(drop_none(grid=grid, horizontal=horizontal), variant, 'case')
     bind = None
     return parse(drop_none(type='case', attrs=attrs, bind=bind, id=id, children=list(children) or None), Case)
 
@@ -257,8 +258,6 @@ def image(
 def input(
     *,
     horizontal: bool | None = None,
-    value: Any = None,
-    source: Any = None,
     event: Any = None,
     field: Any = None,
     payload: Any = None,
@@ -267,7 +266,7 @@ def input(
 ) -> Input:
     """Build a `input` node (the wire type `input`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value, source=source, event=event, field=field, payload=payload, js_kind=kind))
+    bind = drop_none(value=bind_value(event=event, field=field, payload=payload, js_kind=kind))
     return parse(drop_none(type='input', attrs=attrs, bind=bind, id=id), Input)
 
 
@@ -277,14 +276,12 @@ def select(
     value: Any = None,
     source: Any = None,
     event: Any = None,
-    field: Any = None,
-    payload: Any = None,
     options_source: Any = None,
     id: str | None = None,
 ) -> Select:
     """Build a `select` node (the wire type `select`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value, source=source, event=event, field=field, payload=payload), options=bind_entry('options', source=options_source))
+    bind = drop_none(value=bind_value(default=value, source=source, event=event), options=bind_entry('options', source=options_source))
     return parse(drop_none(type='select', attrs=attrs, bind=bind, id=id), Select)
 
 
@@ -354,9 +351,10 @@ def text(
     format: str | None = None,
     source: Any = None,
     id: str | None = None,
+    variant: str | None = None,
 ) -> Text:
     """Build a `text` node (the wire type `text`)."""
-    attrs = drop_none(format=format)
+    attrs = token_attrs(drop_none(format=format), variant, 'text')
     bind = drop_none(value=bind_value(default=value, source=source))
     return parse(drop_none(type='text', attrs=attrs, bind=bind, id=id), Text)
 
@@ -367,12 +365,10 @@ def textarea(
     value: Any = None,
     source: Any = None,
     event: Any = None,
-    field: Any = None,
-    payload: Any = None,
     placeholder: Any = None,
     id: str | None = None,
 ) -> TextArea:
     """Build a `textarea` node (the wire type `textarea`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value, source=source, event=event, field=field, payload=payload), placeholder=bind_entry('placeholder', default=placeholder))
+    bind = drop_none(value=bind_value(default=value, source=source, event=event), placeholder=bind_entry('placeholder', default=placeholder))
     return parse(drop_none(type='textarea', attrs=attrs, bind=bind, id=id), TextArea)

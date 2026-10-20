@@ -65,7 +65,8 @@ def send_all_events() -> None:
 
     @APP.events.register("gate.unknown-attr")
     def unknown_attr(session, frame):
-        session.send(hand({"type": "text", "attrs": {"class": ["leak"]}}))
+        # `selector` is hidden for every type (unlike `class`, which is the token lane now).
+        session.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
 
     @APP.events.register("gate.duplicate-row")
     def duplicate_row(session, frame):

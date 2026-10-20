@@ -2,8 +2,56 @@
    这里只放「只有框架知道」的那几件，且顺序在它之后。
 
    两个保留标记是树里的普通节点（客户端 runtime 从 DOM 上读它们写 URL 与标题），
-   它们不该占位置。用属性选择器而不是 `#reflux\:path`：冒号让 id 选择器很难读。 */
+   它们不该占位置。用属性选择器而不是 `#reflux\:path`：冒号让 id 选择器很难读。
+   这两条**不入层**：隐藏无条件，不该被任何层序影响。 */
 [id="reflux:path"],
 [id="reflux:title"] {
   display: none;
+}
+
+/* 令牌（profile 的 `tokens`）：生产端只写变体名（`variant="heading-1"`），SDK 低成这里
+   的 class。包在 `@layer reflux` 里：main.css 先声明了 theme/base/layout/element/custom/
+   style，新层名在之后首次出现 → 排在 style 之后，层内最强；而 unlayered 会盖掉渲染器
+   **所有**层（连它的布局与组件外观一起推翻），不可控。 */
+@layer reflux {
+  .rx-heading-1 {
+    font-size: 1.75em;
+    font-weight: 600;
+    margin: 0.4em 0 0.2em;
+  }
+
+  .rx-heading-2 {
+    font-size: 1.4em;
+    font-weight: 600;
+    margin: 0.35em 0 0.2em;
+  }
+
+  .rx-heading-3 {
+    font-size: 1.15em;
+    font-weight: 600;
+    margin: 0.3em 0 0.15em;
+  }
+
+  .rx-code {
+    font-family: ui-monospace, "SFMono-Regular", monospace;
+    background: var(--bg);
+    border: var(--border);
+    border-radius: var(--round);
+    padding: 0.1em 0.3em;
+  }
+
+  .rx-muted {
+    color: var(--secondary);
+  }
+
+  .rx-danger {
+    color: var(--error);
+  }
+
+  .rx-card {
+    background: var(--bg);
+    border: var(--border);
+    border-radius: var(--round);
+    padding: 0.6em;
+  }
 }

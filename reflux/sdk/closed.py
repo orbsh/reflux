@@ -24,10 +24,10 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, get_args
 
-from .profile import hidden_attrs
+from .profile import hidden_attrs, tokens
 from .types import Accrete, Bind
 
-__all__ = ["problem", "node_keys", "attrs_keys", "bind_keys", "arms"]
+__all__ = ["problem", "node_keys", "attrs_keys", "bind_keys", "token_values", "arms"]
 
 
 def _names(keys: Any) -> str:
@@ -68,14 +68,29 @@ def node_keys() -> dict[str, frozenset[str]]:
 
 @lru_cache(maxsize=1)
 def attrs_keys() -> dict[str, frozenset[str]]:
-    """Per node type: the attributes it may carry, minus the profile's hidden ones."""
+    """Per node type: the attributes it may carry, minus the profile's hidden ones.
+
+    `class` is the one exception, and only where the profile declares variants for the type: there
+    it is the token lane's carrier (`variant=` → one of these strings), so the key is allowed and
+    `problem` then checks every member against `token_values`.
+    """
     hidden = hidden_attrs()
     out: dict[str, frozenset[str]] = {}
     for tag, cls in arms().items():
         field = cls.model_fields.get("attrs")
         model = _attrs_model(field.annotation) if field is not None else None
-        out[tag] = frozenset(_wire_keys(model) - hidden) if model is not None else frozenset()
+        keys = _wire_keys(model) if model is not None else frozenset()
+        allowed = keys - hidden
+        if token_values(tag):
+            allowed |= keys & {"class"}
+        out[tag] = frozenset(allowed)
     return out
+
+
+@lru_cache(maxsize=None)
+def token_values(tag: str) -> frozenset[str]:
+    """The class strings the profile declares for `tag` — the closed set behind `variant=`."""
+    return frozenset((tokens().get(tag) or {}).values())
 
 
 @lru_cache(maxsize=1)
@@ -109,6 +124,13 @@ def problem(node: Any, where: str = "node") -> str | None:
         extra = set(attrs) - attrs_keys()[tag]
         if extra:
             return f"{where}: {_names(extra)} is not an attribute of {tag!r}"
+        classy = attrs.get("class")
+        if classy is not None:
+            if not isinstance(classy, list) or not all(isinstance(c, str) for c in classy):
+                return f"{where}: class must be a list of token names"
+            stray = [c for c in classy if c not in token_values(tag)]
+            if stray:
+                return f"{where}: {_names(stray)} is not a token of {tag!r}"
 
     bind = node.get("bind")
     if bind is not None:
