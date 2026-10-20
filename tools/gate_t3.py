@@ -1,237 +1,277 @@
 #!/usr/bin/env python3
-"""T3 gate — component dispatch, local state, and how far an update reaches.
+"""T3 gate — the profile's whole vocabulary draws, in one tree, and the DOM proves each type.
 
-Runs the shell in a real browser and measures the DOM: how many mutations a patch causes,
-whether sibling elements survive it, whether a slot write reaches only the component that
-reads it, and whether local state survives a store write. Nothing is mocked.
+The renderer implements all 30 accrete types, so what reflux owes is the closed set — every exposed
+type is a legal node and reaches the page. The set itself is proven offline
+(`tests/test_types_drawable.py`, one legal node per type, exactly the profile's list); this gate
+draws them all at once.
+
+How "each type drew" is measured: every component puts a **role class** on its element (`case`,
+`rack`, `pages`, `txt`, `select`, …), read off the renderer. Four types have no class of their own
+and are asserted by behaviour instead — a `fold`'s header is its `item[0]` while its body stays
+collapsed, a `form` is the only place a `button` renders, and a `portal` mounts its children into
+the element its `attrs.to` names.
+
+Asset-backed types stay out on purpose (`canvas` / `chart` / `editor` mount an ES module, `diagram`
+fetches mermaid): their capability is a deployment artifact, not vocabulary. A stub module would
+prove the stub.
 
     python3 tools/gate_t3.py
-
-Exit code 0 = gate passed.
 """
 
 from __future__ import annotations
 
+import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cdp import console_errors, report, shell_page  # noqa: E402
+from cdp import Cdp, console_errors, report, open_page  # noqa: E402
+from reflux import wire  # noqa: E402
+from reflux.app import App  # noqa: E402
+from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk._parse import dump  # noqa: E402
+from tests.types_fixture import ASSET_BACKED, NODES, text  # noqa: E402
 
-SCENARIO = r"""
-(async () => {
-  const R = window.reflux;
-  const app = document.getElementById("app");
-  const out = {};
-  const settle = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+PAGE = "/"
 
-  out.components = R.components;
-  out.implemented = R.implemented;
+# The renderer's own role classes, one per type that has one. `fold`/`form`/`portal`/`button` are
+# asserted by behaviour (see the docstring), so they are not here.
+ROLE: dict[str, str] = {
+    "case": ".case",
+    "placeholder": ".placeholder",
+    "float": ".float",
+    "layer": ".layer",
+    "popup": ".popup",
+    "svg": ".svg",
+    "group": ".group",
+    "path": ".path",
+    "rack": ".rack",
+    "pages": ".pages",
+    "image": "img",
+    "input": "input",
+    "select": ".select",
+    "table": "table",
+    "thead": "thead",
+    "tbody": "tbody",
+    "tr": "tr",
+    "th": "th",
+    "td": "td",
+    "text": ".txt",
+    "textarea": "textarea",
+}
 
-  const tree = {
-    type: "stack", id: null,
-    attrs: { direction: "column", gap: "md", align: "stretch" },
-    bind: {}, children: [
-      { type: "card", id: "card-1", attrs: { title: "看板", tone: "plain" }, bind: {}, children: [
-        { type: "text", id: "text-1", attrs: { value: "initial", tone: "default", size: "md", wrap: true }, bind: {}, children: [] },
-        { type: "input", id: "input-1", attrs: { kind: "text", placeholder: "名字", disabled: false }, bind: { source: "name" }, children: [] },
-        { type: "button", id: "button-1", attrs: { label: "do", variant: "primary", size: "md", disabled: false }, bind: { event: "do" }, children: [] },
-      ] },
-      { type: "rack", id: "rack-1", attrs: { density: "normal", empty_text: "", follow: "none" }, bind: {}, children: [
-        { type: "badge", id: "row-1", attrs: { value: "one", tone: "neutral" }, bind: {}, children: [] },
-        { type: "badge", id: "row-2", attrs: { value: "two", tone: "neutral" }, bind: {}, children: [] },
-      ] },
-    ],
-  };
-
-  out.created = R.apply({ ev: "draw", ops: [{ op: "create", root: tree }] });
-  await settle();
-  const card = document.querySelector(".rx-card");
-  const input = document.querySelector(".rx-input");
-  const button = document.querySelector(".rx-button");
-  out.root = !!document.querySelector(".rx-stack");
-  out.text_before = document.querySelector(".rx-text")?.textContent ?? null;
-
-  // 1. one text patch: one mutation, no element churn, siblings keep their DOM nodes
-  const seen = [];
-  const mo = new MutationObserver((recs) => seen.push(...recs));
-  mo.observe(app, { subtree: true, childList: true, characterData: true, attributes: true });
-  R.apply({ ev: "draw", ops: [{ op: "patch", path: "/tree/children/0/children/0/attrs/value", value: "patched" }] });
-  await settle();
-  mo.disconnect();
-  out.mutation_count = seen.length;
-  out.mutation_kinds = seen.map((r) => r.type);
-  out.element_churn = seen.some(
-    (r) => [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1),
-  );
-  out.text_after = document.querySelector(".rx-text")?.textContent ?? null;
-  out.identity = {
-    card: document.querySelector(".rx-card") === card,
-    input: document.querySelector(".rx-input") === input,
-    button: document.querySelector(".rx-button") === button,
-  };
-
-  // 2. a slot write: zero DOM mutations, and it reaches the one input reading that slot
-  const seen2 = [];
-  const mo2 = new MutationObserver((recs) => seen2.push(...recs));
-  mo2.observe(app, { subtree: true, childList: true, characterData: true, attributes: true });
-  R.setSlot("name", "from slot");
-  await settle();
-  mo2.disconnect();
-  out.slot_mutations = seen2.length;
-  out.input_after_slot = document.querySelector(".rx-input")?.value ?? null;
-
-  // 3. local state: what the user typed survives a store write
-  const el = document.querySelector(".rx-input");
-  el.focus();
-  el.value = "typed by hand";
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  R.setSlot("name", "store changed");
-  await settle(20);
-  out.typing_kept = el.value;
-
-  // 4. an unknown component refuses the whole frame — the good op in it does not land
-  const rejected0 = R.counters.rejected;
-  out.bad_component = R.apply({ ev: "draw", ops: [
-    { op: "patch", path: "/tree/children/0/attrs/title", value: "nope" },
-    { op: "insert", path: "/tree/children", anchor: "end",
-      node: { type: "div", id: null, attrs: {}, bind: {}, children: [] } },
-  ] });
-  await settle(20);
-  out.rejected_delta = R.counters.rejected - rejected0;
-  out.title_after_bad = document.querySelector(".rx-card__title")?.textContent ?? null;
-  out.error_bad_component = R.errors[R.errors.length - 1] ?? null;
-
-  // 5. an out-of-domain attr value refuses the frame too
-  const rejected1 = R.counters.rejected;
-  out.bad_attr = R.apply({ ev: "draw", ops: [
-    { op: "patch", path: "/tree/children/1/children/0/attrs/tone", value: "purple" },
-  ] });
-  out.rejected_delta2 = R.counters.rejected - rejected1;
-  out.error_bad_attr = R.errors[R.errors.length - 1] ?? null;
-
-  // 6. create again: the view is rebuilt, exactly one root remains, nothing unsupported
-  R.apply({ ev: "draw", ops: [{ op: "create", root: tree }] });
-  await settle();
-  out.roots = document.querySelectorAll(".rx-stack").length;
-  out.unsupported = R.counters.unsupported;
-
-  // 7. the stylesheet itself: the declared layer order, and the token paths that a variant
-  //    (data attribute -> token) and a datum (custom property) are supposed to ride
-  const sheet = document.styleSheets[0];
-  out.layer_statement = sheet?.cssRules?.[0]?.cssText ?? null;
-  out.color_scheme = getComputedStyle(document.documentElement).colorScheme;
-
-  const styled = { type: "stack", id: null, attrs: { direction: "column", gap: "lg", align: "stretch" }, bind: {}, children: [
-    { type: "card", id: "c-style", attrs: { title: "样式", tone: "plain" }, bind: {}, children: [] },
-    { type: "text", id: "t-danger", attrs: { value: "danger", tone: "danger", size: "md", wrap: true }, bind: {}, children: [] },
-    { type: "text", id: "t-plain", attrs: { value: "plain", tone: "default", size: "md", wrap: true }, bind: {}, children: [] },
-    { type: "badge", id: "b-info", attrs: { value: "info", tone: "info" }, bind: {}, children: [] },
-    { type: "badge", id: "b-neutral", attrs: { value: "neutral", tone: "neutral" }, bind: {}, children: [] },
-    { type: "progress", id: "p-1", attrs: { value: 50, label: "半", indeterminate: false }, bind: {}, children: [] },
-    { type: "rack", id: "r-empty", attrs: { density: "normal", empty_text: "还没有记录", follow: "none" }, bind: {}, children: [] },
-    { type: "stack", id: "s-sm", attrs: { direction: "row", gap: "sm", align: "center" }, bind: {}, children: [
-      { type: "text", id: "t-in-sm", attrs: { value: "x", tone: "default", size: "sm", wrap: true }, bind: {}, children: [] },
-    ] },
-  ] };
-  R.apply({ ev: "draw", ops: [{ op: "create", root: styled }] });
-  await settle(40);
-
+PROBE = """(() => {
+  const all = (sel) => Array.from(document.querySelectorAll(sel));
   const q = (sel) => document.querySelector(sel);
-  const progress = q(".rx-progress");
-  const bar = q(".rx-progress__bar");
-  const empty = q(".rx-rack__empty");
-  out.style = {
-    card_border_top: getComputedStyle(q(".rx-card")).borderTopWidth,
-    card_radius: getComputedStyle(q(".rx-card")).borderTopLeftRadius,
-    danger_color: getComputedStyle(q('.rx-text[data-tone="danger"]')).color,
-    plain_color: getComputedStyle(q('.rx-text[data-tone="default"]')).color,
-    info_badge_bg: getComputedStyle(q('.rx-badge[data-tone="info"]')).backgroundColor,
-    neutral_badge_bg: getComputedStyle(q('.rx-badge[data-tone="neutral"]')).backgroundColor,
-    gap_lg: getComputedStyle(q('.rx-stack[data-gap="lg"]')).rowGap,
-    gap_sm: getComputedStyle(q('.rx-stack[data-gap="sm"]')).columnGap,
-    progress_token: getComputedStyle(progress).getPropertyValue("--rx-value").trim(),
-    progress_ratio: bar.getBoundingClientRect().width / progress.getBoundingClientRect().width,
-    empty_visible: !empty.hidden && getComputedStyle(empty).display !== "none",
-    empty_text: empty.textContent,
+  const counts = {};
+  %COUNTS%
+  return {
+    counts,
+    text: (document.getElementById('main') || {}).innerText || '',
+    src: q('img') && q('img').getAttribute('src'),
+    d: q('.path') && q('.path').getAttribute('d'),
+    input: q('input') && q('input').value,
+    textarea: q('textarea') && q('textarea').value,
+    options: all('.select > div').map((d) => d.innerText.trim()),
+    selected: all('.select .selected').map((d) => d.innerText.trim()),
+    cells: all('table th, table td').map((c) => c.innerText.trim()),
+    rack: all('.rack *').map((r) => r.innerText.trim()).filter(Boolean),
+    pages: q('.pages') ? q('.pages').innerText.trim() : null,
+    buttons: all('.button').length,
+    style: (() => {
+      const cs = (sel, prop) => { const el = q(sel); return el ? getComputedStyle(el)[prop] : null; };
+      return {
+        h1: cs('.rx-heading-1', 'fontSize'),
+        h2: cs('.rx-heading-2', 'fontSize'),
+        h3: cs('.rx-heading-3', 'fontSize'),
+        plain: cs('.t3-plain', 'fontSize'),
+        muted: cs('.rx-muted', 'color'),
+        danger: cs('.rx-danger', 'color'),
+        plainColor: cs('.t3-plain', 'color'),
+        codeFont: cs('.rx-code', 'fontFamily'),
+        cardBorder: cs('.rx-card', 'borderTopWidth'),
+      };
+    })(),
   };
+})()"""
 
-  out.console_silent = true;
-  return out;
-})()
-"""
+
+def tree() -> dict:
+    """Every drawable type as one case's children; the button rides inside the form (see fixture)."""
+    kids = [
+        node
+        for tag, node in NODES.items()
+        if tag not in ASSET_BACKED and tag != "button"  # `button` is the form's child
+    ]
+    return {"type": "case", "children": [*kids, {"type": "case", "children": [tokens()]}]}
+
+
+def tokens() -> dict:
+    """A subtree that carries one node per declared variant — the token lane end to end.
+
+    The producer writes the variant *name*; the SDK lowers it to the class; the stylesheet behind
+    that class is what these checks read back as computed style.
+    """
+    return dump(
+        b.case(
+            b.text("Heading one", variant="heading-1"),
+            b.text("Heading two", variant="heading-2"),
+            b.text("Heading three", variant="heading-3"),
+            b.text("muted", variant="muted"),
+            b.text("danger", variant="danger"),
+            b.text("inline code", variant="code"),
+            b.text("plain", id="t3-plain"),
+            b.case(b.text("card body"), variant="card"),
+        )
+    )
+
+
+def seed_slots() -> list[dict]:
+    """The three list slots the fixture binds to: rack rows, select options, pages rows."""
+    return [
+        wire.append("rows", text("row-from-slot", id="row-1")),
+        wire.append("rows", text("row-from-slot", id="row-2")),  # two rows: the count is the point
+        wire.append("opts", text("option-a", id="a")),
+        wire.append("opts", text("option-b", id="b")),
+        wire.append("sel", text("page-one", id="a")),
+        wire.inject("pages-key", "a"),  # the pages key: vals plane, read through `path: "/data"`
+    ]
+
+
+def wait_for(cdp: Cdp, expression: str, timeout: float = 3.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if cdp.eval(expression):
+            return True
+        time.sleep(0.05)
+    return False
 
 
 def main() -> int:
+    app = App()
     checks: list[tuple[str, bool, str]] = []
-    with shell_page() as (cdp, base):
-        errors = console_errors(cdp)
-        checks.append(("zero console errors", not errors, "none" if not errors else str(errors)))
+    probe = PROBE.replace(
+        "%COUNTS%", "\n  ".join(f"counts[{tag!r}] = all({sel!r}).length;" for tag, sel in ROLE.items())
+    )
 
-        out = cdp.eval(SCENARIO)
-        if not isinstance(out, dict):
-            raise RuntimeError(f"the scenario returned {out!r}")
+    with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
+        session = next(iter(app.live()), None)
+        if session is None:
+            print("no session: the page never connected")
+            return 1
 
-        def check(name: str, ok: bool, evidence: str) -> None:
-            checks.append((name, ok, evidence))
+        session.send(wire.draw(session.id, *seed_slots(), wire.create(tree())))
+        wait_for(cdp, "!!document.querySelector('.rack')")
+        cdp.drain()
+        seen = json.loads(cdp.eval(f"JSON.stringify({probe})") or "{}")
+        counts: dict[str, int] = seen.get("counts") or {}
+        body: str = seen.get("text") or ""
 
-        missing = sorted(set(out["components"]) - set(out["implemented"]))
-        extra = sorted(set(out["implemented"]) - set(out["components"]))
-        check(
-            "spec == implementations",
-            not missing and not extra,
-            f"{len(out['components'])} components, missing={missing} extra={extra}",
+        missing = [tag for tag, n in counts.items() if not n]
+        checks.append(
+            (
+                "every class-bearing type draws its own element",
+                not missing,
+                f"missing={missing}" if missing else f"{len(counts)} role classes",
+            )
         )
 
-        check("create renders the tree", out["root"] and out["text_before"] == "initial",
-              f"root={out['root']} text={out['text_before']!r}")
-        check("one patch = one mutation, no element churn",
-              out["mutation_count"] == 1 and not out["element_churn"] and out["text_after"] == "patched",
-              f"mutations={out['mutation_count']} kinds={out['mutation_kinds']} churn={out['element_churn']} text={out['text_after']!r}")
-        check("siblings keep their DOM nodes",
-              all(out["identity"].values()), f"{out['identity']}")
-        check("slot write: zero DOM mutations, one reader updated",
-              out["slot_mutations"] == 0 and out["input_after_slot"] == "from slot",
-              f"mutations={out['slot_mutations']} value={out['input_after_slot']!r}")
-        check("local state survives a store write",
-              out["typing_kept"] == "typed by hand", f"value={out['typing_kept']!r}")
-        check("unknown component: frame refused whole",
-              out["bad_component"] is False and out["rejected_delta"] == 1 and out["title_after_bad"] == "看板",
-              f"rejected+{out['rejected_delta']} title={out['title_after_bad']!r}")
-        check("bad attr value: frame refused",
-              out["bad_attr"] is False and out["rejected_delta2"] == 1,
-              f"rejected+{out['rejected_delta2']} err={out['error_bad_attr']!r}")
-        check("create again: one root, nothing unsupported",
-              out["roots"] == 1 and out["unsupported"] == 0,
-              f"roots={out['roots']} unsupported={out['unsupported']}")
+        checks.append(
+            (
+                "a fold shows its item as the header and keeps its body collapsed",
+                "fold" in body and "fold-body" not in body,
+                f"header={'fold' in body} body_hidden={'fold-body' not in body}",
+            )
+        )
+        checks.append(
+            (
+                "a form registers itself — its submit button renders",
+                seen.get("buttons") == 1,
+                f"buttons={seen.get('buttons')}",
+            )
+        )
+        checks.append(("a portal mounts its children into the named target", "portal" in body, "portal" if "portal" in body else "missing"))
+        checks.append(("a leaf paints its bound value", "text" in body, f"text={'text' in body}"))
 
-        style = out["style"]
-        check("layer order declared first",
-              (out["layer_statement"] or "").startswith("@layer theme, base, layout, element, custom, style"),
-              f"{out['layer_statement']!r}")
-        check("theme tokens applied to a component",
-              style["card_border_top"] == "1px" and style["card_radius"] not in ("0px", ""),
-              f"border={style['card_border_top']} radius={style['card_radius']} scheme={out['color_scheme']!r}")
-        check("tone re-points one token, per component",
-              style["danger_color"] not in (None, "", style["plain_color"])
-              and style["info_badge_bg"] != style["neutral_badge_bg"],
-              f"danger={style['danger_color']} plain={style['plain_color']} "
-              f"info={style['info_badge_bg']} neutral={style['neutral_badge_bg']}")
-        check("gap is a data attribute, not an inline style",
-              style["gap_lg"] == "16px" and style["gap_sm"] == "4px",
-              f"lg={style['gap_lg']} sm={style['gap_sm']}")
-        check("a datum rides its custom property",
-              style["progress_token"] == "50%" and abs(style["progress_ratio"] - 0.5) < 0.02,
-              f"token={style['progress_token']!r} ratio={style['progress_ratio']:.3f}")
-        check("rack shows its empty state when it has no rows",
-              style["empty_visible"] and style["empty_text"] == "还没有记录",
-              f"visible={style['empty_visible']} text={style['empty_text']!r}")
+        checks.append(("image carries its src", seen.get("src") == "/static/logo.svg", f"src={seen.get('src')!r}"))
+        checks.append(("path draws its d", seen.get("d") == "M0 0 L1 1", f"d={seen.get('d')!r}"))
+        checks.append(
+            (
+                "select renders its options from a list slot and marks the bound one",
+                seen.get("options") == ["option-a", "option-b"] and seen.get("selected") == ["option-a"],
+                f"options={seen.get('options')} selected={seen.get('selected')}",
+            )
+        )
+        checks.append(
+            ("the table family renders its cells", seen.get("cells") == ["head", "cell"], f"cells={seen.get('cells')}")
+        )
+        checks.append(
+            (
+                # A rack renders its `item` template once per row of the bound list slot.
+                "rack renders its item once per row of the list slot",
+                (seen.get("rack") or []) == ["row", "row"],
+                f"rack={seen.get('rack')}",
+            )
+        )
+        checks.append(
+            ("pages renders the selected page", "page-one" in (seen.get("pages") or ""), f"pages={seen.get('pages')!r}")
+        )
+        checks.append(
+            (
+                "textarea carries its bound default",
+                seen.get("textarea") == "textarea",
+                f"value={seen.get('textarea')!r}",
+            )
+        )
+        # The renderer's truth, and the reason the profile no longer offers `default`/`source` for an
+        # input: it starts from its js-kind default and only emits.
+        checks.append(
+            ("input starts from its js-kind default, not a binding", seen.get("input") == "", f"value={seen.get('input')!r}")
+        )
 
-        if out["error_bad_component"]:
-            print(f"    refusal 1: {out['error_bad_component']}")
-        if out["error_bad_attr"]:
-            print(f"    refusal 2: {out['error_bad_attr']}")
+        # The token lane: variant name → class → the stylesheet's rule, read as computed style.
+        style = seen.get("style") or {}
+        sizes = [style.get(key) for key in ("h1", "h2", "h3", "plain")]
+        try:
+            sizes = [float(str(px).replace("px", "")) for px in sizes]
+        except (TypeError, ValueError):
+            sizes = []
+        checks.append(
+            (
+                "a heading variant is a real size step",
+                len(sizes) == 4 and sizes[0] > sizes[1] > sizes[2] > sizes[3],
+                f"h1/h2/h3/plain={[style.get(k) for k in ('h1', 'h2', 'h3', 'plain')]}",
+            )
+        )
+        checks.append(
+            (
+                "muted and danger are colours of their own",
+                bool(style.get("muted"))
+                and style.get("muted") != style.get("plainColor")
+                and style.get("danger") not in (None, style.get("plainColor")),
+                f"muted={style.get('muted')} danger={style.get('danger')} plain={style.get('plainColor')}",
+            )
+        )
+        checks.append(
+            (
+                "a code variant is monospace",
+                "mono" in str(style.get("codeFont") or "").lower(),
+                f"font-family={style.get('codeFont')}",
+            )
+        )
+        checks.append(
+            (
+                "a card variant draws a frame",
+                str(style.get("cardBorder")) not in ("0px", "None", ""),
+                f"border-top-width={style.get('cardBorder')}",
+            )
+        )
+
+        errors = console_errors(cdp)
+        checks.append(("zero console errors", not errors, "none" if not errors else str(errors)))
 
     return report(checks, gate="T3 GATE")
 

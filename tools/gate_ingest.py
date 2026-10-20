@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M1.5 gate — the server's ingest boundary, end to end over a real socket.
+"""Ingest gate — the server's ingest boundary, end to end over a real socket.
 
 The SDK refuses a bad node where it is built; this gate proves the *other* fence: a producer that
 hand-writes the JSON (an app's handler, a script, a second language's SDK with a bug) is refused at
@@ -14,10 +14,11 @@ Both directions, one session, one socket:
 - inbound — `App.handle` checks an uplink frame before the registry can dispatch it: the key set,
   the event name's shape, the row `id`'s shape. A refused frame never reaches a handler.
 
-The retiring shell's dialect (`{"ev": "draw", "ops": [...]}`) is *not* this layer's business and
-must still pass — M1.7 retires it, and a gate that broke it now would break the seven old gates.
+One dialect: a frame without `content` (the retired shell's shape) is an envelope defect and is
+refused like the rest — the renderer would skip such a frame silently, so passing it through would
+be a hole, not compatibility.
 
-    python3 tools/gate_m1_5.py
+    python3 tools/gate_ingest.py
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from cdp import Ws, free_port, report  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
-from reflux.tables_generated import MAX_OPS_PER_FRAME  # noqa: E402
+from reflux.protocol import MAX_OPS_PER_FRAME  # noqa: E402
 
 APP = App()
 SEEN: list[dict] = []          # what reached a handler (a refused uplink must not show up here)
@@ -43,7 +44,7 @@ SESSION: list[str] = []        # the one session id, read from the table
 
 
 def legacy_op() -> dict:
-    """One op of the retiring shell's dialect — the seam this layer must not police."""
+    """One op of the retired shell's dialect — the frame shape this boundary now refuses."""
     return {"op": "patch", "path": "/slots/x", "value": 1}
 
 
@@ -80,7 +81,16 @@ def send_all_events() -> None:
 
     @APP.events.register("gate.over-cap")
     def over_cap(session, frame):
-        session.send(wire.draw(session.id, *[wire.empty()] * (MAX_OPS_PER_FRAME + 1)))
+        # Written out by hand on purpose: `wire.draw` refuses to *build* a frame over the cap (the
+        # producer's half of the rule), so only a hand-written one can reach the server's door —
+        # and that door is what this gate proves.
+        session.send(
+            {
+                "ev": "draw",
+                "sender": session.id,
+                "content": [wire.empty()] * (MAX_OPS_PER_FRAME + 1),
+            }
+        )
 
     @APP.events.register("gate.unknown-key")
     def unknown_key(session, frame):
@@ -91,7 +101,7 @@ def send_all_events() -> None:
 
     @APP.events.register("gate.legacy")
     def legacy(session, frame):
-        # The retiring shell's shape: no `content`, so this boundary leaves it alone.
+        # The retiring shell's shape: no `content`. One dialect now, so this is refused whole.
         session.send({"ev": "draw", "ops": [legacy_op()]})
 
     @APP.events.register("gate.alive")
@@ -190,14 +200,15 @@ def main() -> int:
         )
     )
 
-    # 8 — the retiring shell's dialect is out of scope, deliberately.
+    # 8 — one dialect: a frame without `content` is an envelope defect, refused like the rest.
+    before = APP.stats["refused"]
     ask(ws, "gate.legacy")
-    legacy = recv(ws)
+    legacy = recv(ws, 0.4)
     checks.append(
         (
-            "the retiring shell's dialect still passes",
-            legacy is not None and legacy.get("ops") == [legacy_op()],
-            json.dumps(legacy, ensure_ascii=False)[:70] if legacy else "nothing arrived",
+            "a frame without content is refused, not passed",
+            legacy is None and APP.stats["refused"] == before + 1,
+            f"wire={'silent' if legacy is None else 'FRAME'} refused+{APP.stats['refused'] - before}",
         )
     )
 
@@ -237,11 +248,13 @@ def main() -> int:
     )
 
     # 12 — the counters are the record: what was refused is exactly what the gate asked for.
+    # One per outbound case, plus the content-less frame, plus the two refused uplinks.
+    expected = len(refusals) + 3
     checks.append(
         (
             "every refusal is counted once",
-            APP.stats["refused"] == len(refusals) + 2,
-            f"refused={APP.stats['refused']} expected={len(refusals) + 2}",
+            APP.stats["refused"] == expected,
+            f"refused={APP.stats['refused']} expected={expected}",
         )
     )
 
@@ -249,7 +262,7 @@ def main() -> int:
     server.shutdown()
     server.server_close()
     APP.stop()
-    return report(checks, gate="M1.5 ingest boundary")
+    return report(checks, gate="INGEST GATE")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""The fluxen-backed page: its pinned bundle, and the mounts that serve it beside the shell.
+"""The page: its pinned bundle, and the mounts that serve it.
 
 Two failure modes this catches before a browser sees them:
   1. a vendored renderer file was swapped or rebuilt without refreshing versions.json (or the
@@ -7,8 +7,8 @@ Two failure modes this catches before a browser sees them:
      must come from the manifest, and the paths must be origin-absolute, or a deep link resolves
      them against the deep-link directory and the page dies in a browser only
 
-The mounts are tested over real HTTP, without chromium: the prefix rule, the deep-link rule and
-"a missing module never comes back as HTML" are server facts, not browser facts.
+The mounts are tested over real HTTP, without chromium: the root rule, the deep-link rule, the
+prefix redirect and "a missing module never comes back as HTML" are server facts, not browser facts.
 """
 
 from __future__ import annotations
@@ -33,8 +33,9 @@ INDEX = WWW / "index.html"
 ASSET_REF = re.compile(r"""(?:href|src)="([^"]+)\"""")
 IMPORT_URL = re.compile(r"""@import\s+url\(\s*["']([^"']+)["']\s*\)""")
 
+# The page is the origin root now: one mount for it, one for its assets.
+PAGE = "/"
 STATIC_PREFIX = "/static/"
-NEXT_PREFIX = "/__next/"
 
 
 def manifest() -> dict:
@@ -73,18 +74,20 @@ class TestPinnedRenderer(unittest.TestCase):
     def test_page_names_no_hashed_asset_itself(self) -> None:
         self.assertNotIn("ui_leptos-", INDEX.read_text(encoding="utf-8"))
 
-    def test_the_base_matches_the_mount_prefix(self) -> None:
+    def test_the_base_is_the_root_the_page_is_mounted_at(self) -> None:
         """The runtime translates markers with <base>; it must name the prefix the app mounts."""
-        from reflux.app import NEXT_PREFIX
+        from reflux.app import App
 
-        self.assertIn(f'<base href="{NEXT_PREFIX}">', INDEX.read_text(encoding="utf-8"))
+        app = App()
+        self.assertEqual(app.root, WWW, "the app's default root is the page tree")
+        self.assertIn('<base href="/">', INDEX.read_text(encoding="utf-8"))
 
     def test_page_references_are_origin_absolute(self) -> None:
         """A relative reference would resolve against the deep-link path, not the mount root."""
         for ref in ASSET_REF.findall(INDEX.read_text(encoding="utf-8")):
             self.assertTrue(
                 ref.startswith(("/", "data:")),
-                f"{ref} is relative — a page served at /__next/blog/x would resolve it there",
+                f"{ref} is relative — a page served at /blog/x would resolve it there",
             )
 
     def test_page_references_only_pinned_assets_or_its_own_files(self) -> None:
@@ -110,7 +113,7 @@ class TestPinnedRenderer(unittest.TestCase):
 
 
 class TestMounts(unittest.TestCase):
-    """One origin, three mounts: the shell at /, the page at /__next/, its assets at /static/."""
+    """One origin, two mounts: the page at /, its assets at /static/."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -131,13 +134,13 @@ class TestMounts(unittest.TestCase):
         with urllib.request.urlopen(self.base + path, timeout=5) as res:
             return res.status, res.read().decode("utf-8", "replace")
 
-    def test_the_new_page_is_served_under_its_prefix(self) -> None:
-        status, body = self.get(NEXT_PREFIX)
+    def test_the_page_is_the_root(self) -> None:
+        status, body = self.get(PAGE)
         self.assertEqual(status, 200)
         self.assertIn('id="main"', body)
 
-    def test_a_deep_link_under_the_prefix_gets_the_page(self) -> None:
-        status, body = self.get(NEXT_PREFIX + "blog/a/post")
+    def test_a_deep_link_gets_the_page(self) -> None:
+        status, body = self.get("/blog/a/post")
         self.assertEqual(status, 200)
         self.assertIn('id="main"', body)
 
@@ -146,18 +149,12 @@ class TestMounts(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["renderer"], "fluxen")
 
-    def test_the_shell_is_still_the_root(self) -> None:
-        status, body = self.get("/")
-        self.assertEqual(status, 200)
-        self.assertIn('id="app"', body)
-        self.assertNotIn('id="main"', body)
-
-    def test_the_bare_prefix_redirects_to_its_root(self) -> None:
+    def test_an_asset_mount_without_its_slash_redirects_to_it(self) -> None:
         conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1])
-        conn.request("GET", NEXT_PREFIX.rstrip("/"))
+        conn.request("GET", STATIC_PREFIX.rstrip("/"))
         res = conn.getresponse()
         self.assertEqual(res.status, 301)
-        self.assertEqual(res.getheader("Location"), NEXT_PREFIX)
+        self.assertEqual(res.getheader("Location"), STATIC_PREFIX)
         conn.close()
 
     def test_a_missing_module_is_a_404_not_the_page(self) -> None:

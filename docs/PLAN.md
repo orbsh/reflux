@@ -29,51 +29,44 @@
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
-| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ⏳ 先决：M1 | — |
+| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ⏳ 可开（先决 M1 已完成；`demo_app` 已是新页上的参考应用） | — |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
-| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ⏳ 可开（已拆成 M1.1–M1.7，见下） | — |
+| M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ✅ 2026-10-20（M1.1–M1.7 全部落地） | 见下七行 |
 | M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用仓里钉住的包，无需 fluxen 检出） |
 | M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ✅ 2026-10-19 | `python3 tools/gate_t0_next.py`（7 条）＋ `python3 -m unittest tests.test_page` |
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ✅ 2026-10-19 | `python3 tools/gate_t6_next.py`（8 条）＋ `python3 -m unittest tests.test_page` |
 | M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |
 | M1.5 服务端入站校验（封闭性与跨字段语义的落点） | ✅ 2026-10-20 | `python3 tools/gate_m1_5.py`（12 条，真 socket）＋ `python3 -m unittest tests.test_ingest`（22 例） |
 | M1.6 交互门重对（T2／T3 退场换两条；T4／T8 改写；profile 令牌接线） | ✅ 2026-10-20 | `python3 tools/gate_t3_next.py`（18 条）＋ `tools/gate_t4_next.py`（8 条）＋ `tools/gate_t8_next.py`（5 条）＋ `tests.test_types_drawable`（7 例） |
-| M1.7 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`；`draw_page`／`not_found` 切到 `wire`） | ⏳ | — |
+| M1.7 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`；`draw_page`／`not_found` 切到 `wire`） | ✅ 2026-10-20 | 全套：148 例 ＋ 八道门（t0 7／t2 12／t3 18／t4 8／t6 8／t7 4／t8 5／ingest 12）＋ `python3 tools/gen_sdk.py --check` |
 
 ## 已落地的形状
 
 ```
-spec/components.json              单一来源：组件/属性白名单/取值域/绑定/上行时机/操作/保留前缀
-tools/gen.py                      规格 → 三件产物；--check 做漂移门
+reflux/protocol.py                协议的自家数字：一帧的操作数上限、保留前缀（不是词表，手写）
 tools/gate_t0.py                  T0 门：真起 chromium，经 CDP 断言（stdlib-only）
 tools/gate_t2.py / t3.py / t4.py  各任务的门；共用 tools/cdp.py 的夹具（含真鼠标/真按键/真历史）
-reflux/tables_generated.py        ← 生成：纯数据（壳与各 SDK 共用的词表，含 FIRE_EVENTS）
-reflux/components_generated.py    ← 生成：各组件构造器（签名由规格派生）
-reflux/node.py                    线上形状 + 校验边界 make()
-reflux/ui.py                      写入层：规格词表寻址成一个模块（ui.stack(...)）
-reflux/ops.py                     写入层：四个操作与 draw 的构造器（壳的方言，M1.7 随壳退场）
-reflux/wire.py                    出帧层：accrete 的八个 action + draw 信封（新页的方言）
+reflux/wire.py                    出帧层：accrete 的八个 action + draw 信封（唯一的方言）
 reflux/ingest.py                  入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
 reflux/sdk/closed.py              闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
-tools/gate_m1_5.py                M1.5 门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
-tools/gate_t3_next.py             T3′ 门：词表整树（21 个角色 class + 行为断言 + 令牌 computed style）
-tools/gate_t4_next.py             T4′ 门：输入/表单上行、id 认领、无 payload 通路（真按键、真点击）
-tools/gate_t8_next.py             T8′ 门：页面侧三条坏帧后果（帧级两条归 gate_m1_5）
+tools/gate_ingest.py              入站门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
+tools/gate_t3.py                  T3 门：词表整树（21 个角色 class + 行为断言 + 令牌 computed style）
+tools/gate_t4.py                  T4 门：输入/表单上行、id 认领、无 payload 通路（真按键、真点击）
+tools/gate_t8.py                  T8 门：页面侧三条坏帧后果（帧级两条归 gate_ingest）
 tests/types_fixture.py            29 个暴露类型各一个最小合法节点（T3′ 与离线测试共用的唯一一份）
 tests/test_types_drawable.py      词表完整性：夹具 == profile 暴露集，每个节点过闭集与取值域
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
-reflux/app.py                     应用：两个挂载（壳在 /、新页在 /__next/）+ /ws + 注册表 + 一页钩子
-reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子）
+reflux/app.py                     应用：根挂载 + /static/ + /ws + 注册表 + 一页钩子
+reflux/demo_app.py                参考应用：回声／列表增删／表单一次提交／两条路由（T9 的种子）
 reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
 reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注册表
 schema/accrete.schema.json        fluxen 导出物的快照（sha256 与导出命令记在 schema/README.md）
 profile/profile.json              reflux 的 profile：选择、默认、令牌表 tokens（变体名 → class；没有类型定义）
 tools/sync_schema.py              重新导出并逐项对拍（要 fluxen 那个仓；不进默认门）
-tools/gate_m1_1.py                M1.1 门：入口把手的探针页（fluxen 的 dist + App 伺服 + CDP；同样要那个仓）
 tools/gen_sdk.py                  schema + profile → 下面两件产物；--check 做漂移门
 reflux/sdk/types.py               ← 生成：每个线类型一个类 + discriminated 的 Accrete／Bind
 reflux/sdk/builders.py            ← 生成：暴露类型的构造器（签名与默认来自 schema）
@@ -84,24 +77,12 @@ www/static/reflux.css             框架自己的样式表（今天只藏两个�
 www/static/reflux.js              客户端 runtime：两个标记的镜像、hello、popstate（约 90 行）
 www/static/vendor/fluxen/         钉版本的渲染器包：versions.json + js + wasm + assets/*.css
 www/static/vendor/fluxen/versions.json  ← 资产清单：rev、逐文件 sha256 与大小（升版只改这里）
-tools/gate_t0_next.py             T0′ 门：请求清单 == 清单、逐件哈希（过 HTTP）、深链、壳仍在 /
-tools/gate_t6_next.py             T6′ 门：门自己当生产者画页，断言镜像/历史/后退/深链/无标记
-tools/gate_t2_next.py             T2′ 门：八个 action 各一条 DOM 断言 + 域外 position + empty + 零错误
+tools/gate_t0.py                  T0 门：请求清单 == 清单、逐件哈希（过 HTTP）、深链、缺模块 404
 tests/test_wire.py                八种 action 形状逐字对表 + 四类拒收（指针/position/op/节点）
-shell/index.html + js/main.js     静态壳：import map 加载 vendored SolidJS，无编译
-shell/js/interp.js                壳的 store 与四个操作（T2）
-shell/js/validate.js              节点与取值域校验：不合词表的帧整帧拒收（T3）
-shell/js/render.js                组件分派表 + 本地态 + source 读槽（T3/T4）
-shell/js/events.js                委托监听：认领规则、payload 收集、上行帧（T4）
-shell/js/channel.js               壳的通道：连上即 hello，下行交解释器（T4）
-shell/js/nav.js                   壳的导航：拦截同源点击、写 history、popstate 发同一种请求（T6）
-shell/css/main.css                壳自己持有的设计语言：层序 theme/base/layout/element/custom/style
-                                  （框架与 fluxen 的 ui-assets 样式一致），变体走 data 属性改指令牌
-shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
-tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希、
-                                  事件注册表、通道编解码、写入层、路由（含 route_fixture 样例包）、
-                                  应用侧页面解析、新页面的清单与挂载规则（test_page）、
-                                  入站校验的拒收表与两道门（test_ingest）
+tools/gate_t7.py                  T7 门：会话（真浏览器的重载 + 离线判死，两套时钟）
+tests/                            路由（含 route_fixture 样例包）、应用侧页面解析与内置 404、
+                                  词表完整性（夹具 == profile 暴露集）、页面清单与挂载规则（test_page）、
+                                  入站校验的拒收表与两道门（test_ingest）、wire 的形状表（test_wire）
 ```
 
 Python SDK 就是这个仓的 `reflux/` 包，别的语言日后落在 `sdks/<lang>/`。
@@ -603,3 +584,40 @@ T8-NEXT   5/5  PASSED   未注册事件名被计数且页面照常 · 处理器�
 还有两处是画不出来而不是配不出来，写进 DESIGN 的属性落空清单：`canvas`／`chart`／`editor` 要一个 ES module、
 `diagram` 要 `/assets/mermaid.min.js`（本页实测 404）——四个类型不进 T3′ 的真浏览器那条；`image` 只有带 attrs
 时才渲染 `<img>`。
+
+## 2026-10-20 · M1.7 退场（迁移收尾）
+
+这一轮只有「删 + 收口」。形状：`spec/`、`shell/`、`tools/gen.py`、`reflux/{ops,ui,node,components_generated,
+tables_generated}.py`、三个规格/壳用例、七道旧门全部退场；`App` 只剩根挂载 + `/static/`（`NEXT_PREFIX`／
+`next_root`／`SHELL_ROOT` 消失）；`www/index.html` 的 `<base href="/">`；`Session.draw(*ops)` 发一帧
+`wire.draw(self.id, *ops)`，`not_found` 是 accrete 节点（`text("404", variant="heading-1")` +
+`text(路径, variant="muted")`）。
+
+两处补正（不只是删）：`reflux/protocol.py` 收下 `MAX_OPS_PER_FRAME` 与 `RESERVED_PREFIX`（协议自己的规则，不跟
+词表走，也不为两个整数再生一个生成器）；`wire` 接过 `ops.draw` 原来的两条生产者侧规则（一帧的操作数上限、一棵
+树里 id 唯一）。入站那道门同时收口：没有 `content` 的帧现在整帧拒收（壳没了，那帧只会被渲染器静默跳过）。
+
+门改名：`t0_next→t0`、`t2_next→t2`、`t3_next→t3`、`t4_next→t4`、`t6_next→t6`、`t8_next→t8`、`m1_5→ingest`；
+夹具 `cdp.shell_page→cdp.open_page`。`demo_app.py` 重写成新页上的参考应用，`demo.py` 只伺服 `www/`。
+（上表的历史行不改——当时跑的就是那个名字；改名以本节为准。）
+
+实测：
+
+```
+python3 -m unittest discover -s tests -t .   148 例 OK（原 178，减掉的 30 例全是壳与规格的用例）
+python3 tools/gen_sdk.py --check             in sync（唯一的词表门）
+tools/gate_t0.py      7/7    根挂载 · 零外部请求 · 请求集 == 清单 · 逐件 sha256 · 缺模块 404 · 深链 · 零错误
+tools/gate_t2.py      12/12  八个 action + 域外 position 不夹取 + empty
+tools/gate_t3.py      18/18  整树词表 + 令牌 computed style
+tools/gate_t4.py      8/8    输入/表单上行、id 认领、无 payload 通路
+tools/gate_t6.py      8/8    镜像 / 历史 / 后退 / 深链 / 无标记
+tools/gate_t7.py      4/4    会话：重载留一条、判死清表
+tools/gate_t8.py      5/5    页面侧坏帧后果
+tools/gate_ingest.py  12/12  两道门、整帧拒收、计数
+rg -l 'spec/components.json|shell/js' --glob '!docs/**'   空
+rg 'NEXT_PREFIX|/__next' --glob '!docs/**'                空
+```
+
+门顶出来的三件（都记进 DESIGN 的 M1.7 段）：`image` 夹具原指 `/favicon.svg`——那是壳的挂载根里才有的文件，退场
+后 404，改成 `www/static/logo.svg`；`gate_ingest` 的超上限一例必须**手写**帧（`wire.draw` 已经拒建超限帧，只有
+手写的才到得了服务端那道门）；同一道门的拒收总数 `+2 → +3`（无 `content` 的帧现在是第一种拒收）。

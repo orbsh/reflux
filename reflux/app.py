@@ -8,25 +8,27 @@ routing.
 
     @app.events.register("name.change")
     def name_changed(session, frame):
-        session.draw(ops.patch("/slots/echo", frame["data"]["value"]))
+        session.draw(wire.set("echo", b.text(frame["data"])))
 
     app.serve(port=8000)
 
-The shell speaks first. Its ``reflux:hello`` carries the path it stands on, and every later page
-request is ``reflux:nav`` — a link click or the back button. Both go down the same road: the path
-lands on the session, one frame comes back, so the client never sees a wrong tree first and a
-correction second. Every other uplink goes to the handler registered for its name.
+The page speaks first. Its ``reflux:hello`` carries the path it stands on, and every later page
+request is ``reflux:nav`` — back and forward, the only navigation this wire has. Both go down the
+same road: the path lands on the session, one frame comes back, so the client never sees a wrong
+tree first and a correction second. Every other uplink goes to the handler registered for its name.
 
 A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
 default the route table answers; an app with a single page sets `app.page` instead of declaring
-routes.
+routes. Frames are built by `wire` — accrete's eight actions, the renderer's own vocabulary. There
+is no second dialect and no translation layer: everything that leaves here is checked at
+`Session.send` and reaches one renderer.
 
 A session is one connection — created when it opens, reclaimed when it closes or when it stops
 answering. Nothing crosses connections: the socket is the state, and a refresh is a new session
 holding nothing but the path its hello carried. Identity, when a deployment needs it, arrives as
 an ordinary event on the live socket (`login`), not as a credential checked before it. Sessions
-hold their path and where their frames go — not the interface's state, which lives in the shell;
-a hundred sessions are a hundred small records.
+hold their path and where their frames go — not the interface's state, which lives in the page
+tree; a hundred sessions are a hundred small records.
 
 Frames queue per session and one writer thread drains each queue, so a client that stopped reading
 blocks its own writer and nobody else's.
@@ -40,36 +42,32 @@ import threading
 import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, Callable
 
-from . import ingest, ops, ui
+from . import ingest, wire
 from .channel import JUDGED_DEAD, Channel, ChannelClosed
 from .events import Registry
-from .node import Node
+from .protocol import RESERVED_PREFIX
 from .routes import DEFAULT, Routes
+from .sdk import builders as b
+from .sdk.types import Accrete
 from .server import make_server
-from .tables_generated import RESERVED_PREFIX
 
-SHELL_ROOT = Path(__file__).resolve().parent.parent / "shell"
 PAGE_ROOT = Path(__file__).resolve().parent.parent / "www"
-# Where the fluxen-backed page lives while the shell is still the served root. M1.6 promotes it to
-# "/" and the shell disappears; until then both are mounted so every gate stays runnable.
-NEXT_PREFIX = "/__next/"
-# The page's assets are addressed from the origin root, so the page works at any mount prefix and a
-# deep link cannot drag its own references into a subdirectory. M1.6 needs no page change.
+# The page's assets are addressed from the origin root, so a deep link cannot drag its own
+# references into a subdirectory.
 STATIC_PREFIX = "/static/"
 
 
-def not_found(path: str) -> Node:
+def not_found(path: str) -> Accrete:
     """What the framework answers with when nothing matched and nothing catches all.
 
     A missing path is not the app's fault, and a blank page is not an answer. An app that wants its
     own 404 registers a `{rest:path}` route: that is an ordinary match, and it wins like any other.
     """
-    return ui.stack(
-        ui.heading("404", level=1),
-        ui.text(f"没有注册 {path} 这个地址", tone="muted"),
-        gap="md",
+    return b.case(
+        b.text("404", variant="heading-1"),
+        b.text(f"没有注册 {path} 这个地址", variant="muted"),
     )
 
 
@@ -141,25 +139,24 @@ class Session:
     def draw(self, *operations: dict) -> None:
         """Send a batch of operations as one turn (one `draw` frame)."""
         self.draws += 1
-        self.send(ops.draw(*operations))
+        self.send(wire.draw(self.id, *operations))
 
 
 class App:
-    """A reflux producer: the static shell, the ``/ws`` channel, the registry, and the pages."""
+    """A reflux producer: the page tree, the ``/ws`` channel, the registry, and the pages."""
 
     def __init__(
         self,
         root: str | Path | None = None,
         routes: Routes | None = None,
         *,
-        next_root: str | Path | None = PAGE_ROOT,
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
         outbox: int = 256,
     ) -> None:
-        self.root = Path(root) if root is not None else SHELL_ROOT
-        # The page a mount table serves beside the shell; None leaves the server single-rooted.
-        self.next_root = Path(next_root) if next_root is not None else None
+        # One page tree, served at the origin root; its assets come from `root/static` under
+        # `/static/` when that directory exists (a produced site may have none).
+        self.root = Path(root) if root is not None else PAGE_ROOT
         self.events = Registry()
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(session, path) -> a node, or the ops of this turn; left None the route table answers
@@ -194,7 +191,7 @@ class App:
         self.draw_page(session)
 
     def _on_nav(self, session: Session, frame: dict) -> None:
-        """The shell asked for another path: a link click, or back/forward."""
+        """The page asked for another path — back or forward: the only navigation this wire has."""
         data = frame.get("data")
         session.path = (data.get("path") if isinstance(data, dict) else None) or "/"
         self.draw_page(session)
@@ -202,9 +199,8 @@ class App:
     def draw_page(self, session: Session) -> None:
         """One frame for the session's current path: a create, or the ops the app gave for it.
 
-        An app that declares neither a page nor any route draws nothing at all — that is the shell
-        served by hand (`reflux.demo`) and the gates that drive the store themselves; the shell
-        keeps whatever it has.
+        An app that declares neither a page nor any route draws nothing at all — that is the gates
+        that drive the plane themselves; the page keeps whatever it has.
         """
         page = self.page
         if page is None and len(self.routes) == 0:
@@ -214,7 +210,7 @@ class App:
         else:
             match = self.routes.match(session.path)
             drawn = not_found(session.path) if match is None else match.resolve(session)
-        session.draw(*(drawn if isinstance(drawn, list) else [ops.create(drawn)]))
+        session.draw(*(drawn if isinstance(drawn, list) else [wire.create(drawn)]))
 
     # --- the session table -----------------------------------------------------------------
 
@@ -271,9 +267,9 @@ class App:
 
     def make_server(self, port: int = 0, host: str = "127.0.0.1") -> ThreadingHTTPServer:
         mounts: dict[str, str | Path] = {"/": self.root}
-        if self.next_root is not None:
-            mounts[NEXT_PREFIX] = self.next_root
-            mounts[STATIC_PREFIX] = self.next_root / "static"
+        static = self.root / "static"
+        if static.is_dir():
+            mounts[STATIC_PREFIX] = static
         server = make_server(self.root, port, host, app=self, mounts=mounts)
         self.start_watchdog()
         return server
@@ -288,8 +284,7 @@ class App:
         server = self.make_server(port, host)
         address, bound = server.server_address[0], server.server_address[1]
         print(
-            f"[reflux] serving {self.root} on http://{address}:{bound}/  (ws {address}:{bound}/ws)"
-            + (f"; page {self.next_root} at {NEXT_PREFIX}" if self.next_root is not None else ""),
+            f"[reflux] serving {self.root} on http://{address}:{bound}/  (ws {address}:{bound}/ws)",
             flush=True,
         )
         try:

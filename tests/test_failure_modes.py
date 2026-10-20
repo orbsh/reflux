@@ -1,11 +1,12 @@
-"""失败模式里这一轮新做的那几条：批量上限、重复行 id（生产者侧）、慢客户端。
+"""失败模式里这一轮新做的那几条：批量上限、重复 id（生产者侧）、慢客户端。
 
-三条都要求"降级要可见"：上限与重复 id 在发送前大声（`ValueError`），慢客户端丢帧与重同步
+三条都要求“降级要可见”：上限与重复 id 在发送前大声（`ValueError`），慢客户端丢帧与重同步
 走计数（`stats["shed"]` / `stats["resync"]`），不静默。
 
-重复 id 的规则是**帧级**的：它由 `ops.draw` 在帧离开时查（一支 op 还没成帧，谈不上"同一帧
-里 id 唯一"）。慢客户端那组同样不给时钟：flusher 会被"有帧在等"唤醒，写线程在假 channel 的
-`send` 里被一个事件卡住——溢出、标记陈旧、放行后排空并重同步，全是确定性的等待。
+重复 id 的规则分两层：一棵树里的 id 由 `wire` 在组帧时走（keyed 渲染靠它，重了就是半个列表），
+同一帧里给同一个列表槽追加同一个行 id 由服务端的入站校验整帧拒收（见 `tests/test_ingest.py`）。
+慢客户端那组不给时钟：flusher 会被“有帧在等”唤醒，写线程在假 channel 的 `send` 里被一个事件
+卡住——溢出、标记陈旧、放行后排空并重同步，全是确定性的等待。
 """
 
 from __future__ import annotations
@@ -15,10 +16,11 @@ import threading
 import time
 import unittest
 
-from reflux import ops, ui
+from reflux import wire
 from reflux.app import App
 from reflux.channel import Channel
-from reflux.tables_generated import MAX_OPS_PER_FRAME
+from reflux.protocol import MAX_OPS_PER_FRAME
+from reflux.sdk import builders as b
 
 
 class BlockingChannel(Channel):
@@ -70,43 +72,41 @@ def run_connections(app: App, *channels: Channel) -> list[threading.Thread]:
 
 class TestFrameCap(unittest.TestCase):
     def test_a_frame_over_the_cap_is_refused_before_it_is_sent(self) -> None:
-        one = ops.patch("/slots/x", 1)
-        self.assertEqual(len(ops.draw(*[one] * MAX_OPS_PER_FRAME)["ops"]), MAX_OPS_PER_FRAME)
+        def ops(count: int) -> list[dict]:
+            return [wire.empty() for _ in range(count)]
+
+        self.assertEqual(
+            len(wire.draw("s-1", *ops(MAX_OPS_PER_FRAME))["content"]), MAX_OPS_PER_FRAME
+        )
         with self.assertRaises(ValueError):
-            ops.draw(*[one] * (MAX_OPS_PER_FRAME + 1))
+            wire.draw("s-1", *ops(MAX_OPS_PER_FRAME + 1))
 
 
-class TestDuplicateRowIds(unittest.TestCase):
-    """一帧之内的节点数组里，行身份必须唯一——keyed 渲染靠它。"""
+class TestDuplicateIds(unittest.TestCase):
+    """一棵树里，一个 id 只能落在一个节点上——keyed 渲染靠它。"""
 
-    def test_a_frame_carrying_a_duplicate_in_a_slot_value_is_refused(self) -> None:
-        rows = [ui.text("a", id="row-1"), ui.text("b", id="row-1")]
+    def test_one_id_twice_in_a_tree_is_refused(self) -> None:
         with self.assertRaises(ValueError):
-            ops.draw(ops.patch("/slots/rows", rows))
+            wire.create(b.case(b.text("a", id="row-1"), b.text("b", id="row-1")))
 
-    def test_the_same_check_reaches_into_the_tree(self) -> None:
-        def page():
-            return ui.stack(ui.row(ui.text("a", id="r"), ui.text("b", id="r")))
+    def test_the_same_check_reaches_a_row_template(self) -> None:
+        with self.assertRaises(ValueError):
+            wire.create(b.rack(item=[b.text("a", id="r"), b.text("b", id="r")]))
 
+    def test_a_slot_value_is_a_node(self) -> None:
+        # `set` 换的是槽里那个节点；列表槽的行只走 append／remove，不把一个数组塞进 set
         with self.assertRaises(ValueError):
-            ops.draw(ops.create(page()))
-        with self.assertRaises(ValueError):
-            ops.draw(ops.insert("/slots/rows", ui.stack(ui.row(ui.text("a", id="r"), ui.text("b", id="r"))), anchor="end"))
+            wire.set("rows", [{"id": "same"}, {"id": "same"}])  # type: ignore[arg-type]
 
     def test_unique_ids_pass_and_rows_without_ids_are_legal(self) -> None:
-        ops.draw(ops.patch("/slots/rows", [ui.text("a", id="row-1"), ui.text("b", id="row-2")]))
-        ops.draw(ops.patch("/slots/rows", [ui.text("a"), ui.text("b")]))  # 位置行：没有身份，合法
-        ops.draw(ops.create(ui.stack(ui.row(ui.text("a", id="r1"), ui.text("b", id="r2")))))
-
-    def test_free_data_in_a_slot_is_not_walked(self) -> None:
-        # 槽里放的不是节点时不查 id：那是数据，行身份的规则管不到它
-        ops.draw(ops.patch("/slots/rows", [{"id": "same"}, {"id": "same"}]))
+        wire.create(b.case(b.text("a", id="row-1"), b.text("b", id="row-2")))
+        wire.create(b.case(b.text("a"), b.text("b")))  # 位置行：没有身份，合法
 
 
 class TestSlowClient(unittest.TestCase):
     def setUp(self) -> None:
         self.app = App(heartbeat=10.0, dead_after=30.0, outbox=4)
-        self.app.page = lambda session, path: ui.text("resync")
+        self.app.page = lambda session, path: b.text("resync")
 
     def tearDown(self) -> None:
         self.app.stop()
@@ -117,18 +117,18 @@ class TestSlowClient(unittest.TestCase):
         slow_session = self.app.sessions[slow]
         fast_session = self.app.sessions[fast]
         try:
-            slow_session.draw(ops.patch("/slots/x", "first"))  # 让 flusher 进到 send 里
+            slow_session.draw(wire.patch("x", "/bind/value/default", "first"))  # 让 flusher 进到 send 里
             self.assertTrue(slow.inside.wait(2.0), "flusher 应当已经进到 send 里并被卡住")
 
             for i in range(12):  # 远超 outbox=4
-                slow_session.draw(ops.patch("/slots/x", i))
+                slow_session.draw(wire.patch("x", "/bind/value/default", i))
 
             self.assertGreaterEqual(self.app.stats["shed"], 1, "溢出必须计数")
             self.assertTrue(slow_session.stale, "丢过帧就要标记陈旧")
             self.assertLessEqual(len(slow_session.outbox), 4, "出帧队列是有界的")
 
             # 别的会话照常：慢客户端不能按住别人
-            fast_session.draw(ops.patch("/slots/y", "ok"))
+            fast_session.draw(wire.patch("y", "/bind/value/default", "ok"))
             deadline = time.monotonic() + 2.0
             while not fast.written and time.monotonic() < deadline:
                 time.sleep(0.01)
@@ -140,7 +140,7 @@ class TestSlowClient(unittest.TestCase):
                 time.sleep(0.01)
             self.assertGreaterEqual(self.app.stats["resync"], 1, "排空后必须重同步一帧")
             last = json.loads(slow.written[-1])
-            self.assertEqual(last["ops"][0]["op"], "create", "重同步就是用一帧 create 重画")
+            self.assertEqual(last["content"][0]["action"], "create", "重同步就是用一帧 create 重画")
             self.assertFalse(slow_session.stale, "重同步之后不再陈旧")
         finally:
             slow.gate.set()

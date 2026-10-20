@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>reflux</title>
-  <!-- 资源一律从源站绝对路径取（`/static/…`）：页面挂在哪条前缀下都不影响它们，深链也不会
-       把引用解析到深链目录底下。js/wasm 的名字带内容哈希，所以从 versions.json 取，不写死。
-       `<base>` 是客户端 runtime 的挂载前缀（标记写应用路径，地址栏写挂载后的路径）。 -->
-  <base href="/__next/">
+  <!-- 资源一律从源站绝对路径取（`/static/…`）：深链也不会把引用解析到深链目录底下。
+       js/wasm 的名字带内容哈希，所以从 versions.json 取，不写死。
+       `<base>` 是客户端 runtime 的挂载前缀：页面挂在源站根上，标记里的应用路径就是地址栏的路径。 -->
+  <base href="/">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/vendor/fluxen/assets/main.css">
   <link rel="stylesheet" href="/static/reflux.css">

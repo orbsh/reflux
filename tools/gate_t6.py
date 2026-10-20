@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""T6 gate — navigation: the shell's interception, history, and the producer's page turn.
+"""T6 gate — the client runtime mirrors the URL and the title, and only mirrors them.
 
-Real browser, real clicks, real history. A same-origin link must not reload the page (the marker
-the gate puts on `window` is the proof: a load would wipe it), back and forward must be the same
-request as a click, an unknown path must answer with the built-in 404 (or with the app's own
-`{rest:path}` route, which wins like any other match), and the address bar, the page and the
-producer's route must all say the same thing.
+The runtime (`www/static/reflux.js`) is the only thing on the page that writes `location` and
+`document.title`; it reads two reserved-id nodes and nothing else, and the producer is the only
+writer of those nodes. This gate runs the real page and plays the producer:
+
+  * it draws accrete pages by hand — a hand-writing producer is exactly the no-closure case the
+    design allows, and it keeps this gate about the runtime rather than about `wire`
+  * the markers are built with the generated SDK and dumped to the wire, which pins the marker node
+    shape an application's page helper has to produce
+
+Checks: the path marker moves the address bar (once per real change), the title marker writes
+document.title, back/forward is one `reflux:nav` carrying the app path, a deep link is answered
+from the hello path, and a page without markers leaves the bar and the title at their old values.
 
     python3 tools/gate_t6.py
-
-Exit code 0 = gate passed.
 """
 
 from __future__ import annotations
@@ -21,246 +26,170 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cdp import console_errors, report, shell_page  # noqa: E402
+from cdp import Cdp, console_errors, report, open_page  # noqa: E402
+from reflux.app import App  # noqa: E402
+from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk._parse import dump  # noqa: E402
 
-import reflux.demo_app as demo  # noqa: E402
-from reflux import ops, ui  # noqa: E402
-
-HELLO = "reflux:hello"
-NAV = "reflux:nav"
-CTRL = 2  # the CDP modifier bit for ctrl
+PAGE = "/"
 
 
-def link(label: str) -> str:
-    """A JS expression resolving to the link with this label."""
-    return f"[...document.querySelectorAll('a.rx-link')].find((e) => e.textContent.trim() === {json.dumps(label)})"
+def page(path: str, title: str, *, label: str | None = None, markers: bool = True):
+    """One page with the two reserved markers; `markers=False` omits them on purpose."""
+    shown = label or f"page {path}"
+    children = [b.text(shown, id="page-label")]
+    if markers:
+        children = [
+            b.placeholder(b.text(path), id="reflux:path"),
+            b.placeholder(b.text(title), id="reflux:title"),
+            *children,
+        ]
+    return b.case(*children, id="page-root")
 
 
-def received(app, event: str | None = None) -> list[dict]:
-    return [
-        frame
-        for direction, frame in app.log
-        if direction == "recv" and (event is None or frame.get("event") == event)
-    ]
-
-
-def wait(predicate, timeout: float = 5.0) -> bool:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.05)
-    return False
-
-
-def headings(cdp) -> list[str]:
-    return cdp.eval("[...document.querySelectorAll('.rx-heading')].map((e) => e.textContent)") or []
-
-
-def fallback_page(session, match):
-    """A tail route the gate registers at runtime: the app's own answer for any path."""
-    return ui.stack(
-        ui.heading("兜底", level=1),
-        ui.text(f"兜底:{match.params['rest']}"),
-        gap="md",
+def draw(session, node) -> None:
+    """One accrete `draw` frame: `create` on the layout root (`event` is required but unread)."""
+    session.send(
+        {
+            "ev": "draw",
+            "sender": session.id,
+            "content": [{"action": "create", "event": "", "data": dump(node)}],
+        }
     )
 
 
+def wait(predicate, timeout: float = 10.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        got = predicate()
+        if got:
+            return got
+        time.sleep(0.05)
+    return None
+
+
+def seen(cdp: Cdp, text: str) -> bool:
+    return bool(cdp.eval(f"document.body.innerText.includes({json.dumps(text)})"))
+
+
+def frames(app: App, event: str) -> list[dict]:
+    return [
+        frame
+        for direction, frame in list(app.log)
+        if direction == "recv" and isinstance(frame, dict) and frame.get("event") == event
+    ]
+
+
 def main() -> int:
+    app = App()
     checks: list[tuple[str, bool, str]] = []
 
-    def check(name: str, ok: bool, evidence: str) -> None:
-        checks.append((name, ok, evidence))
+    with open_page(path=PAGE, app=app, settle=0.4) as (cdp, base):
+        session = wait(lambda: next(iter(app.live()), None))
+        if session is None:
+            print("no session: the page never connected")
+            return 1
 
-    app = demo.make_app()
+        # 1: the first page's marker moves the bar exactly once
+        before = cdp.eval("history.length")
+        draw(session, page("/a", "A"))
+        drawn = wait(lambda: seen(cdp, "page /a"))
+        bar = cdp.eval("location.pathname")
+        title = cdp.eval("document.title")
+        after_first = cdp.eval("history.length")
+        checks.append(
+            (
+                "the path marker moves the address bar",
+                bool(drawn) and bar == PAGE + "a" and after_first == before + 1,
+                f"location={bar} history={before}->{after_first}",
+            )
+        )
+        checks.append(("the title marker writes document.title", title == "A", f"title={title!r}"))
 
-    # the deep link first: the shell's hello is what carries it
-    with shell_page(app=app, path="/about") as (cdp, base):
-        errors = console_errors(cdp)
-        check("zero console errors", not errors, "none" if not errors else str(errors))
-
-        # 1. cold start: the path in the URL is the page the producer drew
-        wait(lambda: received(app, HELLO) and app.live())
-        hello = received(app, HELLO)
-        session = app.live()[0] if app.live() else None
-        match = app.routes.match("/about")
-        check(
-            "cold start: hello carries the deep link, that page is drawn",
-            bool(hello)
-            and hello[0]["data"] == {"path": "/about"}
-            and session is not None
-            and session.path == "/about"
-            and cdp.eval("location.pathname") == "/about"
-            and headings(cdp) == ["关于"]
-            and match is not None
-            and match.route.path == "/about",
-            f"hello={hello[0]['data'] if hello else None} session.path={session.path if session else None!r} "
-            f"location={cdp.eval('location.pathname')!r} headings={headings(cdp)}",
+        # 2: the same path again is not a new history entry
+        draw(session, page("/a", "A", label="again"))
+        wait(lambda: seen(cdp, "again"))
+        same = cdp.eval("history.length")
+        checks.append(
+            (
+                "drawing the same path again adds no entry",
+                same == after_first,
+                f"history={after_first}->{same}",
+            )
         )
 
-        # 2. a same-origin link click: intercepted, no page load, one request, one new page
-        cdp.eval("window.__gateMark = 'alive'")  # a page load would take this with it
-        navs_before = len(received(app, NAV))
-        cdp.click_js(link("演示"))
-        wait(lambda: len(received(app, NAV)) > navs_before)
-        wait(lambda: cdp.eval("location.pathname") == "/")
-        wait(lambda: headings(cdp) == ["演示"])
-        session_id = session.id if session else None
-        check(
-            "a link click is a request, not a page load",
-            len(received(app, NAV)) == navs_before + 1
-            and len(received(app, HELLO)) == 1
-            and len(app.live()) == 1
-            and cdp.eval("window.__gateMark") == "alive"
-            and cdp.eval("location.pathname") == "/",
-            f"nav frames={len(received(app, NAV))} hellos={len(received(app, HELLO))} "
-            f"sessions={len(app.live())} mark={cdp.eval('window.__gateMark')!r} "
-            f"location={cdp.eval('location.pathname')!r}",
+        # 3: a real page turn pushes exactly one entry
+        draw(session, page("/b", "B"))
+        wait(lambda: seen(cdp, "page /b"))
+        bar_b = cdp.eval("location.pathname")
+        after_turn = cdp.eval("history.length")
+        checks.append(
+            (
+                "a page turn pushes exactly one entry",
+                bar_b == PAGE + "b" and after_turn == same + 1,
+                f"location={bar_b} history={same}->{after_turn}",
+            )
         )
 
-        # 3. the three-way agreement: address bar, page, producer's route
-        here = app.routes.match(session.path) if session else None
-        rows = cdp.eval("document.querySelectorAll('.rx-rack .rx-row').length")
-        check(
-            "address bar, page and server-side route agree",
-            session is not None
-            and session.path == "/"
-            and cdp.eval("location.pathname") == "/"
-            and headings(cdp) == ["演示"]
-            and here is not None
-            and here.route.path == "/"
-            and bool(received(app, NAV))
-            and received(app, NAV)[-1]["data"] == {"path": "/"},
-            f"session.path={session.path if session else None!r} location={cdp.eval('location.pathname')!r} "
-            f"route={here.route.path if here else None!r} last nav={received(app, NAV)[-1]['data'] if received(app, NAV) else None}",
-        )
-        check(
-            "a page turn carries its slot seed in the same frame",
-            rows == 2,
-            f"rack rows={rows}",
-        )
-
-        # 4. back and forward are the same request
-        navs_before = len(received(app, NAV))
+        # 4: back is one nav frame carrying the app path; the producer answers with the page
+        before_nav = len(frames(app, "reflux:nav"))
         cdp.eval("history.back()")
-        wait(lambda: len(received(app, NAV)) > navs_before and cdp.eval("location.pathname") == "/about")
-        wait(lambda: headings(cdp) == ["关于"])
-        back_ok = (
-            len(received(app, NAV)) == navs_before + 1
-            and cdp.eval("location.pathname") == "/about"
-            and headings(cdp) == ["关于"]
-            and session is not None
-            and session.path == "/about"
-        )
-        back_line = f"location={cdp.eval('location.pathname')!r} headings={headings(cdp)} nav frames={len(received(app, NAV))}"
-
-        navs_before = len(received(app, NAV))
-        cdp.eval("history.forward()")
-        wait(lambda: len(received(app, NAV)) > navs_before and cdp.eval("location.pathname") == "/")
-        wait(lambda: headings(cdp) == ["演示"])
-        forward_ok = (
-            len(received(app, NAV)) == navs_before + 1
-            and cdp.eval("location.pathname") == "/"
-            and headings(cdp) == ["演示"]
-            and session is not None
-            and session.path == "/"
-        )
-        forward_line = f"location={cdp.eval('location.pathname')!r} headings={headings(cdp)} nav frames={len(received(app, NAV))}"
-        check("back: the previous page, the same request", back_ok, back_line)
-        check("forward: the page again, one more request", forward_ok, forward_line)
-
-        # 5. a click with a modifier belongs to the browser
-        navs_before = len(received(app, NAV))
-        here = cdp.eval("location.pathname + location.search")
-        cdp.click_js(link("关于"), modifiers=CTRL)
-        time.sleep(0.3)
-        check(
-            "a ctrl-click is not intercepted",
-            len(received(app, NAV)) == navs_before and cdp.eval("location.pathname + location.search") == here,
-            f"nav frames+{len(received(app, NAV)) - navs_before} location={cdp.eval('location.pathname + location.search')!r}",
-        )
-
-        # 6. the route contract is the path; the query stays in the address bar
-        app.live()[0].draw(
-            ops.insert(
-                "/tree/children",
-                ui.row(ui.link("/about?x=1", label="带查询串"), gap="sm", id="query-row"),
-                anchor="end",
+        navs = wait(lambda: frames(app, "reflux:nav")[before_nav:])
+        nav = navs[0] if navs else {}
+        if nav:
+            draw(session, page("/a", "A"))
+            wait(lambda: cdp.eval("document.title") == "A")
+        back_bar = cdp.eval("location.pathname")
+        checks.append(
+            (
+                "back is one reflux:nav with the app path",
+                bool(nav)
+                and nav.get("data") == {"path": "/a"}
+                and back_bar == PAGE + "a"
+                and cdp.eval("history.length") == after_turn,
+                f"frame={nav!r} location={back_bar}",
             )
         )
-        wait(lambda: cdp.eval("!!" + link("带查询串")))
-        navs_before = len(received(app, NAV))
-        cdp.click_js(link("带查询串"))
-        wait(lambda: len(received(app, NAV)) > navs_before)
-        wait(lambda: cdp.eval("location.search") == "?x=1")
-        wait(lambda: headings(cdp) == ["关于"])  # the address changes first; the page follows the frame
-        check(
-            "a querystring link: the address keeps it, the frame does not",
-            cdp.eval("location.pathname + location.search") == "/about?x=1"
-            and received(app, NAV)[-1]["data"] == {"path": "/about"}
-            and headings(cdp) == ["关于"],
-            f"location={cdp.eval('location.pathname + location.search')!r} nav={received(app, NAV)[-1]['data']}",
-        )
 
-        # 7. an unknown path: the built-in 404, the address left alone, the session intact
-        app.live()[0].draw(
-            ops.insert(
-                "/tree/children",
-                ui.row(ui.link("/nope", label="幽灵页", id="ghost-link"), gap="sm", id="ghost-row"),
-                anchor="end",
+        # 5: a deep link is answered from the hello path, and the bar does not move
+        before_hellos = len(frames(app, "reflux:hello"))
+        cdp.call("Page.navigate", url=base + PAGE + "deep/link")
+        wait(
+            lambda: cdp.eval("!!(window.fluxen && typeof window.fluxen.send === 'function')") is True,
+            timeout=20,
+        )
+        hellos = wait(lambda: frames(app, "reflux:hello")[before_hellos:])
+        hello = hellos[0] if hellos else {}
+        deep_session = wait(lambda: next((s for s in app.live() if s.path == "/deep/link"), None))
+        if deep_session is not None:
+            draw(deep_session, page("/deep/link", "Deep"))
+            wait(lambda: seen(cdp, "page /deep/link"))
+        deep_bar = cdp.eval("location.pathname")
+        checks.append(
+            (
+                "a deep link is one hello with the app path",
+                hello.get("data") == {"path": "/deep/link"} and deep_bar == PAGE + "deep/link",
+                f"hello={hello.get('data')!r} location={deep_bar}",
             )
         )
-        wait(lambda: cdp.eval("!!" + link("幽灵页")))
-        sessions_before = len(app.live())  # a ctrl-click's new tab is a session of its own; this
-        navs_before = len(received(app, NAV))  # click must not add one
-        cdp.click_js(link("幽灵页"))
-        wait(lambda: len(received(app, NAV)) > navs_before)
-        wait(lambda: "404" in headings(cdp))
-        still_here = session is not None and any(s.id == session_id for s in app.live())
-        check(
-            "unknown path: the built-in 404 structure, nothing else moved",
-            cdp.eval("location.pathname") == "/nope"
-            and headings(cdp) == ["404"]
-            and still_here
-            and len(app.live()) == sessions_before
-            and session is not None
-            and session.path == "/nope",
-            f"location={cdp.eval('location.pathname')!r} headings={headings(cdp)} "
-            f"sessions={len(app.live())} (was {sessions_before}) session.path={session.path if session else None!r}",
-        )
 
-        # 8. an app that registers a tail route answers unknown paths itself
-        app.routes.add("/{rest:path}", fallback_page)
-        app.live()[0].draw(
-            ops.insert(
-                "/tree/children",
-                ui.row(ui.link("/nope", label="幽灵页", id="ghost-link-2"), gap="sm", id="ghost-row-2"),
-                anchor="end",
+        # 6: a page without markers leaves the bar and the title alone (mirror, do not guess)
+        title_before = cdp.eval("document.title")
+        if deep_session is not None:
+            draw(deep_session, page("/ignored", "Ignored", label="no markers", markers=False))
+            wait(lambda: seen(cdp, "no markers"))
+        checks.append(
+            (
+                "a page without markers changes nothing",
+                cdp.eval("location.pathname") == deep_bar
+                and cdp.eval("document.title") == title_before,
+                f"location={cdp.eval('location.pathname')} title={cdp.eval('document.title')!r}",
             )
         )
-        wait(lambda: cdp.eval("!!" + link("幽灵页")))
-        navs_before = len(received(app, NAV))
-        cdp.click_js(link("幽灵页"))
-        wait(lambda: len(received(app, NAV)) > navs_before)
-        wait(lambda: "兜底" in headings(cdp))
-        check(
-            "a registered {rest:path} answers instead of the 404",
-            headings(cdp) == ["兜底"]
-            and cdp.eval("location.pathname") == "/nope",
-            f"headings={headings(cdp)} location={cdp.eval('location.pathname')!r}",
-        )
 
-        # 9. the frame the shell sends for a page turn
-        nav_frames = received(app, NAV)
-        shapes = {
-            (set(frame) == {"event", "data"}, set(frame.get("data") or {}) == {"path"}, isinstance(frame["data"]["path"], str))
-            for frame in nav_frames
-        }
-        check(
-            "every nav frame is exactly {event, data:{path}}",
-            bool(nav_frames) and shapes == {(True, True, True)},
-            f"{len(nav_frames)} frames, shapes={sorted(shapes)}",
-        )
+        # 7: nothing on the page complained
+        errors = console_errors(cdp)
+        checks.append(("zero console errors", not errors, "none" if not errors else str(errors)))
 
     return report(checks, gate="T6 GATE")
 

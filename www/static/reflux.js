@@ -4,13 +4,13 @@
  * 它读的两个标记是普通节点（`placeholder` 会把节点 id 落到 DOM 上），由 SDK 的糖生成、由 reflux
  * 自己的样式表藏起来。它只镜像，不猜：没有标记就停在旧值。
  *
- * 页面挂在哪条前缀下由页面的 <base href> 说（迁移期 "/__next/"，之后 "/"）：标记里写的是**应用
- * 路径**（"/b"），地址栏是挂载后的路径（"/__next/b"），换算只在下面 toApp / toBrowser 一处发生。
+ * 页面挂在哪条前缀下由页面的 <base href> 说（现在是 "/" 即源站根）：标记里写的是**应用路径**
+ * （"/b"），地址栏是挂载后的路径，换算只在下面 toApp / toBrowser 一处发生。
  */
 const PATH_ID = "reflux:path";
 const TITLE_ID = "reflux:title";
 
-// "/" -> "", "/__next/" -> "/__next"：前缀本身，不带尾斜杠。
+// "/" -> ""：<base> 的前缀本身，不带尾斜杠。
 const base = (() => {
   const path = new URL(document.baseURI).pathname;
   return path.endsWith("/") ? path.slice(0, -1) : path;
