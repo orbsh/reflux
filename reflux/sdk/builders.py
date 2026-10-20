@@ -146,11 +146,12 @@ def form(
     instant: bool | None = None,
     event: Any = None,
     local: Any = None,
+    path: str | None = None,
     id: str | None = None,
 ) -> Form:
     """Build a `form` node (the wire type `form`)."""
     attrs = drop_none(instant=instant)
-    bind = drop_none(value=bind_value(event=event, local=local))
+    bind = drop_none(value=bind_value(event=event, local=local, path=path))
     return parse(drop_none(type='form', attrs=attrs, bind=bind, id=id, children=list(children) or None), Form)
 
 
@@ -220,11 +221,12 @@ def pages(
     source: Any = None,
     select_source: Any = None,
     select_local: Any = None,
+    path: str | None = None,
     id: str | None = None,
 ) -> Pages:
     """Build a `pages` node (the wire type `pages`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(source=source), select=bind_entry('select', source=select_source, local=select_local))
+    bind = drop_none(value=bind_value(source=source), select=bind_entry('select', source=select_source, local=select_local, path=path))
     return parse(drop_none(type='pages', attrs=attrs, bind=bind, id=id, display=display), Pages)
 
 
@@ -350,12 +352,14 @@ def text(
     *,
     format: str | None = None,
     source: Any = None,
+    local: Any = None,
+    path: str | None = None,
     id: str | None = None,
     variant: str | None = None,
 ) -> Text:
     """Build a `text` node (the wire type `text`)."""
     attrs = token_attrs(drop_none(format=format), variant, 'text')
-    bind = drop_none(value=bind_value(default=value, source=source))
+    bind = drop_none(value=bind_value(default=value, source=source, local=local, path=path))
     return parse(drop_none(type='text', attrs=attrs, bind=bind, id=id), Text)
 
 

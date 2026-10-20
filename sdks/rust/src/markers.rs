@@ -20,7 +20,7 @@ pub const PAGE_ID: &str = "page-root";
 /// The address the page is showing. The runtime copies it into the address bar.
 pub fn path_marker(path: &str) -> Value {
     placeholder(
-        &[text(Some(path), None, None, None, None)],
+        &[text(Some(path), None, None, None, None, None, None)],
         None,
         None,
         Some(PATH_ID),
@@ -30,7 +30,7 @@ pub fn path_marker(path: &str) -> Value {
 /// The page's title. The runtime copies it into `document.title`.
 pub fn title_marker(title: &str) -> Value {
     placeholder(
-        &[text(Some(title), None, None, None, None)],
+        &[text(Some(title), None, None, None, None, None, None)],
         None,
         None,
         Some(TITLE_ID),

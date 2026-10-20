@@ -70,6 +70,14 @@ def python_turns() -> list[tuple[str, dict]]:
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.
         ("about page", wire.draw(SESSION, wire.create(demo.demo.about()))),
+        # The `local` 落点 and its `path` rider: a client-side slot, addressed one level in.
+        (
+            "local binding",
+            wire.draw(
+                SESSION,
+                wire.create(b.case(b.text(local="chan", path="/data", id="local-echo"), id="root")),
+            ),
+        ),
     ]
 
 

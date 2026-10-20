@@ -296,6 +296,12 @@ def vocabulary(schema: dict, profile: dict, types_src: str) -> list[TypeModel]:
                 param = Param("kind", "JsType", None, "str", "bind", "type")
                 model.ops.append(BindOp(key, "type", "kind", param))
                 model.params.append(param)
+            if "local" in key_kinds:
+                # `path` rides a local落点: a client-side slot holds the wrapper an in-page emit
+                # wrote, so a reader that wants the payload itself points into it.
+                param = Param("path", "str | None", None, "str", "bind", "path")
+                model.ops.append(BindOp(key, "path", "path", param))
+                model.params.append(param)
 
         if model.item:
             model.params.append(Param("item", "Any", None, "json", "item", "item"))
