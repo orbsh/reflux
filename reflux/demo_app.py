@@ -22,7 +22,8 @@ Two facts about this vocabulary shape the code, and both are measured by the gat
   `go.about` below). The runtime mirrors that marker into the address bar.
 
 The two markers are ordinary nodes read straight out of the DOM (`reflux:path`, `reflux:title`) by
-`www/static/reflux.js`; `page()` is the one place in this app that writes that convention.
+`www/static/reflux.js`; the convention lives in `reflux.sdk.markers` (one `page()` call per page),
+because the page's own shape is the runtime's contract, not an application's private habit.
 """
 
 from __future__ import annotations
@@ -32,26 +33,15 @@ import json
 
 from . import wire
 from .app import App
-from .protocol import RESERVED_PREFIX
 from .routes import route
 from .sdk import builders as b
+from .sdk import markers
 from .sdk.types import Accrete, JsType
 
 ECHO, ROWS, SUBMITTED = "echo", "rows", "submitted"
-PATH_MARKER, TITLE_MARKER = f"{RESERVED_PREFIX}path", f"{RESERVED_PREFIX}title"
 
 # Where a navigation form sends the client. The frame's `event` is the target's name.
 GO = {"go.home": "/", "go.about": "/about"}
-
-
-def marker(node_id: str, text: str) -> Accrete:
-    """One reserved-id node: a `placeholder` puts its id on the DOM, where the runtime reads it."""
-    return b.placeholder(b.text(text), id=node_id)
-
-
-def page(path: str, title: str, *children: Accrete) -> Accrete:
-    """A page: the two markers the client runtime mirrors, then the content."""
-    return b.case(marker(PATH_MARKER, path), marker(TITLE_MARKER, title), *children, id="page-root")
 
 
 def nav_form(label: str, event: str) -> Accrete:
@@ -91,7 +81,7 @@ class Demo:
         return ops
 
     def home(self) -> Accrete:
-        return page(
+        return markers.page(
             "/",
             "演示",
             b.text("演示", variant="heading-1"),
@@ -116,7 +106,7 @@ class Demo:
         )
 
     def about(self) -> Accrete:
-        return page(
+        return markers.page(
             "/about",
             "关于",
             b.text("关于", variant="heading-1"),

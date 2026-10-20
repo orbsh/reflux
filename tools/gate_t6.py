@@ -29,21 +29,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux.app import App  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import markers as page_markers  # noqa: E402
 from reflux.sdk._parse import dump  # noqa: E402
 
 PAGE = "/"
 
 
 def page(path: str, title: str, *, label: str | None = None, markers: bool = True):
-    """One page with the two reserved markers; `markers=False` omits them on purpose."""
+    """One page; `markers=False` omits the two reserved markers on purpose.
+
+    The convention itself is the SDK's (`markers.page`); this helper only adds the two knobs these
+    scenarios need — a label to find the page by, and a page with no markers at all.
+    """
     shown = label or f"page {path}"
     children = [b.text(shown, id="page-label")]
     if markers:
-        children = [
-            b.placeholder(b.text(path), id="reflux:path"),
-            b.placeholder(b.text(title), id="reflux:title"),
-            *children,
-        ]
+        return page_markers.page(path, title, *children)
     return b.case(*children, id="page-root")
 
 
