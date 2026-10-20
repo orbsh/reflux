@@ -3,7 +3,7 @@
 
 Two phases, because they answer different questions.
 
-**A. The socket phase** drives `reflux.examples.chat` as a client: no browser, no DOM, just the
+**A. The socket phase** drives `examples.chat` as a client: no browser, no DOM, just the
 frames. That is where the backend's promises live — one conversation per connection, a reply that
 arrives in chunks, a stop that stops at a boundary, a second message refused with a reason, the app's
 own size limit (the protocol has none), and a window that trims while the status line keeps counting.
@@ -24,13 +24,14 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the cdp fixture
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # the example (examples/chat)
 
 from cdp import Cdp, console_errors, open_page, report  # noqa: E402
 
-from reflux.examples.chat.app import MAX_CHARS, make_app  # noqa: E402
-from reflux.examples.chat.client import Socket  # noqa: E402
-from reflux.examples.chat.model import Scripted  # noqa: E402
+from examples.chat.app import MAX_CHARS, make_app  # noqa: E402
+from examples.chat.client import Socket  # noqa: E402
+from examples.chat.model import Scripted  # noqa: E402
 
 PAGE = "/"
 WINDOW = 4  # small on purpose: the trimming check must not need 30 messages

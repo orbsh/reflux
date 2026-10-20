@@ -1,7 +1,7 @@
 """An AI chat application: the backend is the subject, the page is the skin.
 
-    python3 -m reflux.examples.chat.app --port 8100            # page + backend
-    python3 -m reflux.examples.chat.walkthrough --auto         # the demo, no browser
+    python3 -m examples.chat.app --port 8100        # page + backend (also: python3 examples/chat/app.py)
+    python3 -m examples.chat.walkthrough --auto     # the demo, no browser
 
 Six pieces of backend behaviour, one per section below — each is asserted in
 `tests/test_chat_example.py` (offline, no socket) and `tools/gate_chat.py` (real server, real
@@ -32,6 +32,14 @@ The page is one route, built with `markers.page` so the runtime owns the URL and
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# `python3 examples/chat/{name}.py` as well as `-m examples.chat.{name}`: a script's own directory is
+# what goes on sys.path by default, and this example needs the repo root (it imports reflux).
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import threading
 import time
@@ -43,7 +51,7 @@ from reflux.sdk import builders as b
 from reflux.sdk import markers
 from reflux.sdk.types import Accrete
 
-from .model import Model, OpenAI, Scripted, Turn
+from examples.chat.model import Model, OpenAI, Scripted, Turn
 
 __all__ = ["Chat", "MAX_CHARS", "WINDOW", "make_app", "page"]
 
