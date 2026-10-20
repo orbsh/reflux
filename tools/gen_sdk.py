@@ -37,6 +37,11 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+import gen_rust  # noqa: E402
+import vocabulary  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "schema" / "accrete.schema.json"
 PROFILE_PATH = ROOT / "profile" / "profile.json"
@@ -265,155 +270,99 @@ def param(name: str, annotation_text: str, default: str | None = None) -> str:
     return f"{name}: {annotation_text}" + (f" = {default}" if default is not None else " = None")
 
 
-def builders_text(schema: dict, profile: dict) -> str:
-    arms = arm_list(schema)
-    defs = schema["$defs"]
-    types = profile["types"]
-    hidden = set(profile.get("hidden_attrs", [])) | HIDDEN_ATTRS
-    renames = profile.get("kwarg_renames", {})
-
-    unknown = [c for c in types if c not in {c for c, _ in arms}]
-    missing = [c for c, _ in arms if c not in types]
-    if unknown:
-        raise SystemExit(f"profile/profile.json names types the schema does not have: {', '.join(unknown)}")
-    if missing:
-        raise SystemExit(f"profile/profile.json is missing types: {', '.join(missing)}")
-
-    tokens = profile.get("tokens") or {}
-    exposed = sorted(c for c, _ in arms if types[c].get("expose"))
+def builders_text(models: list) -> str:
+    """The constructor surface: one function per exposed type, formatted from the vocabulary."""
+    exposed = sorted(model.wire for model in models)
     parts = [BUILDERS_IMPORTS, "", f"__all__ = {json.dumps(exposed)}", ""]
 
-    for const, cls in arms:
-        entry = types[const]
-        if not entry.get("expose"):
-            continue
-        defn = defs[cls]
-        props = defn.get("properties") or {}
-        positional = entry.get("positional")
-        kinds = (entry.get("bind") or {}).get("value", [])
-        # The positional value's落点: `default` when the type has one, else the only kind it has
-        # (a button's positional *is* its submit binding).
-        value_kind = None
-        if positional == "value":
-            value_kind = "default" if "default" in kinds else (kinds[0] if len(kinds) == 1 else "default")
-
+    for model in models:
         head: list[str] = []
-        keywords: list[str] = []
-        call: list[str] = []
-        attrs_kw: list[str] = []
-
-        if positional == "children":
+        if model.positional == "children":
             head.append("*children: Accrete")
-        elif positional == "value":
+        elif model.positional == "value":
             head += ["value: Any = None", "*"]
         else:
             head.append("*")
+        keywords = [param(p.kwarg, p.annotation, p.default) for p in model.params]
 
-        # attrs — the profile's hidden list keeps `class`/`selector` (the token lane's future home)
-        # out of the producer's reach.
-        ref = attrs_def_name(defn)
-        if ref:
-            attr_def = defs[ref]
-            fields = dict(attr_def.get("properties") or {})
-            for name in flattened_properties(attr_def):
-                fields.setdefault(name, {"type": ["string", "null"]})
-            for name, sub in fields.items():
-                if name in hidden:
-                    continue
-                kwname = renames.get(name, name)
-                keywords.append(param(kwname, annotation(sub), literal(sub)))
-                attrs_kw.append(kwname)
+        attrs_kw = ", ".join(f"{p.kwarg}={p.kwarg}" for p in model.attrs)
+        if model.attrs and model.variants:
+            attrs = f"    attrs = token_attrs(drop_none({attrs_kw}), variant, {model.wire!r})"
+        elif model.variants:
+            attrs = f"    attrs = token_attrs(None, variant, {model.wire!r})"
+        elif model.attrs:
+            attrs = f"    attrs = drop_none({attrs_kw})"
+        else:
+            attrs = "    attrs = None"
 
-        # top-level fields beyond the ones every node shares (canvas `url`, pages `display`, …)
-        extra = []
-        for name, sub in props.items():
-            if name in SHARED_FIELDS:
-                continue
-            kwname = renames.get(name, name)
-            keywords.append(param(kwname, annotation(sub), literal(sub)))
-            extra.append(kwname)
-
-        # bind — one keyword per (key, kind) the profile declares for this type
-        bind_parts: list[str] = []
-        for key, key_kinds in (entry.get("bind") or {}).items():
-            key_args: list[str] = []
-            for kind in key_kinds:
-                if key == "value" and kind == value_kind and positional == "value":
-                    key_args.append(f"{kind}=value")
-                    continue
-                if kind == "submit":
-                    key_args.append("submit=value")
-                    continue
-                kwname = kind if key == "value" else (key if kind == "default" else f"{key}_{kind}")
-                if kwname == "default":
-                    kwname = "value"
-                keywords.append(param(kwname, "Any"))
-                key_args.append(f"{kind}={kwname}")
-            if key == "value" and "field" in key_kinds:
-                keywords.append(param("payload", "Any"))
-                key_args.append("payload=payload")
-            if key == "value" and entry.get("js_kind"):
-                keywords.append(param("kind", "JsType"))
-                key_args.append("js_kind=kind")
-            if key == "value":
-                bind_parts.append(f"value=bind_value({', '.join(key_args)})")
+        # One entry per bind key, the key's 落点 in the profile's order.
+        groups: list[tuple[str, list[str]]] = []
+        for op in model.ops:
+            if op.kwarg is None:
+                arg = f"{op.kind}=value"  # the positional value is this entry's value
+            elif op.kind == "type":
+                arg = "js_kind=kind"  # accrete's JsType rides as the entry's own `type`
             else:
-                bind_parts.append(f"{key}=bind_entry({key!r}, {', '.join(key_args)})")
-        if entry.get("item"):
-            keywords.append(param("item", "Any"))
-        keywords.append(param("id", "str | None"))
-        # The token lane: a type the profile gives variants gets a `variant=` name (a closed set),
-        # lowered to `attrs.class` — the only way a class reaches the wire.
-        variants = tokens.get(const) or {}
-        if variants:
-            keywords.append(param("variant", "str | None"))
+                arg = f"{op.kind}={op.kwarg}"
+            if groups and groups[-1][0] == op.key:
+                groups[-1][1].append(arg)
+            else:
+                groups.append((op.key, [arg]))
+        bind_parts = [
+            f"value=bind_value({', '.join(args)})" if key == "value" else f"{key}=bind_entry({key!r}, {', '.join(args)})"
+            for key, args in groups
+        ]
+
+        node_args = [f"type={model.wire!r}", "attrs=attrs", "bind=bind", "id=id"]
+        if model.positional == "children":
+            node_args.append("children=list(children) or None")
+        if model.item:
+            node_args.append("item=list(item) if item else None")
+        node_args += [f"{p.kwarg}={p.kwarg}" for p in model.extras]
 
         body = [
-            f"def {const}(",
+            f"def {model.wire}(",
             *[f"    {p}," for p in head],
             *[f"    {p}," for p in keywords],
-            f") -> {cls}:",
-            f'    """Build a `{const}` node (the wire type `{const}`)."""',
-            (
-                f"    attrs = token_attrs(drop_none({', '.join(f'{a}={a}' for a in attrs_kw)}), variant, {const!r})"
-                if attrs_kw and variants
-                else f"    attrs = token_attrs(None, variant, {const!r})"
-                if variants
-                else f"    attrs = drop_none({', '.join(f'{a}={a}' for a in attrs_kw)})"
-                if attrs_kw
-                else "    attrs = None"
-            ),
+            f") -> {model.cls}:",
+            f'    """Build a `{model.wire}` node (the wire type `{model.wire}`)."""',
+            attrs,
             f"    bind = drop_none({', '.join(bind_parts)})" if bind_parts else "    bind = None",
+            f"    return parse(drop_none({', '.join(node_args)}), {model.cls})",
         ]
-        node_args = [f'type={const!r}', "attrs=attrs", "bind=bind", "id=id"]
-        if positional == "children":
-            node_args.append("children=list(children) or None")
-        if entry.get("item"):
-            node_args.append("item=list(item) if item else None")
-        node_args += [f"{name}={name}" for name in extra]
-        body.append(f"    return parse(drop_none({', '.join(node_args)}), {cls})")
         parts += [*body, "", ""]
 
     return "\n".join(parts).rstrip("\n") + "\n"
 
 
-def assemble(schema: dict, profile: dict) -> dict[pathlib.Path, str]:
+def assemble() -> dict[pathlib.Path, str]:
+    """Every generated artifact: the Python type layer, its builders, and the Rust builders.
+
+    The order a second language has to reproduce is read from the *freshly generated* type layer,
+    not from the copy on disk — one run takes a schema change all the way to both languages.
+    """
+    schema = vocabulary.load(vocabulary.SCHEMA_PATH)
+    profile = vocabulary.load(vocabulary.PROFILE_PATH)
     with tempfile.TemporaryDirectory() as tmp:
         raw = pathlib.Path(tmp) / "raw_models.py"
-        codegen(SCHEMA_PATH, raw)
+        codegen(vocabulary.SCHEMA_PATH, raw)
         raw_src = raw.read_text()
-    return {
-        TYPES_PATH: repair(raw_src, schema, profile),
-        BUILDERS_PATH: builders_text(schema, profile),
+    types_text = repair(raw_src, schema, profile)
+    models = vocabulary.vocabulary(schema, profile, types_text)
+    artifacts = {
+        TYPES_PATH: types_text,
+        BUILDERS_PATH: builders_text(models),
     }
+    artifacts.update(gen_rust.artifacts(models, schema, ROOT, types_text))
+    return artifacts
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(description="Generate the Python SDK from the schema and the profile.")
+    ap = argparse.ArgumentParser(description="Generate the SDKs (Python and Rust) from the schema and the profile.")
     ap.add_argument("--check", action="store_true", help="do not write; exit 1 if the disk drifts")
     args = ap.parse_args(argv[1:])
 
-    artifacts = assemble(load(SCHEMA_PATH), load(PROFILE_PATH))
+    artifacts = assemble()
     drifted: list[str] = []
     for path, text in artifacts.items():
         if args.check:
@@ -427,7 +376,7 @@ def main(argv: list[str]) -> int:
         if drifted:
             print("drift — regenerate with `python3 tools/gen_sdk.py`:\n  " + "\n  ".join(drifted))
             return 1
-        print("in sync — types.py and builders.py match the schema and the profile")
+        print("in sync — types.py, builders.py and sdks/rust/src/types.rs match the schema and the profile")
     return 0
 
 

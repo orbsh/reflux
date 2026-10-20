@@ -1,0 +1,15 @@
+[package]
+name = "reflux-sdk"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "The minimal producer SDK for reflux in Rust: build accrete nodes and the frames that carry them."
+
+[dependencies]
+# `preserve_order` is load-bearing, not a preference: without it `serde_json::Map` is a BTreeMap and
+# every key comes out sorted, which is not the order the wire's type layer declares.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[[bin]]
+name = "frames"
+path = "src/bin/frames.rs"
