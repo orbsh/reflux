@@ -23,7 +23,7 @@
 
 ```
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 148 例
+python3 -m unittest discover -s tests -t .       # 162 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -34,6 +34,8 @@ python3 tools/gate_t7.py                         # 4 条：会话（浏览器重
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
 python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
 python3 tools/gate_t10.py                        # 7 条：Rust SDK 的六帧与 Python 逐字节相等（要 cargo）
+python3 -m reflux.cli routes reflux.demo_app       # 路由表（import 的副作用）
+python3 -m reflux.cli events reflux.demo_app:make_app   # 事件名注册表（名字 / builtin|app / 来源）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
 python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／表单／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
@@ -105,7 +107,7 @@ T10 小得多。
   `page(path, title, …)` 一个调用出整页。别把它当词表的一部分——它不进 vocabulary，也不生成。
 - `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
 - `bind` 的 `local` 落点只有 `fold`／`pages` 的构造器暴露（`text` 没有）；`gate_t2.py` 的 fixture 手写了这一处。
-- `reflux events` CLI（打印事件名注册表）没有；`routes` 那个动词有。
+- `reflux events` CLI（打印事件名注册表）：**有了**，`python3 -m reflux.cli events <module>:<attr>`，目标写法是显式的 `module:attr`（不猜 `make_app`）；没有 Rust 对应物，注册表属于宿主不属于词表。
 - T11、T10 都落了；DESIGN 的「实施计划」里**没有剩下的里程碑**——留下的是这几条小的（上面四条）与「开放问题」里
   还没结的裁决。
 
@@ -137,13 +139,14 @@ sdks/rust/                     第二语言的 SDK：生成的 src/types.rs + �
 tools/gate_t0.py … gate_t10.py   十道门（t2/t3/t4/t6/t9/t10 用浏览器或 cargo，t7 真浏览器 + 离线，t8 页面侧，ingest 真 socket）
 tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
+tests/test_cli_events.py       `reflux events` 的表、目标解析的四种拒绝、以及「页面能发的事件都有处理器」
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
 ```
 
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（148 例 + 十道门，全绿；gate_t10 需要 cargo）
+1. 跑一遍第二节的全套，确认基线（162 例 + 十道门，全绿；gate_t10 需要 cargo）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节列的四条小缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
