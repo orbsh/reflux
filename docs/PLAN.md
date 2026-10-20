@@ -29,7 +29,7 @@
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
-| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ⏳ 可开（先决 M1 已完成；`demo_app` 已是新页上的参考应用） | — |
+| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ✅ 2026-10-20 | `python3 tools/gate_t9.py`（10 条，真浏览器 drive `demo_app`）＋ 全套 |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
 | T11 测量 | ⏳ | — |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
@@ -621,3 +621,28 @@ rg 'NEXT_PREFIX|/__next' --glob '!docs/**'                空
 门顶出来的三件（都记进 DESIGN 的 M1.7 段）：`image` 夹具原指 `/favicon.svg`——那是壳的挂载根里才有的文件，退场
 后 404，改成 `www/static/logo.svg`；`gate_ingest` 的超上限一例必须**手写**帧（`wire.draw` 已经拒建超限帧，只有
 手写的才到得了服务端那道门）；同一道门的拒收总数 `+2 → +3`（无 `content` 的帧现在是第一种拒收）。
+
+## 2026-10-20 · T9（参考应用有门了）
+
+`tools/gate_t9.py`：真浏览器 drive `reflux.demo_app.make_app()`，十条。题目不是某个机制（机制各有各的门），而是
+「SDK + App + runtime 合起来能不能写出一个应用」——`demo_app` 是仓里唯一这样的应用，之前只被 `gate_t7` 当会话
+夹具。
+
+```
+[1/10] PASS  the reference app draws its page and seeds the list   heading=True rows=2
+[2/10] PASS  an input's Enter reaches the slot it wrote            echo=True
+[3/10] PASS  a one-button form adds a row                          rows=3
+[4/10] PASS  a row's form removes it by identity                   rows=2 first_row=False
+[5/10] PASS  one submit carries every field                        submitted=True fields=True
+[6/10] PASS  a submit moves the page and the marker moves the address bar  location=/about about=True
+[7/10] PASS  the other direction is the same mechanism             location=/
+[8/10] PASS  back is one reflux:nav carrying the app path          frames=1 data={'path': '/about'}
+[9/10] PASS  an unregistered path draws the built-in 404           location=/nope text='404\n没有注册 /nope 这个地址'
+[10/10] PASS  zero console errors                                  none
+```
+
+这一轮实测到的两件事（都不改框架，记进 DESIGN 的 T9 段）：**空字段的表单照样发帧**（「加一行」的 form 只有一个
+button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 form；**内置 404 第一次有门**（M1.7 之前它是壳的形状，
+画不出来，`gate_t6` 因此刻意没有这条）。门里选按钮按文字选（`.button` 的 innerText）而不是按下标——下标在列表
+增删之后会变，那是 T9 这一轮踩到的第一个坑（第一版按 `#main input` 取节点，也错：渲染器的树不保证挂在 `#main`
+里面，全局 `querySelectorAll` 才稳）。

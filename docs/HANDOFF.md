@@ -29,6 +29,7 @@ python3 tools/gate_t4.py                         # 8 条：输入/表单上行�
 python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历史 / 后退 / 深链 / 无标记
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
+python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
 python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／表单／两条路由）
 ```
@@ -37,21 +38,15 @@ python3 -m reflux.demo_app --port 0              # 起参考应用（回声／�
 门都由**门自己当生产者**：等会话出现、用 `wire`/`sdk.builders` 组帧、`session.send` 发出，再读 DOM。
 `gate_ingest.py` 只要那条 socket（`cdp.Ws`），不需要浏览器。
 
-## 三、下一件：T9（Python SDK 的验收面）
+## 三、下一件：T10 或 T11（T9 已落地，由用户定）
 
-M1 收尾之后，T9 的题目是「SDK 是不是真的够写应用」——它的种子已经在了：`reflux/demo_app.py` 就是新页上的
-参考应用（回声／列表增删／表单一次提交／两条路由，全用 `sdk.builders` + `wire` 写）。
-
-要补的是**验收**，不是新机制：
-
-1. 一个真浏览器门对着 `demo_app` 跑（今天没有：它只被 `gate_t7` 当会话夹具）。四件事各一条断言：输入的回声、
-   加一行／删一行、一次表单提交带两个字段、`/about` 与 `/` 之间换页（含地址栏）。
-2. 导航那条要按镜像机制测：点击的是页面上的 `nav_form`（表单提交，不是锚点——accrete 没有带 URL 的类型），
-   断言的是「一帧新结构 + 新路径标记 → 地址栏跟着变」，后退再一帧 `reflux:nav`。
-3. 顺手补的糖（若做，就是这一轮唯一的「加」）：`reflux:path`／`reflux:title` 的标记糖（见下节未做清单第一条），
-   让 `demo_app.page()` 那种手写 helper 升成 SDK 的一件。
-
-T10（第二个语言的 SDK）与 T11（测量）仍排在 T9 之后，先决条件都是同一份 schema 快照。
+- **T10——第二个语言的 SDK（最小）。** 只生成构造器与上行，证明「规格是产品」不是口号。判据是 `sdks/<lang>/`
+  与 Python 版对同一份 schema 快照产出**逐字相同**的线上帧。现在 `sdks/python` 只有目录占位，`tools/gen_sdk.py`
+  是单语言实现。
+- **T11——测量。** 每回合帧字节数、重渲染范围（DOM 变更计数）、首屏与资产体积、100 会话 × N 事件/秒的服务端
+  CPU。判据是数字进 `docs/PERF.md`，且 DESIGN 里每条性能断言要么有测量、要么被显式标为未测量。DESIGN 里已经
+  认下但没量的三处：`wire` 构造期 + 入站那道门的双份走查（闭集与 `parse`）、`append.position` 换成生产者计数、
+  两个页面并存期那张「两页同夹具」的表（M1.7 之后只剩一页，T11 只需量一次）。
 
 ## 四、硬约束（这些轮踩出来的，别再踩）
 
@@ -102,7 +97,7 @@ T10（第二个语言的 SDK）与 T11（测量）仍排在 T9 之后，先决�
 - `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
 - `bind` 的 `local` 落点只有 `fold`／`pages` 的构造器暴露（`text` 没有）；`gate_t2.py` 的 fixture 手写了这一处。
 - `reflux events` CLI（打印事件名注册表）没有；`routes` 那个动词有。
-- T9 的验收门（对着 `demo_app` 的真浏览器门）、T10、T11 都没做。
+- T10、T11 都没做。
 
 ## 六、文件地图（M1.7 之后）
 
@@ -123,7 +118,7 @@ www/static/logo.svg            页面自己的图片资产（fixture 与示例�
 www/static/vendor/fluxen/      钉住的渲染器包 + versions.json（升版只改这里）
 tools/cdp.py                   CDP 夹具：open_page（起服务、等启动、注入 error hook）、真鼠标/按键、Ws 客户端
 tools/gate_ingest.py           入站门（真 socket，无 chromium）
-tools/gate_t0.py … gate_t8.py  八道门（t2/t3/t4 浏览器，t7 真浏览器 + 离线，t8 页面侧坏帧）
+tools/gate_t0.py … gate_t9.py    九道门（t2/t3/t4/t6/t9 浏览器，t7 真浏览器 + 离线，t8/t9 页面侧，ingest 真 socket）
 tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
@@ -132,9 +127,8 @@ tests/test_app.py              路由解析、内置 404、demo 的种子与导�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（148 例 + 八道门，全绿）
-2. 读 DESIGN 的「实施计划」T9 那一条与「组件词表」的未落地项，以及 PLAN 的 T9 行
-3. 出 T9 的计划：门对着 demo_app 的四条断言怎么写、导航那条按镜像机制怎么断言、标记糖做不做（做就是 SDK 的
-   第一件手写 API，名字与签名要用户定）—— 等「开」
+1. 跑一遍第二节的全套，确认基线（148 例 + 九道门，全绿）
+2. 读 DESIGN 的「实施计划」T10／T11 两条与 PLAN 的对应行，以及「开放问题」里还没结的那几条
+3. 出下一轮的计划（T10 或 T11，先跟用户定哪条）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
 ```
