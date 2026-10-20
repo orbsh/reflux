@@ -85,6 +85,18 @@ class PageHandler(SimpleHTTPRequestHandler):
                 return prefix, Path(mounts[prefix])
         return None, None
 
+    def finish(self) -> None:
+        """Close the connection, tolerating a peer that vanished mid-write.
+
+        A websocket client that hangs up leaves `super().finish()` flushing into a dead socket;
+        the session accounting has already run by then (`App.handle` caught the close), so the
+        stack trace would only be noise about the TCP half of an event we handled.
+        """
+        try:
+            super().finish()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def log_message(self, format: str, *args) -> None:
         print(f"[http] {self.address_string()} {format % args}", flush=True)
 
