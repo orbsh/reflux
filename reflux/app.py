@@ -42,7 +42,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from . import ops, ui
+from . import ingest, ops, ui
 from .channel import JUDGED_DEAD, Channel, ChannelClosed
 from .events import Registry
 from .node import Node
@@ -89,6 +89,7 @@ class Session:
         record: Callable[[str, Any], None],
         stats: dict[str, int],
         outbox: int = 256,
+        note: Callable[[str], None] | None = None,
     ) -> None:
         self.id = id
         self.channel = channel
@@ -100,14 +101,25 @@ class Session:
         self.stale = False  # frames were shed: the client has a hole (a resync repairs it)
         self._record = record
         self._stats = stats
+        self._note = note or (lambda line: None)
         self._wake = threading.Event()
 
     def send(self, frame: dict) -> None:
         """Queue one frame out. The writer writes it; nobody blocks on the socket here.
 
+        Every outbound frame passes this one door, so this is where the ingest boundary stands:
+        a frame that contradicts the wire is refused **whole**, counted, logged with this session
+        and its path — and the session keeps going. A producer's defect is not the session's, and
+        it must not become the client's (the renderer would drop the defect silently).
+
         Over capacity the *middle* goes: the first frame (whatever established the tree) and the
         newest state are the two ends a stale client can still use, and the resync replaces the rest.
         """
+        try:
+            ingest.check_frame(frame)
+        except ingest.Refused as bad:
+            self._refuse(str(bad))
+            return
         if len(self.outbox) >= self.capacity:
             del self.outbox[1]
             self.stale = True
@@ -116,6 +128,10 @@ class Session:
         self.sent += 1
         self._record("send", frame)
         self._wake.set()
+
+    def _refuse(self, reason: str) -> None:
+        self._stats["refused"] += 1
+        self._note(f"refused frame for {self.id} on {self.path}: {reason}")
 
     def await_frames(self, timeout: float = 0.5) -> None:
         """Block until a frame is queued — or the timeout, so a live session stays checked."""
@@ -152,7 +168,14 @@ class App:
         # Live sessions, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a session that is not its own.
         self.sessions: dict[Any, Session] = {}
-        self.stats = {"issued": 0, "reclaimed": 0, "dead": 0, "shed": 0, "resync": 0}
+        self.stats = {
+            "issued": 0,
+            "reclaimed": 0,
+            "dead": 0,
+            "shed": 0,
+            "resync": 0,
+            "refused": 0,  # frames the ingest boundary refused, in either direction
+        }
         self.heartbeat = heartbeat
         self.dead_after = dead_after
         self.outbox = outbox  # frames a session may queue before the middle is shed
@@ -281,7 +304,9 @@ class App:
 
     def handle(self, channel: Channel) -> None:
         """Read this connection's frames until it goes away: the session lives and dies with it."""
-        session = Session(secrets.token_hex(4), channel, self._record, self.stats, self.outbox)
+        session = Session(
+            secrets.token_hex(4), channel, self._record, self.stats, self.outbox, self.events.log.append
+        )
         self.sessions[channel] = session
         self.stats["issued"] += 1
         # Writing is a thread of its own, so nothing that produces a frame can be held by a client
@@ -297,6 +322,16 @@ class App:
                     self.events.log.append(f"not JSON from {session.id}: {raw[:200]!r}")
                     continue
                 self._record("recv", frame)
+                try:
+                    ingest.check_uplink(frame)
+                except ingest.Refused as bad:
+                    # The registry never sees it: a frame that is not shaped like an uplink frame
+                    # is refused before anything can dispatch on it. The session survives.
+                    self.stats["refused"] += 1
+                    self.events.log.append(
+                        f"refused uplink from {session.id} on {session.path}: {bad}"
+                    )
+                    continue
                 self.events.dispatch(session, frame)
         except ChannelClosed as exc:
             self.events.log.append(f"session {session.id} closed: {exc}")

@@ -47,12 +47,14 @@ def dump(node: Any) -> Any:
 
     `mode="json"` is what makes this the *wire's* dict rather than a Python one: an enum field is
     serialized to its value (accrete's enums are string-valued) instead of an enum member.
+    `by_alias` is the other half of the same rule: the wire says `class`, so the model's `class_`
+    must leave here as `class` — the Python spelling would be dropped by the renderer's serde.
     """
     if isinstance(node, (list, tuple)):
         return [dump(item) for item in node]
     if node is None:
         return None
-    return node.model_dump(exclude_none=True, mode="json")
+    return node.model_dump(exclude_none=True, mode="json", by_alias=True)
 
 
 def drop_none(**kw: Any) -> dict[str, Any] | None:

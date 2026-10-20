@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from reflux import wire
 from reflux.sdk import builders as b
-from reflux.sdk._parse import dump
+from reflux.sdk._parse import dump, parse
 
 
 class TestShapes(unittest.TestCase):
@@ -109,8 +109,13 @@ class TestRefusals(unittest.TestCase):
             wire.append("rows", b.text("a"), position=True)
 
     def test_a_node_that_is_not_accrete(self) -> None:
-        with self.assertRaises(ValidationError):
+        # An unknown type is the closure's refusal (the shared walk), a bad domain pydantic's —
+        # both are `ValueError`s: the builder is loud either way.
+        with self.assertRaises(ValueError) as caught:
             wire.create({"type": "not-a-type"})
+        self.assertIn("not one of the wire's types", str(caught.exception))
+        with self.assertRaises(ValidationError):
+            wire.create({"type": "input", "id": 7})
         with self.assertRaises(ValueError):
             wire.create(object())
 
@@ -131,6 +136,25 @@ class TestRefusals(unittest.TestCase):
             wire.draw("s-1")
         with self.assertRaises(ValueError):
             wire.draw("s-1", {"op": "create", "root": {}})
+
+
+class TestTheBuildersBoundary(unittest.TestCase):
+    """The first fence: a hand-written node fails where it is built, not inside the renderer."""
+
+    def test_a_hand_written_node_is_checked_before_it_is_dumped(self) -> None:
+        # `parse` alone would have *dropped* the typo (accrete ignores unknown fields), so the
+        # builders run the same closure the server's boundary runs.
+        with self.assertRaises(ValueError) as caught:
+            wire.create({"type": "text", "name": "typo"})
+        self.assertIn("'name' is not a field of 'text'", str(caught.exception))
+        with self.assertRaises(ValueError):
+            wire.set("echo", {"type": "text", "attrs": {"class": ["leak"]}})
+
+    def test_the_wire_names_are_the_models_aliases(self) -> None:
+        # accrete says `class`; the model's field is `class_`. `dump` is the wire's dict, so the
+        # Python spelling must not reach it (the renderer's serde would drop the key silently).
+        node = parse({"type": "text", "attrs": {"class": ["token"]}})
+        self.assertEqual(dump(node)["attrs"], {"class": ["token"]})
 
 
 if __name__ == "__main__":

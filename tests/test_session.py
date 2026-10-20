@@ -20,7 +20,7 @@ from reflux.channel import JUDGED_DEAD, Channel
 
 def counts(**over: int) -> dict[str, int]:
     """The whole stats shape, so a new counter has to show up in these tests too."""
-    return {"issued": 0, "reclaimed": 0, "dead": 0, "shed": 0, "resync": 0, **over}
+    return {"issued": 0, "reclaimed": 0, "dead": 0, "shed": 0, "resync": 0, "refused": 0, **over}
 
 
 class FakeChannel(Channel):

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .sdk import closed
 from .sdk._parse import dump, parse
 
 __all__ = [
@@ -40,10 +41,14 @@ ACTIONS = frozenset({"create", "set", "append", "remove", "patch", "inject", "tm
 def _node(node: Any, what: str) -> dict:
     """A built SDK node (or a hand-written one) as the wire's dict.
 
-    A dict goes through the same boundary the SDK builds on, so a hand-written node is validated rather
-    than trusted — a producer's typo has to fail here, not as a silent drop inside the renderer.
+    A dict goes through the same two checks the server's boundary runs — closure (`closed.problem`,
+    one vocabulary shared with the ingest side) and domains (`parse`) — so a producer's typo fails
+    where it is built instead of being dropped silently inside the renderer.
     """
     if isinstance(node, dict):
+        bad = closed.problem(node, what)
+        if bad is not None:
+            raise ValueError(bad)
         return dump(parse(node))
     try:
         out = dump(node)

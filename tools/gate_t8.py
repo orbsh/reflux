@@ -74,18 +74,22 @@ def offline_phase() -> list[tuple[str, bool, str]]:
             ("a connection registers a session", wait_for(lambda: len(app.live()) == 1), f"live={len(app.live())}")
         )
 
-        refused_before = app.events.refused
+        registry_before, ingest_before = app.events.refused, app.stats["refused"]
         client._send_frame(0x1, b"this is not json")  # a frame that never parses
         client.send({"event": "no.such.handler", "data": {}})  # unregistered: never dispatched
-        client.send({"data": {}})  # no event key at all
+        client.send({"data": {}})  # no event key at all — the ingest boundary's, not the registry's
         client.send({"event": "boom", "data": {}})  # a handler that raises
-        counted = wait_for(lambda: app.events.refused == refused_before + 4)
+        counted = wait_for(
+            lambda: app.events.refused + app.stats["refused"] == registry_before + ingest_before + 4
+        )
         traceback_logged = any("handler for 'boom' raised" in line for line in app.events.log)
         check.append(
             (
                 "bad JSON / unknown name / no event / raising handler: four refusals, one per frame",
                 counted and traceback_logged and round_trip(),
-                f"refused +{app.events.refused - refused_before} traceback={traceback_logged} session answered",
+                f"registry +{app.events.refused - registry_before} "
+                f"ingest +{app.stats['refused'] - ingest_before} "
+                f"traceback={traceback_logged} session answered",
             )
         )
 

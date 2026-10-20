@@ -38,7 +38,7 @@
 | M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ✅ 2026-10-19 | `python3 tools/gate_t0_next.py`（7 条）＋ `python3 -m unittest tests.test_page` |
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ✅ 2026-10-19 | `python3 tools/gate_t6_next.py`（8 条）＋ `python3 -m unittest tests.test_page` |
 | M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |
-| M1.5 服务端入站校验（封闭性与跨字段语义的落点） | ⏳ | — |
+| M1.5 服务端入站校验（封闭性与跨字段语义的落点） | ✅ 2026-10-20 | `python3 tools/gate_m1_5.py`（12 条，真 socket）＋ `python3 -m unittest tests.test_ingest`（22 例） |
 | M1.6 交互门重对（T2／T3 退场换两条；T4／T8 改写；profile 令牌接线） | ⏳ | — |
 | M1.7 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`；`draw_page`／`not_found` 切到 `wire`） | ⏳ | — |
 
@@ -55,6 +55,9 @@ reflux/node.py                    线上形状 + 校验边界 make()
 reflux/ui.py                      写入层：规格词表寻址成一个模块（ui.stack(...)）
 reflux/ops.py                     写入层：四个操作与 draw 的构造器（壳的方言，M1.7 随壳退场）
 reflux/wire.py                    出帧层：accrete 的八个 action + draw 信封（新页的方言）
+reflux/ingest.py                  入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
+reflux/sdk/closed.py              闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
+tools/gate_m1_5.py                M1.5 门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
@@ -92,7 +95,8 @@ shell/css/main.css                壳自己持有的设计语言：层序 theme/
 shell/vendor/solid-js/            钉版本的四个 ESM 文件（sha256 记在 shell/VERSIONS）
 tests/                            规格漂移、两边词表一致、边界校验、签名形状、资产哈希、
                                   事件注册表、通道编解码、写入层、路由（含 route_fixture 样例包）、
-                                  应用侧页面解析、新页面的清单与挂载规则（test_page）
+                                  应用侧页面解析、新页面的清单与挂载规则（test_page）、
+                                  入站校验的拒收表与两道门（test_ingest）
 ```
 
 Python SDK 就是这个仓的 `reflux/` 包，别的语言日后落在 `sdks/<lang>/`。
@@ -520,3 +524,39 @@ MutationObserver（childList／characterData／subtree，`queueMicrotask` 合并
   必须是 `placeholder`」那条的同一个事实。
 - **`inject` 落的是 Outflow 形状的包装**：vals 槽里是 `{event, data}`（与页面自己 emit 写入的完全同形），
   订阅方要 `bind.path = "/data"` 才拿到载荷本体。门里那个 local 绑定因此手写了 `path`。
+## M1.5 门的实测结果（2026-10-20）
+
+```
+[1/12] PASS  a legal frame lands unchanged          {"ev": "draw", "sender": "26cc3c6a", "content": [{"action": "create",
+[2/12] PASS  an unknown node type                   wire=silent refused+1 logged=True
+[3/12] PASS  an attribute outside the profile       wire=silent refused+1 logged=True
+[4/12] PASS  one row id twice in a frame            wire=silent refused+1 logged=True
+[5/12] PASS  more operations than the cap           wire=silent refused+1 logged=True
+[6/12] PASS  a field the action does not have       wire=silent refused+1 logged=True
+[7/12] PASS  the session survives every refusal     {"ev": "draw", "sender": "26cc3c6a", "content": [{"action": "set",
+[8/12] PASS  the retiring shell's dialect still passes {"ev": "draw", "ops": [{"op": "patch", "path": "/slots/x", "value": 1}
+[9/12] PASS  a bad uplink never reaches a handler   wire=silent handler_calls=0 refused+1
+[10/12] PASS  an uplink id that is not a string      wire=silent handler_calls=0 refused+1
+[11/12] PASS  a legal uplink is dispatched and answered handled={'n': 3}
+[12/12] PASS  every refusal is counted once          refused=7 expected=7
+```
+
+离线：`python3 -m unittest tests.test_ingest`（22 例，表驱动）——信封、每个 action 的字段集与必填键、指针、
+`position`、节点闭集（类型／属性／bind 键／取值域）、行 id 唯一、上行键集与 `id` 形状各拒一次，加一条合法帧原样
+通过；两个门（`Session.send` 丢帧计数带会话、`App.handle` 拒收后会话照常工作）各有一例。
+
+落地的形状：`reflux/ingest.py`（`check_frame` 在 `Session.send`、`check_uplink` 在 `App.handle`；整帧拒收、首个
+缺陷胜出、计数进 `App.stats["refused"]`、日志带会话/路径/第几条 op/原因）、`reflux/sdk/closed.py`（闭集从生成的
+模型算，`wire` 与 `ingest` 共用）、`tools/gate_m1_5.py`（真 socket、门自己当生产者、不需要 chromium）。
+
+这一轮抓到的三件（都已改）：
+
+- **`wire._node` 把未知字段吃掉了**：手写节点走 `parse` 时 pydantic 默认 `extra=ignore`，`{"type":"text","name":…}`
+  的 `name` 在 `dump` 之后已经不存在——构造期那道门形同虚设，入站再校也看不到。做法是把闭集抽成
+  `reflux/sdk/closed.py`，构造期与边界读同一份（不重出 codegen、不加 `extra=forbid`：那份产物要 `uvx` 联网重出，
+  而闭集本来就能从模型算出来）。
+- **`dump` 漏了 `by_alias`**：线上叫 `class`、模型叫 `class_`，`model_dump` 默认用字段名，`class_` 会被渲染器的
+  serde 静默丢弃。词表的 class 令牌在 M1.6 接线，这条现在不修就会在那时变成「写了没效果」。测试钉住
+  `dump(parse({"type":"text","attrs":{"class":["token"]}}))["attrs"] == {"class": ["token"]}`。
+- **「没有 event 的帧」换了归属**：它现在是入站校验的信封拒收（`stats["refused"]`），不再算注册表的未注册事件名
+  ——`gate_t8` 第 2 条因此改成读两个计数（`registry +3 ingest +1`），一条帧仍然记一次账。
