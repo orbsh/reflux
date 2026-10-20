@@ -739,3 +739,34 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
   改成按 key 分组取 riders；`{field!r}` 吐的是 Python 单引号，Rust 编译不过，改双引号。
 - **位置参数的代价**：`text` 多两个键，`frames.rs`／`markers.rs` 里 11 处调用按位补；`form` 多一个 `path`，另外 4 处补。
   这条认下并写进 DESIGN 的 T10 段。
+
+## 2026-10-20 · 示例应用（`reflux/examples/chat`，AI 对话）
+
+框架此前只有一个使用者 `demo_app`：它证明页面能怎么用，不证明页面后面的后端在做什么。这一轮加第二个使用者，重点
+在后端——一个只有一页的对话应用，模型是一条可换的缝，默认离线确定性，演示一条命令就能跑。
+
+六件事，各自有离线用例与跨线断言：
+
+1. **会话态挂在连接上**：`Chat` 是 `Session` 的属性（`setattr`），随连接回收；不持久化、不跨刷新。显示那份（行）
+   在页面树里，模型那份（turn 窗口）在后端——只在「停止」时故意分叉。
+2. **流式靠 `patch(op="append")`**：每块一次 `wire.patch(slot, "/bind/value/default", chunk, op="append")`。实测一句
+   126 字的回话 = **42 帧**（`gate_chat` 第 3 条），没有为聊天新增机制。
+3. **停止的半句不进上下文**：块边界停住，页面留 `⏹`，`Chat.turns` 不记那半句（半句会污染下一轮）。
+4. **单飞**：流未结束时再发 → 状态行「上一条还在流：按「停止」或等它结束」，不静默丢；同一条门断言被拒的那条
+   **没有多出两行**（`appends` 只有一对行 id）。
+5. **应用层两道门**：空消息与超 `MAX_CHARS`(4096) 在 `send()` 里拒并说明；`ingest` 只查帧形状，对长度没有意见。
+6. **模型失败变气泡**：worker 里把异常吞成回话槽里的文本 + 状态行，`busy` 归 False；不往上抛。
+
+模型缝：`Model.reply(context) -> Iterator[str]`。`Scripted` 离线确定性（默认）；`OpenAI` 走 OpenAI 兼容 SSE，**没有
+对真端点跑过**（本机无 key）——请求体与 SSE 读器用本地 stub HTTP server 测（`tests/test_chat_example.py::OpenAIClient`），
+那部分能独立于厂商出错，其余是厂商的。
+
+门与演示：`tools/gate_chat.py` 12 条（9 条真 socket、3 条真 Chromium：页面画出、输入后点「发送」气泡长出来、零
+console error）；`reflux/examples/chat/walkthrough.py` 借 fluxen `examples/walkthrough.py` 的形状（编号步骤 + Enter、
+`--auto`、`--delay`、`--attach`），输出是后端的自述（状态行原文）。
+
+顺带补的缺口：仓里此前没有通用 WS 客户端（`reflux.channel` 只接升级，`tools/cdp.py` 那支对着 DevTools 说），
+`examples/chat/client.py` 是那一半——walkthrough 与门都用它，演示不必开浏览器。
+
+实测：`182 例 OK`（+19）；`gate_chat` 12/12；十道门与 `gen_sdk --check` 不回归。演示六步实跑：出页 14 节点、
+回话 129 字分 42 帧、停止留 `⏹`、单飞拒绝、空/超长两条拒绝原文、窗口 4 连发到 `裁掉 5`。

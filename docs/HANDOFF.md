@@ -1,4 +1,4 @@
-# Reflux — 交接（2026-10-20 快照，T10 后）
+# Reflux — 交接（2026-10-20 快照，示例应用后）
 
 给接手的会话：先读 `docs/DESIGN.md`（设计，含每次裁决的 Why Not）和 `docs/PLAN.md`（台账：什么真的落地了、
 每件怎么复验）。这份文件只讲「现在站哪儿、下一步做什么、哪些坑已经替你踩过」，它会随日期过期，PLAN 不会。
@@ -18,12 +18,15 @@
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
+- 示例应用已落地：`reflux/examples/chat/`（AI 对话）——六个后端行为（会话态／流式／停止／单飞／应用层两道门／
+  模型失败变气泡）各有断言，`tools/gate_chat.py` 12 条（9 条走真 socket、3 条在真 Chromium），
+  `reflux/examples/chat/walkthrough.py` 是它的快速演示（借 fluxen `examples/walkthrough.py` 的形状）。
 
 ## 二、怎么跑（全绿才算数）
 
 ```
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 163 例
+python3 -m unittest discover -s tests -t .       # 182 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -34,6 +37,9 @@ python3 tools/gate_t7.py                         # 4 条：会话（浏览器重
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
 python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
 python3 tools/gate_t10.py                        # 8 条：Rust SDK 的七帧与 Python 逐字节相等（要 cargo）
+python3 tools/gate_chat.py                       # 12 条：示例应用的后端（9 条真 socket + 3 条真浏览器）
+python3 -m reflux.examples.chat.app --port 8100  # 手工起示例应用（AI 对话）
+python3 -m reflux.examples.chat.walkthrough --auto   # 示例的快速演示（自己起 app，六个行为各一步）
 python3 -m reflux.cli routes reflux.demo_app       # 路由表（import 的副作用）
 python3 -m reflux.cli events reflux.demo_app:make_app   # 事件名注册表（名字 / builtin|app / 来源）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
@@ -46,18 +52,18 @@ python3 tools/measure.py --only bytes,cpu        #   只跑其中两段
 门都由**门自己当生产者**：等会话出现、用 `wire`/`sdk.builders` 组帧、`session.send` 发出，再读 DOM。
 `gate_ingest.py` 只要那条 socket（`cdp.Ws`），不需要浏览器。
 
-## 三、下一件：T10（第二个语言的 SDK）
+## 三、这一轮：示例应用（`reflux/examples/chat`）
 
-T11 已落地，数字在 `docs/PERF.md`。剩下的一件是 **T10——第二个语言的 SDK（最小）**：只生成构造器与上行，证明
-「规格是产品」不是口号。
+T11 的数字在 `docs/PERF.md`，T10 的判据在 `tools/gate_t10.py`——都落了。这一轮补的是**使用者**：框架此前只有
+`demo_app`（证明页面能怎么用），没有第二个应用证明**页面后面的后端**怎么做。
 
-判据已经现成：同一个 demo 结构在第二语言里写出来，线上帧与 Python 版**逐字一致**——对表用 T11 量出来的那份基线
-（回声 171 B／加行 392 B／删行 103 B／表单提交 222 B／翻页 2 761 B；信封 70 B、每 op 21 B）。现在
-`tools/gen_sdk.py` 是单语言实现，`sdks/python` 只有目录占位；第二语言要先决定的是**怎么把 profile 与 schema 快照
-喂给它**（复用 Python 脚本生成，还是照同一份 JSON 自己写一遍模板）。
+示例是一页对话应用，六件事各有用例与门：会话态挂在连接上、回话逐块流进槽（一句 126 字 = 42 帧）、停止时半句不进
+上下文、流未结束时再发被拒并说明、空/超长在应用层拒、模型出错变一条气泡。模型是一条缝（`Model.reply`），默认
+`Scripted` 离线确定性，`OpenAI` 走 SSE——**后者没有对真端点跑过**。
 
-另一条可选的线是 `reflux events` CLI（打印事件名注册表）——它要一个「从包装配出应用」的约定，独立于 T10，但比
-T10 小得多。
+下一件没有排定的条目。可选的两条：给 `canvas`／`chart`／`editor`／`diagram` 补真浏览器门（要先决定部署件从哪来），
+或者按 DESIGN「开放问题」里没结的几条做一次裁决。示例自身能继续长的地方（持久化、工具调用、token 计量）是它
+README 里明说的「不做」，要做等于另开一轮。
 
 ## 四、硬约束（这些轮踩出来的，别再踩）
 
@@ -107,6 +113,8 @@ T10 小得多。
 - 这三件是**已落地**的，列在这里是为了说明它们不在「未做」里：标记糖（`reflux.sdk.markers` + `sdks/rust/src/markers.rs`
   手写同一份约定，不进 vocabulary）、`reflux events` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
   注册表属于宿主）、`text` 的 `local` 落点与它的 `path` 随行键（`gate_t2` 的 vals 平面检查已从手写 dict 换成构造器）。
+- 示例应用不持久化、不做账号与刷新后的历史（会话挂在连接上，刷新即新对话）；没有工具调用与检索；没有 token 计量与
+  限流。`model.OpenAI` 的 SSE 读器用本地 stub 测过，**没有对真端点跑过**（本机没有 key）——别把它当已验收。
 - 里程碑层面：T0–T11 与 M1.1–M1.7 全部落地，DESIGN 的「实施计划」里**没有剩下的条目**——余下的是上面那一条门缺口与
   「开放问题」里还没结的裁决。
 
@@ -123,6 +131,11 @@ reflux/app.py                  根挂载 + /static/ + /ws + 注册表 + 一页�
 reflux/server.py               伺服：挂载表（前缀 → 目录）、无缓存、深链交 index.html、/ws 升级
 reflux/demo_app.py             参考应用：回声／列表增删／表单一次提交／两条路由（T9 的种子）
 reflux/demo.py                 只伺服 www/，不声明页面
+reflux/examples/chat/app.py    示例应用：一页对话 + 流式 worker + 单飞/停止/应用层两道门
+reflux/examples/chat/model.py  模型缝：Scripted（离线确定性）／OpenAI（SSE，未对真端点验证）
+reflux/examples/chat/client.py 通用 WS 客户端（walkthrough 与 gate_chat 都用它）
+reflux/examples/chat/walkthrough.py  示例的快速演示（Enter 分步 / --auto / --delay / --attach）
+reflux/examples/chat/README.md 示例的自述：跑法、六个行为、模型缝、明确不做的
 www/index.html                 页面：静态；`#main` 钉通道与编码；<base href="/">
 www/static/reflux.js           客户端 runtime：标记镜像、hello、popstate（只读 DOM，不持 socket）
 www/static/reflux.css          @layer reflux 的七条令牌规则 + 藏两个保留标记
@@ -140,12 +153,14 @@ tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（g
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
 tests/test_cli_events.py       `reflux events` 的表、目标解析的四种拒绝、以及「页面能发的事件都有处理器」
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
+tests/test_chat_example.py     示例后端 19 例：窗口、两道门、流式、停止、失败、SSE（本地 stub）
+tools/gate_chat.py             示例的门：真 socket 的九条 + 真浏览器的三条
 ```
 
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（163 例 + 十道门，全绿；gate_t10 需要 cargo）
+1. 跑一遍第二节的全套，确认基线（182 例 + 十一道门，全绿；gate_t10 需要 cargo，gate_chat 需要 chromium）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节列的四条小缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
