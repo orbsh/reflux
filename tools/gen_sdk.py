@@ -81,7 +81,7 @@ BUILDERS_IMPORTS = """from __future__ import annotations
 
 from typing import Any
 
-from ._parse import bind_entry, bind_value, drop_none, parse
+from ._parse import bind_entry, bind_value, drop_none, parse, token_attrs
 from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 """
@@ -279,6 +279,7 @@ def builders_text(schema: dict, profile: dict) -> str:
     if missing:
         raise SystemExit(f"profile/profile.json is missing types: {', '.join(missing)}")
 
+    tokens = profile.get("tokens") or {}
     exposed = sorted(c for c, _ in arms if types[c].get("expose"))
     parts = [BUILDERS_IMPORTS, "", f"__all__ = {json.dumps(exposed)}", ""]
 
@@ -361,6 +362,11 @@ def builders_text(schema: dict, profile: dict) -> str:
         if entry.get("item"):
             keywords.append(param("item", "Any"))
         keywords.append(param("id", "str | None"))
+        # The token lane: a type the profile gives variants gets a `variant=` name (a closed set),
+        # lowered to `attrs.class` — the only way a class reaches the wire.
+        variants = tokens.get(const) or {}
+        if variants:
+            keywords.append(param("variant", "str | None"))
 
         body = [
             f"def {const}(",
@@ -368,7 +374,15 @@ def builders_text(schema: dict, profile: dict) -> str:
             *[f"    {p}," for p in keywords],
             f") -> {cls}:",
             f'    """Build a `{const}` node (the wire type `{const}`)."""',
-            f"    attrs = drop_none({', '.join(f'{a}={a}' for a in attrs_kw)})" if attrs_kw else "    attrs = None",
+            (
+                f"    attrs = token_attrs(drop_none({', '.join(f'{a}={a}' for a in attrs_kw)}), variant, {const!r})"
+                if attrs_kw and variants
+                else f"    attrs = token_attrs(None, variant, {const!r})"
+                if variants
+                else f"    attrs = drop_none({', '.join(f'{a}={a}' for a in attrs_kw)})"
+                if attrs_kw
+                else "    attrs = None"
+            ),
             f"    bind = drop_none({', '.join(bind_parts)})" if bind_parts else "    bind = None",
         ]
         node_args = [f'type={const!r}', "attrs=attrs", "bind=bind", "id=id"]

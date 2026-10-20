@@ -110,8 +110,10 @@ class TestTheNode(unittest.TestCase):
         refused(self, frame(hand("create", {"type": "text", "name": "x"})), "'name' is not a field of 'text'")
 
     def test_attributes_are_the_schemas_minus_the_hidden_ones(self) -> None:
-        # `class` and `selector` exist in accrete; the profile keeps them out of a producer's reach.
-        refused(self, frame(hand("create", {"type": "text", "attrs": {"class": ["x"]}})), "'class' is not an attribute")
+        # `selector` exists in accrete and stays out of a producer's reach for every type; `class`
+        # is out too, except as the token lane (next test) — `text` has variants, so a stray name
+        # is refused by the token check, and a type without any has no `class` key at all.
+        refused(self, frame(hand("create", {"type": "text", "attrs": {"class": ["x"]}})), "'x' is not a token of 'text'")
         refused(self, frame(hand("create", {"type": "text", "attrs": {"selector": "x"}})), "'selector' is not an attribute")
         refused(
             self,
@@ -139,6 +141,26 @@ class TestTheNode(unittest.TestCase):
                 )
             ),
             "'payload' is not a field of a 'source' binding",
+        )
+
+    def test_the_token_lane_is_closed_at_the_boundary(self) -> None:
+        # The builders lower a variant name to a class; a producer that hand-writes the class gets
+        # exactly the profile's set — nothing else, and no type without variants at all.
+        ingest.check_frame(frame(hand("create", {"type": "text", "attrs": {"class": ["rx-heading-1"]}})))
+        refused(
+            self,
+            frame(hand("create", {"type": "text", "attrs": {"class": ["rx-heading-9"]}})),
+            "'rx-heading-9' is not a token of 'text'",
+        )
+        refused(
+            self,
+            frame(hand("create", {"type": "image", "attrs": {"class": ["rx-card"]}})),
+            "'class' is not an attribute of 'image'",
+        )
+        refused(
+            self,
+            frame(hand("create", {"type": "text", "attrs": {"class": "rx-muted"}})),
+            "class must be a list of token names",
         )
 
     def test_value_domains_are_pydantics(self) -> None:

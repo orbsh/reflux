@@ -1,18 +1,19 @@
-# Reflux — 交接（2026-10-20 快照）
+# Reflux — 交接（2026-10-20 快照，M1.6 后）
 
 给接手的会话：先读 `docs/DESIGN.md`（设计，含每次裁决的 Why Not）和 `docs/PLAN.md`（台账：什么真的落地了、
 每件怎么复验）。这份文件只讲「现在站哪儿、下一步做什么、哪些坑已经替你踩过」，它会随日期过期，PLAN 不会。
 
 ## 一、现在在哪
 
-- reflux：`main` @ 60b94fd；**M1.5 已落地、未提交**（新增 `reflux/ingest.py`、`reflux/sdk/closed.py`、
-  `tools/gate_m1_5.py`、`tests/test_ingest.py`；改 `reflux/app.py`、`reflux/wire.py`、`reflux/sdk/_parse.py`、
-  `tests/test_wire.py`、`tests/test_session.py`、`tools/gate_t8.py`、两份 docs）。本文档同样未提交。
+- reflux：`main` @ 9b4a92c（M1.5）。**M1.6 已落地、未提交**：新增 `tools/gate_t3_next.py`、`gate_t4_next.py`、
+  `gate_t8_next.py`、`tests/types_fixture.py`、`tests/test_types_drawable.py`；改 `profile/profile.json`（令牌 +
+  input/textarea/select 的落点收窄）、`tools/gen_sdk.py`、`reflux/sdk/builders.py`（重出）、`reflux/sdk/_parse.py`、
+  `reflux/sdk/closed.py`、`www/static/reflux.css`、`tools/gate_m1_5.py`、三份 docs。
 - fluxen：`main` @ 0bf166d，工作树干净。它的 `crates/ui_leptos/src/lib.rs` 是 M1.1 的唯一改动（入口多读
   `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`）。
 - 仓里钉着的渲染器包是 fluxen 0bf166d 的 **release** 构建：`www/static/vendor/fluxen/`，4 件资产共
   2 420 114 B（wasm 2 348 320 B），清单在 `versions.json`（rev + 逐文件 sha256/大小）。
-- 迁移进度（M1 已拆成七件）：M1.1 ✅ · M1.2 ✅ · M1.3 ✅ · M1.4 ✅ · M1.5 ✅ · M1.6 ⏳ · M1.7 ⏳。
+- 迁移进度（M1 已拆成七件）：M1.1 ✅ · M1.2 ✅ · M1.3 ✅ · M1.4 ✅ · M1.5 ✅ · M1.6 ✅ · M1.7 ⏳（剩退场那一件）。
 - 两个页面并存是刻意设计：壳仍在 `/`（旧门 T0–T8 对着它），新页在 `/__next/`，它的资产在 `/static/`。
   同一个 App 同时伺服这三处挂载。
 
@@ -21,8 +22,11 @@
 ```
 python3 tools/gen.py --check                     # 旧规格 → 壳表/SDK 的漂移门（M1.7 退场）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（词表门）
-python3 -m unittest discover -s tests -t .       # 168 例：规格、边界、路由、会话、wire、页面清单、入站
+python3 -m unittest discover -s tests -t .       # 178 例：规格、边界、路由、会话、wire、页面、入站、词表
 python3 tools/gate_m1_5.py                       # 12 条：入站校验两道门（真 socket，无 chromium）
+python3 tools/gate_t3_next.py                    # 18 条：整树画词表 + 令牌的 computed style
+python3 tools/gate_t4_next.py                    # 8 条：输入/表单上行、id 认领（真按键、真点击）
+python3 tools/gate_t8_next.py                    # 5 条：页面侧的坏帧后果
 python3 tools/gate_m1_1.py                       # 5 条：入口把手（用仓里钉住的包）
 python3 tools/gate_t0_next.py                    # 7 条：新页请求清单 == versions.json、逐件哈希、深链
 python3 tools/gate_t6_next.py                    # 8 条：runtime 镜像 / 历史 / 后退 / 深链 / 无标记
@@ -40,21 +44,22 @@ python3 tools/gate_t8.py
 `window.reflux`（壳的内部）；新页的门都由**门自己当生产者**：等会话出现、用 `wire`/`sdk.builders` 组帧、
 `session.send` 发出，再读 DOM。`gate_m1_5.py` 只要那条 socket（`cdp.Ws`），不需要浏览器。
 
-## 三、下一件：M1.6 交互门重对
+## 三、下一件：M1.7 退场
 
-四块，按这个顺序落（每块自带门槛，别攒到最后）：
+这是迁移的最后一件，题目是「删」而不是「加」：
 
-1. **T2／T3 退场，换两条端到端**：八个 action 的落点（就是今天的 `gate_t2_next.py`，可升格成 T2′）＋
-   「profile 里每个暴露的类型至少画出来一次」。壳的 store／解释器／分派表那三道随壳退场（文件在 M1.7 才删）。
-2. **T4 改写**：`input` 失焦上行、`form` 一次提交带上 `fields`、`id` 认领规则；`payload` 那几条断言删掉。
-3. **T8 改写**：坏帧清单以入站为准——`gate_m1_5.py` 已经覆盖了两道门，T8′ 要补的是**新页**上那几条（渲染器的
-   降级只 `warn`，不计数）。旧 T8 第 2 条已按「注册表 + 入站」两个计数跑通，可直接搬。
-4. **profile 的 class 令牌接线**：`profile/profile.json` 的 `tokens` 现在是空的；接线时 `dump` 已按 alias 出线
-   （`class` 而不是 `class_`），渲染器才认。接完写进 `www/static/reflux.css`。
+1. 删 `spec/`、`shell/*`（vendored SolidJS、壳 CSS、壳侧生成物 `components.generated.js`）、`tools/gen.py` 里生成
+   壳分派表的那一半、对着规格与壳写的用例（`test_spec_sync`、`test_shell_assets`、`test_dsl` 里壳的部分）。
+2. `/__next` 提到 `/`：`App.NEXT_PREFIX`、`www/index.html` 的 `<base href="/">`、挂载表（`tests/test_page.py` 把
+   `<base>` 与 `App.NEXT_PREFIX` 钉在一起，两处必须同轮改）。
+3. `App.draw_page`／`not_found` 切到 `wire`（壳没了，第二个方言一起退场——`ops.py`／`ui.py`／`node.py`／
+   `components_generated.py` 随壳删除）；`reflux/demo_app.py` 要么迁到新页要么一并删。
+4. 旧门 t0/t2/t3/t4/t6/t7/t8 全部退场（它们 drive 的是壳）；新门 t0′/t2′/t3′/t4′/t6′/t8′ 升格成唯一的门名。
+5. `gen_sdk.py --check` 留作词表门；`gen.py --check` 与规格一起消失。
 
-门槛：改写后的 T2′／T4′／T8′，加 T5／T7 的离线门，全套绿（旧 t2／t3 到 M1.7 才退场，期间仍须绿）。
+门槛（DESIGN 写的）：`rg 'spec/components.json|shell/js|SolidJS'` 零命中，全套绿（门会少一半，例数会掉）。
 
-## 四、硬约束（这五轮踩出来的，别再踩）
+## 四、硬约束（这六轮踩出来的，别再踩）
 
 - **方言分离**：`reflux/ops.py` 是**壳的方言**（`{"op":"create","root":…}`），`reflux/wire.py` 是新页的
   （accrete 的八个 + `{"ev":"draw","sender":…,"content":[…]}`）。同一个 socket 只一套帧，**永远不翻译**。
@@ -69,6 +74,11 @@ python3 tools/gate_t8.py
   session 加一份树。
 - **拒收是整帧、会话存活、计数带身份**：`App.stats["refused"]` ＋ 日志里的会话／路径／第几条 op／原因。
   渲染器的降级只有 `warn`，我们这一侧每一个数字都要自己留。
+- **令牌是唯一的 class 通路**：生产端只写 `variant=`（profile 的闭集合），SDK 低成 `attrs.class`；`closed.py`
+  只在声明过变体的类型上放行 `class`，且每个元素必须是令牌。`selector` 一律隐藏。别给生产端开自由 class。
+- **上行的时机是渲染器的，不是旧壳的**：`input`／`textarea` 在 **Enter**（全仓没有 blur），空值不上行；
+  `field` 只被 `input` 读（回车提交进 form，form 的 submit 一次发出全部字段）；`id` = 发射节点自身，空 id 无键。
+  写门之前先读 `ui_leptos`，别照旧壳的 `fire: change` 想当然。
 - **每一轮落地，全套门同轮绿**。旧门不许先红着（所以有了两个页面并存的迁移期）。
 - **两个标记必须是 `placeholder`**：`text`／`case` 把 id 塞进 class 列表，只有 `placeholder` 一类
   （`rack`/`pages`/`layer`/`fold`/`diagram`/`canvas`）才 `.id()`。gate 里读 DOM 也因此按 class 取。
@@ -89,8 +99,8 @@ python3 tools/gate_t8.py
 
 - 内置 404（`not_found`）还是壳的旧形状 → 新页上画不出来；T6′ 因此**没有**「未知路径 → 404」那条。
 - `App.draw_page` 还在用 `ops`（旧方言）→ **路由应用还不能给新页供页**；目前只有门里的生产者能画。
-- T4′／T8′ 未改写（M1.6）；T2／T3 旧门还在跑壳。
-- profile 的 class 令牌还没接进 `www/static/reflux.css`（M1.6）。
+- 旧门 t2／t3／t4／t8 仍在跑壳（M1.7 与壳一起退场）。
+- `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
 - SDK 还没有标记糖（`reflux:path`／`reflux:title` 目前靠手写 `placeholder`，见 `tools/gate_t6_next.py`）。
 - `bind` 的 `local` 落点只有 `fold`／`pages` 的构造器暴露（`text` 没有）；门与 `gate_t2_next` 的 fixture 手写了这一处。
 - `reflux events` CLI、`demo_app` 迁到新页、T9–T11 重对：都没做。
@@ -108,6 +118,10 @@ www/static/reflux.js           客户端 runtime：标记镜像、hello、popsta
 www/static/reflux.css          只藏两个保留标记
 www/static/vendor/fluxen/      钉住的渲染器包 + versions.json（升版只改这里）
 tools/gate_m1_5.py  gate_m1_1.py  t0_next.py  t6_next.py  t2_next.py    五道新门
+tools/gate_t3_next.py  gate_t4_next.py  gate_t8_next.py                T3′ / T4′ / T8′
+tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（T3′ 与离线测试共用）
+tests/test_types_drawable.py   词表完整性：夹具 == profile 暴露集，逐节点过闭集与域
+www/static/reflux.css          @layer reflux 的七条令牌规则（heading-1/2/3、code、muted、danger、card）
 tests/test_ingest.py           入站校验：拒收表 + 两道门（22 例）
 tests/test_wire.py             八种形状对表 + 四类拒收 + 构造期闭集与 alias
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；挂载规则
@@ -116,8 +130,9 @@ tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；挂载
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（168 例 + 十二道门：5 道新的 + 7 道旧的，全绿）
-2. 读 DESIGN 的「M1.6——交互门重对」与「失败模式」，以及 PLAN 的 M1.6 行
-3. 出 M1.6 的计划：T2′／T4′／T8′ 各改哪几条、令牌接线的落点（profile → css）、对现有门的影响 —— 等「开」
+1. 跑一遍第二节的全套，确认基线（178 例 + 十五道门：8 道新的 + 7 道旧的，全绿）
+2. 读 DESIGN 的「M1.7——退场」与「已落地的形状」，以及 PLAN 的 M1.7 行
+3. 出 M1.7 的计划：删哪些文件／用例、`/__next` 提到 `/` 的两处同改、`draw_page`／`not_found` 切 `wire` 的形状、
+   哪些门升格成唯一的门名 —— 等「开」
 4. 落地、跑全套、报实测行与改动文件；不提交
 ```

@@ -39,7 +39,7 @@
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ✅ 2026-10-19 | `python3 tools/gate_t6_next.py`（8 条）＋ `python3 -m unittest tests.test_page` |
 | M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |
 | M1.5 服务端入站校验（封闭性与跨字段语义的落点） | ✅ 2026-10-20 | `python3 tools/gate_m1_5.py`（12 条，真 socket）＋ `python3 -m unittest tests.test_ingest`（22 例） |
-| M1.6 交互门重对（T2／T3 退场换两条；T4／T8 改写；profile 令牌接线） | ⏳ | — |
+| M1.6 交互门重对（T2／T3 退场换两条；T4／T8 改写；profile 令牌接线） | ✅ 2026-10-20 | `python3 tools/gate_t3_next.py`（18 条）＋ `tools/gate_t4_next.py`（8 条）＋ `tools/gate_t8_next.py`（5 条）＋ `tests.test_types_drawable`（7 例） |
 | M1.7 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`；`draw_page`／`not_found` 切到 `wire`） | ⏳ | — |
 
 ## 已落地的形状
@@ -58,6 +58,11 @@ reflux/wire.py                    出帧层：accrete 的八个 action + draw �
 reflux/ingest.py                  入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
 reflux/sdk/closed.py              闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
 tools/gate_m1_5.py                M1.5 门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
+tools/gate_t3_next.py             T3′ 门：词表整树（21 个角色 class + 行为断言 + 令牌 computed style）
+tools/gate_t4_next.py             T4′ 门：输入/表单上行、id 认领、无 payload 通路（真按键、真点击）
+tools/gate_t8_next.py             T8′ 门：页面侧三条坏帧后果（帧级两条归 gate_m1_5）
+tests/types_fixture.py            29 个暴露类型各一个最小合法节点（T3′ 与离线测试共用的唯一一份）
+tests/test_types_drawable.py      词表完整性：夹具 == profile 暴露集，每个节点过闭集与取值域
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
 reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
@@ -66,7 +71,7 @@ reflux/demo_app.py                示例应用（T4 的门用它；T9 的种子�
 reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
 reflux/cli.py                     `python3 -m reflux.cli routes <pkg>` 打印注册表
 schema/accrete.schema.json        fluxen 导出物的快照（sha256 与导出命令记在 schema/README.md）
-profile/profile.json              reflux 的 profile：选择、默认、class 令牌表（里面没有类型定义）
+profile/profile.json              reflux 的 profile：选择、默认、令牌表 tokens（变体名 → class；没有类型定义）
 tools/sync_schema.py              重新导出并逐项对拍（要 fluxen 那个仓；不进默认门）
 tools/gate_m1_1.py                M1.1 门：入口把手的探针页（fluxen 的 dist + App 伺服 + CDP；同样要那个仓）
 tools/gen_sdk.py                  schema + profile → 下面两件产物；--check 做漂移门
@@ -560,3 +565,41 @@ MutationObserver（childList／characterData／subtree，`queueMicrotask` 合并
   `dump(parse({"type":"text","attrs":{"class":["token"]}}))["attrs"] == {"class": ["token"]}`。
 - **「没有 event 的帧」换了归属**：它现在是入站校验的信封拒收（`stats["refused"]`），不再算注册表的未注册事件名
   ——`gate_t8` 第 2 条因此改成读两个计数（`registry +3 ingest +1`），一条帧仍然记一次账。
+
+## M1.6 的实测结果（2026-10-20）
+
+```
+T3-NEXT  18/18 PASSED   21 个角色 class 逐个出现 · fold 头/体 · form 的 button · portal 挂载 ·
+                        select 选项与选中 · table 一族 · rack 按槽 · pages 选中页 · textarea/input 初值 ·
+                        四条令牌的 computed style（h1/h2/h3/plain = 35/28/23/20px，card 的 border = 1px）·
+                        零 console error
+T4-NEXT   8/8  PASSED   input 的 Enter 上行 {event,id,data} · 空值不上行 · 无 id 的节点帧里无 id 键 ·
+                        field 的回车只提交 · 一次 submit 带上两个字段与 form 的 id · 字段条目只有
+                        {data, payload:null} · confirm 复位 · 零 console error
+T8-NEXT   5/5  PASSED   未注册事件名被计数且页面照常 · 处理器抛异常留下 traceback 且会话存活 ·
+                        一帧里一个坏 op 整帧拒收（页面没有半回合）· 后一帧照落 · 零 console error
+```
+
+离线：`tests.test_types_drawable`（7 例，29 个暴露类型各一个最小合法节点，表与 profile 的暴露集必须相等）、
+`tests.test_sdk_generated`（14 例，含令牌闭集合与「只有声明过变体的类型才有 `variant=`」）、
+`tests.test_ingest`（23 例，含未声明令牌整帧拒收）。全套 178 例。
+
+落地的形状：`profile/profile.json` 的 `tokens`（`text` 六个变体、`case` 一个）、`tools/gen_sdk.py`（有变体的类型
+多一个 `variant=` 关键字）、`reflux/sdk/_parse.token_attrs`（变体名 → `attrs.class`，错名报出整张表）、
+`reflux/sdk/closed.py`（`class` 只在声明过变体的类型上合法，且每个元素必须在该类型的令牌里）、
+`www/static/reflux.css`（`@layer reflux` 的七条令牌规则）。
+
+这一轮门顶出来的四件（三件改了 profile，一件改了门）：
+
+- **`input` 不读 `default`／`source`**：它从 js-kind 的默认值起手，清空也回到那里，只负责上行。profile 原来给
+  它这四个落点，其中两个是死键——已收成 `event`／`field`。
+- **`field` 只有 `input` 读**：`form` 的 `collect_fields` 收的是 input 的信号，`textarea`／`select` 上的 `field`
+  是死键——已删。
+- **表单字段条目带 `payload: null`**：渲染器的 `Message.payload` 是 `Option` 且没有 `skip_serializing_if`，
+  那个 null 是它的形状。T4′ 因此断言**实测形状**，而不是假装这个键不存在。
+- **`class` 从「一律隐藏」变成「令牌通道」**：`gate_m1_5` 的「越 profile 的属性」一例因此改用 `selector`
+  （它对所有类型都隐藏），令牌那一侧由 `test_ingest` 与 T3′ 两侧夹住。
+
+还有两处是画不出来而不是配不出来，写进 DESIGN 的属性落空清单：`canvas`／`chart`／`editor` 要一个 ES module、
+`diagram` 要 `/assets/mermaid.min.js`（本页实测 404）——四个类型不进 T3′ 的真浏览器那条；`image` 只有带 attrs
+时才渲染 `<img>`。

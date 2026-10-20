@@ -142,6 +142,10 @@ profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（
 - **默认**：哪个属性值是默认。
 - **收**：生产端见不到自由 class——变体收成闭集合，由 profile 低成 class 令牌（accrete 的线上允许 class，令牌就是 `attrs.class` 里的那些字符串）。
 
+**令牌这一层落地的形状（2026-10-20）**：`profile.json` 的 `tokens` 是 `类型 → {变体名 → class}`（今天是 `text` 的 `heading-1/2/3`、`code`、`muted`、`danger`，与 `case` 的 `card`）。生成器给这些类型加一个 `variant=` 关键字（值必须是那张表里的名字，错字当场报出整张表），由 `_parse.token_attrs` 低成 `attrs.class`；`reflux/sdk/closed.py` 因此把 `class` 从「一律隐藏」改成「只在这些类型上、且每个元素都必须在该类型的令牌里」——`selector` 仍然一律隐藏。样式在 `www/static/reflux.css` 的 `@layer reflux` 里（main.css 先声明了六个层，新层名排在 `style` 之后 → 层内最强；unlayered 会盖掉渲染器**所有**层，不可控）。令牌族按需长：加一个名字＝改 profile、重出 SDK、写一条 CSS，三处各一行。
+
+属性侧的几处落空是**量出来的**，不是口味（见本节末尾的清单）；其中一条最容易被当成故障：`input` 既不读 `default` 也不读 `source`（它从 js-kind 的默认值起手，只负责上行），所以 profile 不给它这两个落点；`field` 也只有 `input` 读——`textarea`／`select` 的 `field` 是死键，已删。
+
 现有那 21 项（`spec/components.json`）与它不是包含关系：同名 8 项——form / rack / input / textarea / select / button / image / text；另外 13 项是 reflux 自己的词，逐个落成：
 
 | 我们这一项 | 落点 |
@@ -172,6 +176,13 @@ accrete 那侧比我们宽的另外 22 项（case / placeholder / chart / diagra
 - **属性**：类型自己的白名单（闭枚举、受限值域）；变体的闭集合收在 profile 里、落成 class 令牌。
 
 属性侧有几处是这次裁决认下的落空（逐项核过 accrete 的属性空间）：`placeholder`（input／textarea）与 `disabled`（input／textarea／select／button／form）在那边没有字段，只有 class；`input.kind` 里的 email／search 没有对应（`JsType` 只有 bool／number／text／password／button／submit）；`textarea.rows`、`form.submit_label`、`rack` 的 density／empty_text／follow 同样没有字段（accrete 的 rack 只有 `scroll`）；`image.fit`、`text.wrap`、`text`／`button`／`badge` 的 size／tone／variant 都走 class 令牌。这些不构成加词表的理由——要么是外观（令牌），要么是渲染器的行为细节；真装不下的在落 profile 时逐条列出来。**还有一处落空不是属性而是机制**：我们的 `payload`（组件声明这次上行要带哪几件本地态）在那边没有位置——送什么由组件自己定（输入送它的值、表单送它收集到的字段），所以构造器不提供这个参数。
+
+**M1.6 量出来的四处**（都改了 profile 或写进门的断言，不再靠「属性表应该这样」）：
+
+- `input` 只读 `bind.type`（js-kind）与发射落点：`value` 上的 `default`／`source` 它**不读**（输入框从 kind 的默认值起手，清空也回到那里），profile 因此只给它 `event` 与 `field`。
+- `field` 只有 `input` 读（`form` 的 `collect_fields` 收的是它的信号）；`textarea`／`select` 上的 `field` 是死键，已从 profile 删掉。
+- 表单送上来的字段条目是 `{data, payload: null}`——渲染器的 `Message.payload` 是 `Option` 且没有 skip，那个 null 是它的形状，不是我们的落点（我们没有 payload 声明这条路）。
+- 四个类型要外部部署件才画得出：`canvas`／`chart`／`editor` 挂一个 ES module，`diagram` 取 `/assets/mermaid.min.js`（本页实测 404）。它们的「能画」属于部署件而不是词表，所以 T3′ 不画它们；另外 `image` 只有在**带了 attrs** 时才渲染 `<img>`，否则是一个空 div——这是渲染器的条件，不是泄漏。
 
 **词表的厚度就是交互逻辑的表达力。** 这个模型的复杂度不在服务端，在这里：应用里凡是「依赖状态的界面行为」，只有两个去处——落进某个组件的声明式语义（本地态 + 事件 + 变体），或者走一次事件上行交给生产者。所以加组件时的判据是「有哪类交互逻辑现在无处表达」，不是「界面还缺哪种元素」。
 
@@ -427,9 +438,9 @@ def post_index(session, match): ...
 - **M1.4——出帧层。**（已落地 2026-10-19）`reflux/wire.py`：accrete 的八个 action 逐字——`create(event: "", data)`／`set(slot, data)`／`append(slot, data, position 缺省不写)`／`remove(slot, id)`／`patch(slot, path, op: replace|append)`／`inject(slot, data)`／`tmpl(name, body)`／`empty()`——加帧信封 `draw(sender, *ops)`（`ev: "draw"`、`sender` 必填、`created` 不写）。边界校验：JSON Pointer；`position` 必须是整数，**但域外只有渲染器判得了**（它要知道列表多长），所以那条是渲染器的拒收加门的断言，不是构造器的；节点必须是 accrete 形状（裸 dict 先 `parse` 再 `dump`）。它与 `ops` 的分界是**方言**：同一个 socket 只有一套帧，新页只说 accrete、壳只说旧的，App 不猜。门槛：T2 改写（`gate_t2_next.py`）——八个 action 各一条 DOM 断言（含 `+1` 落点、`patch append` 续写、vals 平面取值要带 `path: "/data"`），加「域外 position 拒收不夹取」「`empty` 解码后同帧其余照常应用」「零 console error」。
 - **M1.5——服务端入站校验。**（已落地 2026-10-20）`reflux/ingest.py` 两道门：出帧那道在 `Session.send`（每个下行帧唯一的门，所以绕过 SDK 手写的生产者也在射程内），入站那道在 `App.handle` 派发之前。拒收是**整帧**、首个缺陷胜出、会话存活：计数进 `App.stats["refused"]`，日志带会话 id、路径、第几条 op 与原因。校的九类：信封（`ev`／`sender`／`content`／未知键）、八个 action 的字段集与必填键、JSON Pointer、`position` 是整数、`max_ops_per_frame`、节点闭集（类型／属性／bind 键，按 `kind` 分开）、取值域（`parse`）、同一帧里同一个列表槽的行 id 只出现一次、上行帧的键集与 `id` 形状。
   闭集**不手写第二份**：`reflux/sdk/closed.py` 从生成的模型（`types.py` ← schema）算出允许的键（取 alias——线上叫 `class`，模型叫 `class_`），减去 profile 的 `hidden_attrs`；构造期（`wire`）与边界（`ingest`）读同一份。由此 `profile.expose` **不是**词表封闭度而是构造器面：`template` 节点线上合法（它是 `tmpl`/`inject` 展开的替换节点），只是没有建造器。`sender` 只校形状（非空字符串），不校「等于本会话 id」——渲染器整仓不读这个字段（它只是信封的必填项），一条 socket 本来也是一个会话。两条写明的边界：**槽名在入站判不了**（要会话持着它发出去的树——影子状态），留在 SDK 构造期；**退休壳的方言不在这一层**（没有 `content` 的帧归壳自己的 `validate.js`，M1.7 随壳退场）。代价认下：每个带节点的帧多一次闭集走查与一次 `parse`（构造期已经做过一遍），量级归 T11 测——封闭性优先于这点成本，而渲染器那边**不会**替我们拒。门槛：`python3 tools/gate_m1_5.py`（12 条，真 socket、门自己当生产者、零 chromium）＋ `python3 -m unittest tests.test_ingest`（22 例表驱动）。
-- **M1.6——交互门重对。** T2（壳的 store 与解释器）与 T3（分派表与本地态）退场——它们是壳的内部，渲染器那边有实现；换成两条端到端：八个 action 各自的落点、profile 里每个类型至少画出来一次。T4 改写：`input` 失焦上行、`form` 一次提交带上 `fields`、`id` 认领规则；`payload` 那几条断言删掉。T8 的坏帧清单以入站为准（渲染器的降级只 `warn`，不计数）。门槛：改写后的 T4′／T8′，加 T5／T7 的离线门，全套绿。
+- **M1.6——交互门重对。**（已落地 2026-10-20）T2 由 `gate_t2_next.py` 接住（八个 action 各一条 DOM 断言）；T3 的替代是「词表画得出来」——离线 `tests/test_types_drawable.py`（29 个暴露类型各一个最小合法节点，且这份表必须**等于** profile 的暴露集：加了类型不补节点即红）＋ `gate_t3_next.py`（21 个角色 class 逐个出现、`fold` 的头/体、`form` 里的 button、`portal` 的挂载、`select` 的选项与选中、`table` 一族、`rack` 按槽渲染、`pages` 的选中页，加四条令牌的 computed style）。T4′（`gate_t4_next.py`）按渲染器的**真实**时机断言，而不是旧壳的 `fire: change`：`input` 在 **Enter** 上行（全仓没有 blur 监听），空值不上行，`field` 绑定的回车只提交进 form，`form` 由 submit 按钮一次性发出全部字段，帧的 `id` = 发射节点自身、空 id 无键，字段条目带的是渲染器自己的 `payload: null`。T8′（`gate_t8_next.py`）只留页面侧三条（未注册的事件名、处理器抛异常、一帧被拒不留半回合）——帧级那两道门归 `gate_m1_5.py`，不重测。旧 t2/t3/t4/t8 继续对着壳跑到 M1.7。门槛：`gate_t3_next.py`（18 条）＋ `gate_t4_next.py`（8 条）＋ `gate_t8_next.py`（5 条）＋ 全套（178 例、15 道门）。
 - **M1.7——退场。** 删 `spec/`、`shell/*`（vendored SolidJS、壳 CSS、壳侧生成物）、`tools/gen.py` 里生成壳分派表的那一半、对着规格与壳写的用例；`/__next` 提到 `/`；`App.draw_page`／`not_found` 切到 `wire`（壳没了，没有第二个方言要迁就）；`gen_sdk.py --check` 留作词表门。门槛：`rg 'spec/components.json|shell/js|SolidJS'` 零命中，全套绿。
 
 ## 词汇
 
-规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`bind`（accrete 的绑定表：读槽 / 上行落点 / 表单字段，见「组件形状」）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的八个操作：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择与默认）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`session`（路由＋身份＋推送目标）、`handler`（处理器）、`frame`（上行帧 `{event, id, data}`）、`channel`（一条 WS 连接）、`app`（页面钩子＋通道＋事件名注册表）、`ui`／`ops`（写入层：节点与帧的构造器）。`shell`、`spec` 与 `fire`／`payload` 是退场形态的词，只在描述现状时用。别处不再另造同义词。
+规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`bind`（accrete 的绑定表：读槽 / 上行落点 / 表单字段，见「组件形状」）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的八个操作：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`session`（路由＋身份＋推送目标）、`handler`（处理器）、`frame`（上行帧 `{event, id, data}`）、`channel`（一条 WS 连接）、`app`（页面钩子＋通道＋事件名注册表）、`ui`／`ops`（写入层：节点与帧的构造器）。`shell`、`spec` 与 `fire`／`payload` 是退场形态的词，只在描述现状时用。别处不再另造同义词。

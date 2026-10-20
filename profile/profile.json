@@ -14,7 +14,11 @@
   ],
   "hidden_attrs": ["class", "selector"],
   "kwarg_renames": { "type": "kind" },
-  "tokens": {},
+  "tokens": {
+    "text": { "heading-1": "rx-heading-1", "heading-2": "rx-heading-2", "heading-3": "rx-heading-3",
+              "code": "rx-code", "muted": "rx-muted", "danger": "rx-danger" },
+    "case": { "card": "rx-card" }
+  },
   "types": {
     "case":        { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
     "placeholder": { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": { "value": ["source"] } },
@@ -35,8 +39,8 @@
     "pages":       { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["source"], "select": ["source", "local"] } },
     "button":      { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["submit"] } },
     "image":       { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default"] } },
-    "input":       { "expose": true,  "positional": null,       "children": false, "item": false, "js_kind": true, "bind": { "value": ["default", "source", "event", "field"] } },
-    "select":      { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["default", "source", "event", "field"], "options": ["source"] } },
+    "input":       { "expose": true,  "positional": null,       "children": false, "item": false, "js_kind": true, "bind": { "value": ["event", "field"] } },
+    "select":      { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["default", "source", "event"], "options": ["source"] } },
     "table":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
     "thead":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
     "tbody":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
@@ -44,7 +48,7 @@
     "th":          { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
     "td":          { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
     "text":        { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default", "source"] } },
-    "textarea":    { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["default", "source", "event", "field"], "placeholder": ["default"] } },
+    "textarea":    { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["default", "source", "event"], "placeholder": ["default"] } },
     "template":    { "expose": false, "positional": null,       "children": false, "item": false, "bind": {}, "why": "the renderer draws it as an empty view — it is a substitution node for tmpl/inject, not something a producer draws" }
   }
 }
