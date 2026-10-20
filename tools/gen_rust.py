@@ -47,6 +47,10 @@ HEADER = '''// GENERATED from schema/accrete.schema.json + profile/profile.json 
 // serde_json's `preserve_order`; without it `Map` is a BTreeMap and every key would come out sorted.
 //
 // Regenerate: python3 tools/gen_sdk.py      Verify: python3 tools/gen_sdk.py --check
+//
+// This file is deliberately not `cargo fmt`-shaped: the generator writes wide signatures, and
+// formatting it would make `--check` fail on a clean tree. Format the hand-written files by name
+// (`rustfmt src/lib.rs src/wire.rs src/markers.rs src/bin/frames.rs`) and leave this one alone.
 
 #![allow(clippy::too_many_arguments)]
 

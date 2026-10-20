@@ -67,6 +67,9 @@ def python_turns() -> list[tuple[str, dict]]:
                 *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows],
             ),
         ),
+        # The second page, through the same sugar: it proves `markers.page` on both sides and
+        # covers a page whose node mix is not the reference page's.
+        ("about page", wire.draw(SESSION, wire.create(demo.demo.about()))),
     ]
 
 
@@ -109,10 +112,10 @@ def main() -> int:
         ok = want == got
         checks.append((label, ok, f"{len(want)} B" if ok else first_difference(want, got)))
 
-    # The frames are distinct turns, not the same frame five times: a green run that compared a
+    # The frames are distinct turns, not the same frame N times: a green run that compared a
     # constant against itself would prove nothing.
     distinct = len({bytes(got) for got in actual}) == len(actual)
-    checks.append(("five distinct frames", distinct, f"{len(set(actual))} unique of {len(actual)}"))
+    checks.append((f"{len(actual)} distinct frames", distinct, f"{len(set(actual))} unique of {len(actual)}"))
 
     for index, (label, ok, detail) in enumerate(checks, 1):
         print(f"[{index}/{len(checks)}] {'PASS' if ok else 'FAIL'}  {label}: {detail}")

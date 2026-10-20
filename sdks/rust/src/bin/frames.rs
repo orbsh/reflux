@@ -5,7 +5,8 @@
 //! rows. The gate builds these with the Python SDK and compares bytes; nothing here talks to a
 //! server, because producing the frame is the SDK's whole job.
 
-use reflux_sdk::types::{button, case, form, input, placeholder, rack, text, JsType, TextVariant};
+use reflux_sdk::markers;
+use reflux_sdk::types::{button, form, input, rack, text, JsType, TextVariant};
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::Value;
 use std::io::Write;
@@ -14,35 +15,30 @@ const SESSION: &str = "measure1";
 const ECHO: &str = "echo";
 const ROWS: &str = "rows";
 const SUBMITTED: &str = "submitted";
-const PATH_MARKER: &str = "reflux:path";
-const TITLE_MARKER: &str = "reflux:title";
-
-/// One reserved-id node: a `placeholder` puts its id on the DOM, where the runtime reads it.
-fn marker(id: &str, value: &str) -> Value {
-    placeholder(&[text(Some(value), None, None, None, None)], None, None, Some(id))
-}
-
-/// A page: the two markers the client runtime mirrors, then the content.
-fn page(path: &str, title: &str, children: &[Value]) -> Value {
-    let mut nodes = vec![marker(PATH_MARKER, path), marker(TITLE_MARKER, title)];
-    nodes.extend_from_slice(children);
-    case(&nodes, None, None, Some("page-root"), None)
-}
 
 /// A one-button form — the vocabulary's only clickable, and the demo's way between pages.
 fn nav_form(label: &str, event: &str) -> Value {
     let id = format!("nav-{event}");
-    form(&[button(Some(label), None, None)], None, Some(event), None, Some(&id))
+    form(
+        &[button(Some(label), None, None)],
+        None,
+        Some(event),
+        None,
+        Some(&id),
+    )
 }
 
 /// One row: its text, and the form whose submit carries the row's own id up.
 fn row_node(id: &str, value: &str) -> Value {
-    let children = [text(Some(value), None, None, None, None), button(Some("删"), None, None)];
+    let children = [
+        text(Some(value), None, None, None, None),
+        button(Some("删"), None, None),
+    ];
     form(&children, None, Some("row.remove"), None, Some(id))
 }
 
 fn home() -> Value {
-    page(
+    markers::page(
         "/",
         "演示",
         &[
@@ -78,15 +74,36 @@ fn home() -> Value {
     )
 }
 
+fn about() -> Value {
+    markers::page(
+        "/about",
+        "关于",
+        &[
+            text(Some("关于"), None, None, None, Some(TextVariant::Heading1)),
+            text(
+                Some("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
+                None,
+                None,
+                None,
+                None,
+            ),
+            nav_form("回到演示", "go.home"),
+        ],
+    )
+}
+
 fn main() {
     let turns = [
-        ("echo", draw(SESSION, &[set(ECHO, text(Some("hello"), None, None, None, None))])),
         (
-            "add row",
+            "echo",
             draw(
                 SESSION,
-                &[append(ROWS, row_node("row-4", "第 4 行"), 0)],
+                &[set(ECHO, text(Some("hello"), None, None, None, None))],
             ),
+        ),
+        (
+            "add row",
+            draw(SESSION, &[append(ROWS, row_node("row-4", "第 4 行"), 0)]),
         ),
         ("remove row", draw(SESSION, &[remove(ROWS, "row-1")])),
         (
@@ -95,7 +112,13 @@ fn main() {
                 SESSION,
                 &[set(
                     SUBMITTED,
-                    text(Some("已提交 {\"pass\": \"secret\", \"user\": \"ada\"}"), None, None, None, None),
+                    text(
+                        Some("已提交 {\"pass\": \"secret\", \"user\": \"ada\"}"),
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
                 )],
             ),
         ),
@@ -110,6 +133,7 @@ fn main() {
                 ],
             ),
         ),
+        ("about page", draw(SESSION, &[create(about())])),
     ];
 
     let mut out = std::io::stdout().lock();

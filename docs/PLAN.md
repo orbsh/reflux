@@ -30,7 +30,7 @@
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
 | T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ✅ 2026-10-20 | `python3 tools/gate_t9.py`（10 条，真浏览器 drive `demo_app`）＋ 全套 |
-| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ✅ 2026-10-20 | `python3 tools/gate_t10.py`（6 条字节对拍）＋ `cargo build` ＋ 全套 |
+| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ✅ 2026-10-20 | `python3 tools/gate_t10.py`（7 条：六帧字节对拍＋互不相同）＋ `cargo build` ＋ 全套 |
 | T11 测量 | ✅ 2026-10-20 | `python3 tools/measure.py`（四段）＋ 数字在 `docs/PERF.md` |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
 | M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ✅ 2026-10-20（M1.1–M1.7 全部落地） | 见下七行 |
@@ -691,3 +691,20 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
 
 `cargo build` 零 warning；`sdks/rust/target/` 与 `Cargo.lock` 进 `.gitignore`。**首次 `cargo build` 要 crates.io**：
 本机直连 TLS 断（`SSL connect error`），走 `HTTPS_PROXY=http://127.0.0.1:7890` 才通；之后 `cargo run` 不需要网络。
+
+## 2026-10-20 · 标记糖（`reflux:path` / `reflux:title` 有名字了）
+
+触发条件是 DESIGN 自己写的那条：等第二个消费者。T10 之后它到齐了——参考应用、`gate_t6`、`sdks/rust` 的帧转储
+三份手写副本，形状一字不差，这就叫「名字被逼出来了」。
+
+- **手写，不生成**：`reflux/sdk/markers.py` 与 `sdks/rust/src/markers.rs`。`reflux:` 前缀归 `reflux/protocol.py`，
+  而 `path`／`title` 这两个词 accrete 不认识——进了 vocabulary 就等于让词表承载 reflux 自己的策略。
+- **签名由副本定**：`page(path, title, *children)`（Rust 是 `page(path, title, children)`），外加 `PATH_ID`／
+  `TITLE_ID`／`PAGE_ID` 三个常量。`page-root` 只是默认的根 id，没有任何东西读它。
+- **三个调用点收敛**：`demo_app` 的 `marker`／`page` 删掉；`gate_t6` 的本地 `page()` 变成「糖 + 它自己的两个旋钮」
+  （`label=`、`markers=False`，这两件是这个门的场景需要，不属于约定）；`frames.rs` 的 `marker`／`page` 删掉。
+- **证据两层**：`gate_t10` 加「关于页」一帧（843 B），现在 7 条——第二页也走同一份糖，且那一页的节点组合与参考页
+  不同；`gate_t9` 在真浏览器里证明这两个标记确实移动地址栏（糖为了的那件事真的发生，不是「定义了一个没人验证的
+  helper」）。
+- 一个坑：`rustfmt src/lib.rs` 会顺着 `mod types;` 把**生成**文件也格式化，`--check` 立刻红。生成文件头部已写明
+  「别 fmt 它，按名字 fmt 手写文件」。今天正是这么踩了一次，然后重新生成修回。
