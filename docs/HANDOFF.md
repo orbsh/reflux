@@ -32,21 +32,26 @@ python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后
 python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
 python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／表单／两条路由）
+python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
+python3 tools/measure.py --only bytes,cpu        #   只跑其中两段
 ```
 
 浏览器门共用 `tools/cdp.py`（stdlib CDP 夹具，真 chromium、真鼠标/按键、`open_page` 负责起服务与等启动）。
 门都由**门自己当生产者**：等会话出现、用 `wire`/`sdk.builders` 组帧、`session.send` 发出，再读 DOM。
 `gate_ingest.py` 只要那条 socket（`cdp.Ws`），不需要浏览器。
 
-## 三、下一件：T10 或 T11（T9 已落地，由用户定）
+## 三、下一件：T10（第二个语言的 SDK）
 
-- **T10——第二个语言的 SDK（最小）。** 只生成构造器与上行，证明「规格是产品」不是口号。判据是 `sdks/<lang>/`
-  与 Python 版对同一份 schema 快照产出**逐字相同**的线上帧。现在 `sdks/python` 只有目录占位，`tools/gen_sdk.py`
-  是单语言实现。
-- **T11——测量。** 每回合帧字节数、重渲染范围（DOM 变更计数）、首屏与资产体积、100 会话 × N 事件/秒的服务端
-  CPU。判据是数字进 `docs/PERF.md`，且 DESIGN 里每条性能断言要么有测量、要么被显式标为未测量。DESIGN 里已经
-  认下但没量的三处：`wire` 构造期 + 入站那道门的双份走查（闭集与 `parse`）、`append.position` 换成生产者计数、
-  两个页面并存期那张「两页同夹具」的表（M1.7 之后只剩一页，T11 只需量一次）。
+T11 已落地，数字在 `docs/PERF.md`。剩下的一件是 **T10——第二个语言的 SDK（最小）**：只生成构造器与上行，证明
+「规格是产品」不是口号。
+
+判据已经现成：同一个 demo 结构在第二语言里写出来，线上帧与 Python 版**逐字一致**——对表用 T11 量出来的那份基线
+（回声 171 B／加行 392 B／删行 103 B／表单提交 222 B／翻页 2 761 B；信封 70 B、每 op 21 B）。现在
+`tools/gen_sdk.py` 是单语言实现，`sdks/python` 只有目录占位；第二语言要先决定的是**怎么把 profile 与 schema 快照
+喂给它**（复用 Python 脚本生成，还是照同一份 JSON 自己写一遍模板）。
+
+另一条可选的线是 `reflux events` CLI（打印事件名注册表）——它要一个「从包装配出应用」的约定，独立于 T10，但比
+T10 小得多。
 
 ## 四、硬约束（这些轮踩出来的，别再踩）
 
@@ -118,6 +123,7 @@ www/static/logo.svg            页面自己的图片资产（fixture 与示例�
 www/static/vendor/fluxen/      钉住的渲染器包 + versions.json（升版只改这里）
 tools/cdp.py                   CDP 夹具：open_page（起服务、等启动、注入 error hook）、真鼠标/按键、Ws 客户端
 tools/gate_ingest.py           入站门（真 socket，无 chromium）
+tools/measure.py               T11 的测量（帧字节 / DOM 变更 / 首屏 / 服务端 CPU）；数字落 docs/PERF.md
 tools/gate_t0.py … gate_t9.py    九道门（t2/t3/t4/t6/t9 浏览器，t7 真浏览器 + 离线，t8/t9 页面侧，ingest 真 socket）
 tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则

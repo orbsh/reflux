@@ -31,7 +31,7 @@
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
 | T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ✅ 2026-10-20 | `python3 tools/gate_t9.py`（10 条，真浏览器 drive `demo_app`）＋ 全套 |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
-| T11 测量 | ⏳ | — |
+| T11 测量 | ✅ 2026-10-20 | `python3 tools/measure.py`（四段）＋ 数字在 `docs/PERF.md` |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
 | M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ✅ 2026-10-20（M1.1–M1.7 全部落地） | 见下七行 |
 | M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用仓里钉住的包，无需 fluxen 检出） |
@@ -646,3 +646,26 @@ button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 form；
 画不出来，`gate_t6` 因此刻意没有这条）。门里选按钮按文字选（`.button` 的 innerText）而不是按下标——下标在列表
 增删之后会变，那是 T9 这一轮踩到的第一个坑（第一版按 `#main input` 取节点，也错：渲染器的树不保证挂在 `#main`
 里面，全局 `querySelectorAll` 才稳）。
+
+## 2026-10-20 · T11（测量）
+
+`tools/measure.py` 四段，数字与口径写在 `docs/PERF.md`（带机器、日期，可复跑：`python3 tools/measure.py`）。
+这一轮**不改设计、不加缓存**：题目是把已认下的代价量出来。
+
+```
+帧字节      回声 171 B · 加行 392 B · 删行 103 B · 表单提交 222 B · 翻页 2 761 B · 信封 70 B · 每 op 21 B
+DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，childList+characterData+subtree）
+首屏        渲染器包 2 420 114 B · reflux 自己 4 717 B · 文档开始→树 16 ms · DCL 12 ms（三次中位数）
+服务端 CPU  100 会话 × 50 帧/秒：24 472 帧、0 拒收、99 µs/帧、持续 3 699 帧/秒（客户端在子进程）
+双份走查    建一个 set op 4.2 µs · 出帧那道门 3.4 µs · 入站那道门 0.2 µs（各 3000 次；跨运行 4–11 µs）
+```
+
+结论三条：**重渲染范围是真的窄**（窄写与列表各一条 DOM 变更，只有整树替换才是一批）；**双份走查占一帧的
+3–4 %**，不是主要成本（主要成本在 JSON 编解码与 socket），所以 M1.5 认下那笔代价的量级是「量过，不值得优化」；
+**服务端 CPU 99 µs/帧**，与 Why Not 里被否掉的「服务端每事件重渲染」那 0.37 ms/回合 相比刚好差一档——那条拒绝
+现在有对照数字了。
+
+这一轮唯一动过的一行代码：`reflux/server.py` 的 `PageHandler.finish` 容忍对端半途消失（`BrokenPipe`／
+`ConnectionReset`）。它原来是 `App.handle` 已经记完账、`socketserver` 随后往死 socket 冲缓冲时抛出的栈——压测
+里每轮十几条噪音，不影响任何计数。**没有量到的**：深链多等一次往返的毫秒数（要和服务端渲染并列才有意义）。
+方法上的界限写在 PERF.md 末节：只在一台机器上横比、分母永远是帧、不假装精度。
