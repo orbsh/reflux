@@ -1,4 +1,4 @@
-# Reflux — 交接（2026-10-20 快照，M1.7 后）
+# Reflux — 交接（2026-10-20 快照，T10 后）
 
 给接手的会话：先读 `docs/DESIGN.md`（设计，含每次裁决的 Why Not）和 `docs/PLAN.md`（台账：什么真的落地了、
 每件怎么复验）。这份文件只讲「现在站哪儿、下一步做什么、哪些坑已经替你踩过」，它会随日期过期，PLAN 不会。
@@ -15,6 +15,9 @@
   `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`）。
 - 仓里钉着的渲染器包是 fluxen 0bf166d 的 **release** 构建：`www/static/vendor/fluxen/`，4 件资产共
   2 420 114 B（wasm 2 348 320 B），清单在 `versions.json`（rev + 逐文件 sha256/大小）。
+- 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
+  `src/wire.rs` 手写），`gate_t10.py` 断言它建的五帧与 Python **逐字节相等**。词表只有一份模型
+  （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
 
 ## 二、怎么跑（全绿才算数）
 
@@ -30,6 +33,7 @@ python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历�
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
 python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
+python3 tools/gate_t10.py                        # 6 条：Rust SDK 的帧与 Python 逐字节相等（要 cargo）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
 python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／表单／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
@@ -102,9 +106,10 @@ T10 小得多。
 - `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
 - `bind` 的 `local` 落点只有 `fold`／`pages` 的构造器暴露（`text` 没有）；`gate_t2.py` 的 fixture 手写了这一处。
 - `reflux events` CLI（打印事件名注册表）没有；`routes` 那个动词有。
-- T10、T11 都没做。
+- T11、T10 都落了；DESIGN 的「实施计划」里**没有剩下的里程碑**——留下的是这几条小的（上面四条）与「开放问题」里
+  还没结的裁决。
 
-## 六、文件地图（M1.7 之后）
+## 六、文件地图（T10 之后）
 
 ```
 reflux/protocol.py             协议自己的两个数字：MAX_OPS_PER_FRAME、RESERVED_PREFIX
@@ -124,7 +129,11 @@ www/static/vendor/fluxen/      钉住的渲染器包 + versions.json（升版只
 tools/cdp.py                   CDP 夹具：open_page（起服务、等启动、注入 error hook）、真鼠标/按键、Ws 客户端
 tools/gate_ingest.py           入站门（真 socket，无 chromium）
 tools/measure.py               T11 的测量（帧字节 / DOM 变更 / 首屏 / 服务端 CPU）；数字落 docs/PERF.md
-tools/gate_t0.py … gate_t9.py    九道门（t2/t3/t4/t6/t9 浏览器，t7 真浏览器 + 离线，t8/t9 页面侧，ingest 真 socket）
+tools/vocabulary.py            词表模型：schema + profile + 类型层的字段序，两个 emitter 共用
+tools/gen_rust.py              Rust emitter：词表 → sdks/rust/src/types.rs
+tools/gate_t10.py              T10 的门：五帧字节对拍（要 cargo；首次 build 需 crates.io）
+sdks/rust/                     第二语言的 SDK：生成的 src/types.rs + 手写的 src/wire.rs 与 src/bin/frames.rs
+tools/gate_t0.py … gate_t10.py   十道门（t2/t3/t4/t6/t9/t10 用浏览器或 cargo，t7 真浏览器 + 离线，t8 页面侧，ingest 真 socket）
 tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
@@ -133,8 +142,8 @@ tests/test_app.py              路由解析、内置 404、demo 的种子与导�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（148 例 + 九道门，全绿）
-2. 读 DESIGN 的「实施计划」T10／T11 两条与 PLAN 的对应行，以及「开放问题」里还没结的那几条
-3. 出下一轮的计划（T10 或 T11，先跟用户定哪条）—— 等「开」
+1. 跑一遍第二节的全套，确认基线（148 例 + 十道门，全绿；gate_t10 需要 cargo）
+2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节列的四条小缺口
+3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
 ```

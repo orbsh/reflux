@@ -30,7 +30,7 @@
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
 | T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ✅ 2026-10-20 | `python3 tools/gate_t9.py`（10 条，真浏览器 drive `demo_app`）＋ 全套 |
-| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ⏳ 先决：M1 | — |
+| T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ✅ 2026-10-20 | `python3 tools/gate_t10.py`（6 条字节对拍）＋ `cargo build` ＋ 全套 |
 | T11 测量 | ✅ 2026-10-20 | `python3 tools/measure.py`（四段）＋ 数字在 `docs/PERF.md` |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
 | M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ✅ 2026-10-20（M1.1–M1.7 全部落地） | 见下七行 |
@@ -669,3 +669,25 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
 `ConnectionReset`）。它原来是 `App.handle` 已经记完账、`socketserver` 随后往死 socket 冲缓冲时抛出的栈——压测
 里每轮十几条噪音，不影响任何计数。**没有量到的**：深链多等一次往返的毫秒数（要和服务端渲染并列才有意义）。
 方法上的界限写在 PERF.md 末节：只在一台机器上横比、分母永远是帧、不假装精度。
+
+## 2026-10-20 · T10（Rust SDK，第二个语言）
+
+`python3 tools/gate_t10.py`：6 条（五帧字节对拍 ＋「五帧互不相同」——一条拿常量比自己也会绿的检查不值得算数）。
+五帧 154 / 353 / 93 / 205 / 2 498 B（紧凑 JSON；`PERF.md` 那组 171/392/… 是 `json.dumps` 的带空白形态，两者不是一回事）。
+
+形状：`tools/vocabulary.py` 是唯一一份词表模型（schema + profile + **类型层声明的字段序**），`tools/gen_sdk.py` 与
+`tools/gen_rust.py` 只做格式化；`sdks/rust/` 里生成的只有 `src/types.rs`，`src/wire.rs` 与 `src/bin/frames.rs` 手写。
+
+两个坑值得记：
+- **键序是契约**：bind 条目在 Python 侧是 `Bind1..6` 的声明序（`default, type, kind, path, source`），**不是字母序**。
+  Rust 侧靠 `serde_json` 的 `preserve_order` 再按同一序插入，两边都不排序；字段序则从生成的 `types.py` 用 ast 读出来，
+  不靠「大概是字母序」的猜。
+- **默认值照写**：`oneshot=false`、`display="render"` 这类 schema 默认，Python 侧省略实参也照样落线上。Rust 侧第一版
+  写成「`None` 就省略」，`add row` 那一帧立刻差 26 B（`{"attrs":{"oneshot":false}}` 整块消失），改法是 `unwrap_or(默认)`。
+
+抽模型那一步的判据只有一条：**Python 的产物必须逐字节不变**——emitter 改完立刻 `gen_sdk --check`，绿了才算抽对。
+其它三个小修：单落点的 bind 键不生成「只能有一个」的断言；`portal` 的线上形状没有 `id` 字段，Rust 侧就不发这个参数
+（Python 那侧接受并静默丢掉，是那边的松）；`input` 的 payload/kind 断言要落在 `field` 参数上（第一版写成 `source`，编译不过）。
+
+`cargo build` 零 warning；`sdks/rust/target/` 与 `Cargo.lock` 进 `.gitignore`。**首次 `cargo build` 要 crates.io**：
+本机直连 TLS 断（`SSL connect error`），走 `HTTPS_PROXY=http://127.0.0.1:7890` 才通；之后 `cargo run` 不需要网络。
