@@ -12,43 +12,327 @@
     "tokens:      enum value -> class token, filled in when the styling layer lands (M1). Until then the",
     "             builders offer no class strings at all — the producer cannot reach a free class."
   ],
-  "hidden_attrs": ["class", "selector"],
-  "kwarg_renames": { "type": "kind" },
+  "hidden_attrs": [
+    "class",
+    "selector"
+  ],
+  "kwarg_renames": {
+    "type": "kind"
+  },
   "tokens": {
-    "text": { "heading-1": "rx-heading-1", "heading-2": "rx-heading-2", "heading-3": "rx-heading-3",
-              "code": "rx-code", "muted": "rx-muted", "danger": "rx-danger" },
-    "case": { "card": "rx-card" }
+    "text": {
+      "heading-1": "rx-heading-1",
+      "heading-2": "rx-heading-2",
+      "heading-3": "rx-heading-3",
+      "code": "rx-code",
+      "muted": "rx-muted",
+      "danger": "rx-danger"
+    },
+    "case": {
+      "card": "rx-card"
+    }
   },
   "types": {
-    "case":        { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "placeholder": { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": { "value": ["source"] } },
-    "chart":       { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default", "source"] } },
-    "diagram":     { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default"] } },
-    "canvas":      { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default", "source"] } },
-    "editor":      { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default", "source"] } },
-    "float":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "layer":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": { "value": ["source"] } },
-    "portal":      { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "fold":        { "expose": true,  "positional": "children", "children": true,  "item": true,  "bind": { "value": ["default"] } },
-    "form":        { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": { "value": ["event", "local"] } },
-    "popup":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "svg":         { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "group":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "path":        { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default"] } },
-    "rack":        { "expose": true,  "positional": null,       "children": false, "item": true,  "bind": { "value": ["source"] } },
-    "pages":       { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["source"], "select": ["source", "local"] } },
-    "button":      { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["submit"] } },
-    "image":       { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default"] } },
-    "input":       { "expose": true,  "positional": null,       "children": false, "item": false, "js_kind": true, "bind": { "value": ["event", "field"] } },
-    "select":      { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["default", "source", "event"], "options": ["source"] } },
-    "table":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "thead":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "tbody":       { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "tr":          { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "th":          { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "td":          { "expose": true,  "positional": "children", "children": true,  "item": false, "bind": {} },
-    "text":        { "expose": true,  "positional": "value",    "children": false, "item": false, "bind": { "value": ["default", "source"] } },
-    "textarea":    { "expose": true,  "positional": null,       "children": false, "item": false, "bind": { "value": ["default", "source", "event"], "placeholder": ["default"] } },
-    "template":    { "expose": false, "positional": null,       "children": false, "item": false, "bind": {}, "why": "the renderer draws it as an empty view — it is a substitution node for tmpl/inject, not something a producer draws" }
+    "case": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "placeholder": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {
+        "value": [
+          "source"
+        ]
+      }
+    },
+    "chart": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default",
+          "source"
+        ]
+      }
+    },
+    "diagram": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default"
+        ]
+      }
+    },
+    "canvas": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default",
+          "source"
+        ]
+      }
+    },
+    "editor": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default",
+          "source"
+        ]
+      }
+    },
+    "float": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "layer": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {
+        "value": [
+          "source"
+        ]
+      }
+    },
+    "portal": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "fold": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": true,
+      "bind": {
+        "value": [
+          "default"
+        ]
+      }
+    },
+    "form": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {
+        "value": [
+          "event",
+          "local"
+        ]
+      }
+    },
+    "popup": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "svg": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "group": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "path": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default"
+        ]
+      }
+    },
+    "rack": {
+      "expose": true,
+      "positional": null,
+      "children": false,
+      "item": true,
+      "bind": {
+        "value": [
+          "source"
+        ]
+      }
+    },
+    "pages": {
+      "expose": true,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "source"
+        ],
+        "select": [
+          "source",
+          "local"
+        ]
+      }
+    },
+    "button": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "submit"
+        ]
+      }
+    },
+    "image": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default"
+        ]
+      }
+    },
+    "input": {
+      "expose": true,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "js_kind": true,
+      "bind": {
+        "value": [
+          "event",
+          "field"
+        ]
+      }
+    },
+    "select": {
+      "expose": true,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default",
+          "source",
+          "event"
+        ],
+        "options": [
+          "source"
+        ]
+      }
+    },
+    "table": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "thead": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "tbody": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "tr": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "th": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "td": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "bind": {}
+    },
+    "text": {
+      "expose": true,
+      "positional": "value",
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default",
+          "source",
+          "local"
+        ]
+      }
+    },
+    "textarea": {
+      "expose": true,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {
+        "value": [
+          "default",
+          "source",
+          "event"
+        ],
+        "placeholder": [
+          "default"
+        ]
+      }
+    },
+    "template": {
+      "expose": false,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {},
+      "why": "the renderer draws it as an empty view — it is a substitution node for tmpl/inject, not something a producer draws"
+    }
   }
 }

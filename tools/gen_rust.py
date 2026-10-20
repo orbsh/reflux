@@ -238,18 +238,19 @@ def bind_block(model, bind_orders: dict[str, list[str]]) -> list[str]:
     mutually exclusive by construction and the count assertion keeps it loud. Entry keys come out in
     the arm's declaration order — `type` sits before `field` because `Bind4` says so.
     """
-    keys: list[tuple[str, list]] = []
+    groups: list[tuple[str, list]] = []
     for op in model.ops:
-        if op.kind in ("payload", "type"):
-            continue
-        if keys and keys[-1][0] == op.key:
-            keys[-1][1].append(op)
+        if groups and groups[-1][0] == op.key:
+            groups[-1][1].append(op)
         else:
-            keys.append((op.key, [op]))
-    riders = [p.kwarg for p in model.params if p.lane == "bind" and p.kwarg in ("payload", "kind")]
+            groups.append((op.key, [op]))
 
     lines: list[str] = ["    let mut bind = Map::new();"]
-    for key, ops in keys:
+    for key, key_ops in groups:
+        # Riders (`payload`, `type`, `path`) belong to one key's entry, not to the whole type: a
+        # type with `payload` on its `value` key and `path` on another must not cross them.
+        ops = [op for op in key_ops if op.kind not in ("payload", "type", "path")]
+        riders = [op.kwarg for op in key_ops if op.kind in ("payload", "type", "path")]
         names = ["value" if op.kwarg is None else op.kwarg for op in ops]
         if len(names) > 1:  # with one 落点 there is nothing to choose between
             lines += [
@@ -260,15 +261,17 @@ def bind_block(model, bind_orders: dict[str, list[str]]) -> list[str]:
                 "    }",
             ]
         if riders:
-            condition = " || ".join(f"{name}.is_some()" for name in riders)
-            riders_onto = next(
-                ("value" if op.kwarg is None else op.kwarg) for op in ops if op.kind == "field"
-            )
-            lines += [
-                f"    if {condition} {{",
-                f'        assert!({riders_onto}.is_some(), "{model.wire}: payload / kind need a落点 to ride on");',
-                "    }",
-            ]
+            for rider, onto in (("payload", "field"), ("kind", "field"), ("path", "local")):
+                if rider not in riders:
+                    continue
+                target = next(
+                    ("value" if op.kwarg is None else op.kwarg) for op in ops if op.kind == onto
+                )
+                lines += [
+                    f"    if {rider}.is_some() {{",
+                    f'        assert!({target}.is_some(), "{model.wire}: {rider} needs a {onto} 落点 to ride on");',
+                    "    }",
+                ]
 
         for index, op in enumerate(ops):
             name = "value" if op.kwarg is None else op.kwarg
@@ -291,9 +294,14 @@ def bind_block(model, bind_orders: dict[str, list[str]]) -> list[str]:
                 ]
             else:
                 field = "slot" if op.kind == "local" else "default" if op.kind in ("default", "submit") else op.kind
+                lines += [f'        let mut fields: Vec<(&str, Value)> = vec![("{field}", s(v))];']
+                if op.kind == "local" and "path" in riders:
+                    lines += ["        if let Some(p) = path {"]
+                    lines += ['            fields.push(("path", s(p)));']
+                    lines += ["        }"]
+                lines += [f'        fields.push(("kind", s("{op.kind}")));']
                 lines += [
-                    f'        let entry = ordered(&[("{field}", s(v)), ("kind", s("{op.kind}"))], &[{order_literal}]);',
-                    f'        put(&mut bind, "{key}", entry);',
+                    f'        put(&mut bind, "{key}", ordered(&fields, &[{order_literal}]));'
                 ]
         lines += ["    }"]
     return lines

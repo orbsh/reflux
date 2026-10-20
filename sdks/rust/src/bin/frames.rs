@@ -6,7 +6,7 @@
 //! server, because producing the frame is the SDK's whole job.
 
 use reflux_sdk::markers;
-use reflux_sdk::types::{button, form, input, rack, text, JsType, TextVariant};
+use reflux_sdk::types::{button, case, form, input, rack, text, JsType, TextVariant};
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::Value;
 use std::io::Write;
@@ -24,6 +24,7 @@ fn nav_form(label: &str, event: &str) -> Value {
         None,
         Some(event),
         None,
+        None,
         Some(&id),
     )
 }
@@ -31,10 +32,10 @@ fn nav_form(label: &str, event: &str) -> Value {
 /// One row: its text, and the form whose submit carries the row's own id up.
 fn row_node(id: &str, value: &str) -> Value {
     let children = [
-        text(Some(value), None, None, None, None),
+        text(Some(value), None, None, None, None, None, None),
         button(Some("删"), None, None),
     ];
-    form(&children, None, Some("row.remove"), None, Some(id))
+    form(&children, None, Some("row.remove"), None, None, Some(id))
 }
 
 fn home() -> Value {
@@ -42,10 +43,10 @@ fn home() -> Value {
         "/",
         "演示",
         &[
-            text(Some("演示"), None, None, None, Some(TextVariant::Heading1)),
+            text(Some("演示"), None, None, None, None, None, Some(TextVariant::Heading1)),
             input(None, Some("name.change"), None, None, None, Some("name-input")),
-            text(None, None, Some(ECHO), Some("echo"), None),
-            form(&[button(Some("加一行"), None, None)], None, Some("row.add"), None, Some("add-row")),
+            text(None, None, Some(ECHO), None, None, Some("echo"), None),
+            form(&[button(Some("加一行"), None, None)], None, Some("row.add"), None, None, Some("add-row")),
             rack(None, Some(ROWS), None, Some("rows")),
             form(
                 &[
@@ -55,10 +56,9 @@ fn home() -> Value {
                 ],
                 None,
                 Some("login.submit"),
-                None,
-                Some("login"),
-            ),
-            text(None, None, Some(SUBMITTED), Some("submitted"), None),
+                None, None,
+                Some("login")),
+            text(None, None, Some(SUBMITTED), None, None, Some("submitted"), None),
             nav_form("关于", "go.about"),
             text(
                 Some(
@@ -66,10 +66,9 @@ fn home() -> Value {
                      runtime 把标记镜像进地址栏。",
                 ),
                 None,
+                None, None, None,
                 None,
-                None,
-                Some(TextVariant::Muted),
-            ),
+                Some(TextVariant::Muted)),
         ],
     )
 }
@@ -79,9 +78,19 @@ fn about() -> Value {
         "/about",
         "关于",
         &[
-            text(Some("关于"), None, None, None, Some(TextVariant::Heading1)),
+            text(
+                Some("关于"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(TextVariant::Heading1),
+            ),
             text(
                 Some("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -98,7 +107,10 @@ fn main() {
             "echo",
             draw(
                 SESSION,
-                &[set(ECHO, text(Some("hello"), None, None, None, None))],
+                &[set(
+                    ECHO,
+                    text(Some("hello"), None, None, None, None, None, None),
+                )],
             ),
         ),
         (
@@ -114,6 +126,8 @@ fn main() {
                     SUBMITTED,
                     text(
                         Some("已提交 {\"pass\": \"secret\", \"user\": \"ada\"}"),
+                        None,
+                        None,
                         None,
                         None,
                         None,
@@ -134,6 +148,27 @@ fn main() {
             ),
         ),
         ("about page", draw(SESSION, &[create(about())])),
+        (
+            "local binding",
+            draw(
+                SESSION,
+                &[create(case(
+                    &[text(
+                        None,
+                        None,
+                        None,
+                        Some("chan"),
+                        Some("/data"),
+                        Some("local-echo"),
+                        None,
+                    )],
+                    None,
+                    None,
+                    Some("root"),
+                    None,
+                ))],
+            ),
+        ),
     ];
 
     let mut out = std::io::stdout().lock();

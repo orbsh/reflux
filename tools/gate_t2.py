@@ -38,16 +38,11 @@ TEMPLATE_BODY = (
 def local_text(slot: str, *, id: str):
     """A `text` bound to the vals plane.
 
-    Two things the generated builders do not give us here: `local` is exposed on `fold`/`pages` only,
-    so this one落点 is written by hand (the same wire shape `bind_entry(local=…)` produces), and the
-    vals slot holds the Outflow-shaped wrapper an in-page `local` emit would write — so the reader
-    takes `path: "/data"` to display the payload itself.
+    The reader takes `path: "/data"` because the vals slot holds the Outflow-shaped wrapper an
+    in-page `local` emit writes, so the payload itself is one level in. This used to be hand-built —
+    `local` was exposed on `fold`/`pages` only, so the `text` reader had no keyword for it.
     """
-    return {
-        "type": "text",
-        "id": id,
-        "bind": {"value": {"kind": "local", "slot": slot, "path": "/data"}},
-    }
+    return b.text(local=slot, path="/data", id=id)
 
 
 def tree():

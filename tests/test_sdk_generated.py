@@ -208,6 +208,20 @@ class ProfileTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             sdk.input(payload={"k": 1})  # payload rides a field落点, not thin air
 
+    def test_a_local_binding_carries_its_path(self):
+        # A client-side slot holds the wrapper an in-page emit wrote, so a reader that wants the
+        # payload itself points into it. `path` rides a local落点 and nothing else.
+        self.assertEqual(
+            sdk.dump(sdk.text(local="chan", path="/data"))["bind"],
+            {"value": {"kind": "local", "slot": "chan", "path": "/data"}},
+        )
+        self.assertEqual(sdk.dump(sdk.text(local="chan"))["bind"],
+                         {"value": {"kind": "local", "slot": "chan"}})
+        with self.assertRaises(ValueError):
+            sdk.text(source="title", path="/data")  # path on a source落点
+        with self.assertRaises(ValueError):
+            sdk.text(path="/data")  # path with no落点 at all
+
     def test_children_and_item_come_through(self):
         node = sdk.case(sdk.text("a"), sdk.text("b"))
         self.assertEqual([n["type"] for n in sdk.dump(node)["children"]], ["text", "text"])

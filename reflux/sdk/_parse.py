@@ -93,6 +93,7 @@ def bind_entry(
     local: str | None = None,
     submit: Any = None,
     payload: Any = None,
+    path: str | None = None,
     js_kind: Any = None,
 ) -> dict[str, Any] | None:
     """One entry of accrete's `bind` map — the display source, the uplink落点, or a form field, one
@@ -101,6 +102,8 @@ def bind_entry(
 
     `js_kind` is the entry's own `type` (accrete's `JsType`: bool → a checkbox, number, text,
     password, …), a sibling of the variant, not part of it. `payload` rides a `field`落点 only.
+    `path` rides a `local`落点: a client-side slot holds the wrapper an in-page emit wrote, so a
+    reader that wants the payload itself points at it (`path="/data"`).
     """
     picks = [
         ("default", default),
@@ -115,8 +118,8 @@ def bind_entry(
         names = [kind for kind, _ in chosen]
         raise ValueError(f'bind[{key!r}] takes one落点 at a time, got {names}')
     if not chosen:
-        if payload is not None or js_kind is not None:
-            raise ValueError(f"bind[{key!r}]: payload / kind need a落点 to ride on")
+        if payload is not None or js_kind is not None or path is not None:
+            raise ValueError(f"bind[{key!r}]: payload / kind / path need a落点 to ride on")
         return None
     kind, value = chosen[0]
     entry: dict[str, Any] = {"kind": kind}
@@ -128,8 +131,12 @@ def bind_entry(
             entry["payload"] = payload
     elif kind == "local":
         entry["slot"] = value
+        if path is not None:
+            entry["path"] = path
     else:  # source / event carry their own field, named after the kind
         entry[kind] = value
+    if path is not None and kind != "local":
+        raise ValueError(f"bind[{key!r}]: `path` rides a local落点, got {kind!r}")
     if js_kind is not None:
         entry["type"] = getattr(js_kind, "value", js_kind)
     return entry

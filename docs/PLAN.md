@@ -725,3 +725,17 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
 测试比打印格式更值的那一条：`tests/test_cli_events.py` 遍历参考应用两页的节点树，收集所有 `bind.kind == "event"`
 的名字，断言它们全在注册表里——`form(event="login.submit")` 打错字这类事现在不用起浏览器就会被抓住；行表单不在页面
 树里（它们走 `append`），所以 `row_node(...)` 自己也是被遍历的对象。新增 14 例。
+
+## 2026-10-20 · `local` 落点与它的 `path` 随行键
+
+`b.text(local="chan", path="/data")`。`local` 读的是客户端槽，槽里装的是页内 emit 写下的 Outflow 包装，所以显示载荷
+本身要再往里一层；`path` 不带 `local` 是构造期错误（`bind_entry` 里拦，不留渲染器去忽略）。
+
+- 生成器那条链三处一起动：`bind_entry` 收 `path`、vocabulary 给「有 `local` 的键」加一条 `path` 随行 op、两个 emitter
+  各自把它放进条目（Rust 侧的键序按 `Bind2`：`kind` 在 `path` 前、`slot` 在后）。
+- `gate_t2` 的 vals 平面检查从手写 dict 换成构造器——它现在证明的是「SDK 造得出、渲染器也接受」，不只是后者。
+- `gate_t10` 加第七帧（`local binding`，221 B）：`local` + `path` 的字节序两语言一致。
+- 撞到两个生成器缺陷：**随行键按「整个类型」算而不是按「这个键」算**（`text` 有 `path`、别的键有 `payload` 时会串），
+  改成按 key 分组取 riders；`{field!r}` 吐的是 Python 单引号，Rust 编译不过，改双引号。
+- **位置参数的代价**：`text` 多两个键，`frames.rs`／`markers.rs` 里 11 处调用按位补；`form` 多一个 `path`，另外 4 处补。
+  这条认下并写进 DESIGN 的 T10 段。

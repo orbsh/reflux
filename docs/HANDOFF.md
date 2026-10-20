@@ -16,14 +16,14 @@
 - 仓里钉着的渲染器包是 fluxen 0bf166d 的 **release** 构建：`www/static/vendor/fluxen/`，4 件资产共
   2 420 114 B（wasm 2 348 320 B），清单在 `versions.json`（rev + 逐文件 sha256/大小）。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
-  `src/wire.rs` 手写），`gate_t10.py` 断言它建的六帧与 Python **逐字节相等**。词表只有一份模型
+  `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
 
 ## 二、怎么跑（全绿才算数）
 
 ```
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 162 例
+python3 -m unittest discover -s tests -t .       # 163 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -33,7 +33,7 @@ python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历�
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
 python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
-python3 tools/gate_t10.py                        # 7 条：Rust SDK 的六帧与 Python 逐字节相等（要 cargo）
+python3 tools/gate_t10.py                        # 8 条：Rust SDK 的七帧与 Python 逐字节相等（要 cargo）
 python3 -m reflux.cli routes reflux.demo_app       # 路由表（import 的副作用）
 python3 -m reflux.cli events reflux.demo_app:make_app   # 事件名注册表（名字 / builtin|app / 来源）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
@@ -103,13 +103,12 @@ T10 小得多。
 
 ## 五、明确没做的（别当成已存在）
 
-- **SDK 的标记糖有了**：`reflux.sdk.markers`（Python）与 `sdks/rust/src/markers.rs`（Rust）手写同一份约定，
-  `page(path, title, …)` 一个调用出整页。别把它当词表的一部分——它不进 vocabulary，也不生成。
 - `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
-- `bind` 的 `local` 落点只有 `fold`／`pages` 的构造器暴露（`text` 没有）；`gate_t2.py` 的 fixture 手写了这一处。
-- `reflux events` CLI（打印事件名注册表）：**有了**，`python3 -m reflux.cli events <module>:<attr>`，目标写法是显式的 `module:attr`（不猜 `make_app`）；没有 Rust 对应物，注册表属于宿主不属于词表。
-- T11、T10 都落了；DESIGN 的「实施计划」里**没有剩下的里程碑**——留下的是这几条小的（上面四条）与「开放问题」里
-  还没结的裁决。
+- 这三件是**已落地**的，列在这里是为了说明它们不在「未做」里：标记糖（`reflux.sdk.markers` + `sdks/rust/src/markers.rs`
+  手写同一份约定，不进 vocabulary）、`reflux events` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
+  注册表属于宿主）、`text` 的 `local` 落点与它的 `path` 随行键（`gate_t2` 的 vals 平面检查已从手写 dict 换成构造器）。
+- 里程碑层面：T0–T11 与 M1.1–M1.7 全部落地，DESIGN 的「实施计划」里**没有剩下的条目**——余下的是上面那一条门缺口与
+  「开放问题」里还没结的裁决。
 
 ## 六、文件地图（T10 之后）
 
@@ -146,7 +145,7 @@ tests/test_app.py              路由解析、内置 404、demo 的种子与导�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（162 例 + 十道门，全绿；gate_t10 需要 cargo）
+1. 跑一遍第二节的全套，确认基线（163 例 + 十道门，全绿；gate_t10 需要 cargo）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节列的四条小缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
