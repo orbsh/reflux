@@ -363,9 +363,9 @@ def post_index(session, match): ...
 
 计数只归我们这一侧：渲染器的失败是 `tracing::warn`（一行日志，不带计数），所以每一条要在我们这里留下数字的降级——入站校验、路由、会话、出帧队列——都得计数并带足身份记日志（会话、路径、操作、事件名）。绕过 SDK 的生产者只剩渲染器的 `warn` 与我们的入站校验这两道，这条写明：静默降级不是选项，但有一道边界的可观测性在别人手里，这是选「帧定义只有一套」要认的账。
 
-## 示例应用（`reflux/examples/chat`）
+## 示例应用（`examples/chat`）
 
-框架此前只有一个使用者：`demo_app`（参考应用）。它证明「页面能怎么用」，不证明「页面后面那个后端在做什么」。`reflux/examples/chat` 补这一半——一页对话应用，六个后端行为各自有断言（`tests/test_chat_example.py` 19 例；`tools/gate_chat.py` 12 条，其中 3 条在真 Chromium 里）。
+框架此前只有一个使用者：`demo_app`（参考应用）。它证明「页面能怎么用」，不证明「页面后面那个后端在做什么」。`examples/chat` 补这一半——一页对话应用，六个后端行为各自有断言（`tests/test_chat_example.py` 19 例；`tools/gate_chat.py` 12 条，其中 3 条在真 Chromium 里）。
 
 - **状态挂在会话上**：`Chat` 是 `Session` 的（`setattr`，与「socket 就是状态」一致），随连接回收；不持久化、不跨刷新。显示那份（行）在页面树里，模型那份（turn 窗口）在后端——两者只在「停止」时故意分叉。
 - **流式 = 往槽里 append**：回话不是一帧写完，是每块一次 `patch(slot, "/bind/value/default", chunk, op="append")`。实测一句 126 字的回话是 42 帧（`gate_chat` 第 3 条）。这条路 walkthrough 早就在用，没有为聊天新增机制。

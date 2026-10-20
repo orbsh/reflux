@@ -12,8 +12,8 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from reflux.examples.chat import app as chat
-from reflux.examples.chat.model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
+from examples.chat import app as chat
+from examples.chat.model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
 from tests.fakes import FakeSession
 
 

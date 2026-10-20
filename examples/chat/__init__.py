@@ -1,7 +1,7 @@
 """An AI chat app: one page, a streaming backend, and a model seam you can swap.
 
-    python3 -m reflux.examples.chat.app --port 8100            # the app
-    python3 -m reflux.examples.chat.walkthrough --auto         # the demo, no browser
+    python3 -m examples.chat.app --port 8100            # the app
+    python3 -m examples.chat.walkthrough --auto         # the demo, no browser
 
 `app.make_app()` is the whole application; `model.Scripted` runs offline and `model.OpenAI` speaks the
 OpenAI-compatible SSE form.

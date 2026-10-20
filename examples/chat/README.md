@@ -6,8 +6,8 @@ reply that arrives in chunks, a stop that stops, a second message refused with a
 that can fail without taking the page down.
 
 ```
-python3 -m reflux.examples.chat.app --port 8100     # the app, then open http://127.0.0.1:8100/
-python3 -m reflux.examples.chat.walkthrough --auto  # the same backend, no browser
+python3 -m examples.chat.app --port 8100     # the app, then open http://127.0.0.1:8100/
+python3 -m examples.chat.walkthrough --auto  # the same backend, no browser
 python3 tools/gate_chat.py                          # 12 assertions over a socket and a browser
 ```
 
@@ -63,7 +63,7 @@ did (turn number, window, chunk delay) so a demo run reads as documentation.
 
 ```
 OPENAI_BASE_URL=https://api.example/v1 OPENAI_API_KEY=… OPENAI_MODEL=… \
-  python3 -m reflux.examples.chat.app --model openai
+  python3 -m examples.chat.app --model openai
 ```
 
 It has **not** been exercised against a live provider from this repo — there is no key here. Its
@@ -79,8 +79,8 @@ covers the part that can be wrong independently of the vendor; everything past t
 ## Run it against a running app
 
 ```
-python3 -m reflux.examples.chat.app --port 8100
-python3 -m reflux.examples.chat.walkthrough --attach --port 8100
+python3 -m examples.chat.app --port 8100
+python3 -m examples.chat.walkthrough --attach --port 8100
 ```
 
 `--delay` paces the chunks, `--window` sets the context window (small values make the trimming step

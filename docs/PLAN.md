@@ -740,7 +740,7 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
 - **位置参数的代价**：`text` 多两个键，`frames.rs`／`markers.rs` 里 11 处调用按位补；`form` 多一个 `path`，另外 4 处补。
   这条认下并写进 DESIGN 的 T10 段。
 
-## 2026-10-20 · 示例应用（`reflux/examples/chat`，AI 对话）
+## 2026-10-20 · 示例应用（`examples/chat`，AI 对话）
 
 框架此前只有一个使用者 `demo_app`：它证明页面能怎么用，不证明页面后面的后端在做什么。这一轮加第二个使用者，重点
 在后端——一个只有一页的对话应用，模型是一条可换的缝，默认离线确定性，演示一条命令就能跑。
@@ -762,7 +762,7 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
 那部分能独立于厂商出错，其余是厂商的。
 
 门与演示：`tools/gate_chat.py` 12 条（9 条真 socket、3 条真 Chromium：页面画出、输入后点「发送」气泡长出来、零
-console error）；`reflux/examples/chat/walkthrough.py` 借 fluxen `examples/walkthrough.py` 的形状（编号步骤 + Enter、
+console error）；`examples/chat/walkthrough.py` 借 fluxen `examples/walkthrough.py` 的形状（编号步骤 + Enter、
 `--auto`、`--delay`、`--attach`），输出是后端的自述（状态行原文）。
 
 顺带补的缺口：仓里此前没有通用 WS 客户端（`reflux.channel` 只接升级，`tools/cdp.py` 那支对着 DevTools 说），

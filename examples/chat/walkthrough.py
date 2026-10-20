@@ -18,21 +18,29 @@ with no setup. `--model openai` needs `OPENAI_BASE_URL`/`OPENAI_API_KEY`; the de
 scripted model.
 
 Usage:
-  python3 -m reflux.examples.chat.walkthrough [--auto] [--delay 0.01] [--window 6] [--port 8100]
-  python3 -m reflux.examples.chat.walkthrough --attach --port 8100
+  python3 -m examples.chat.walkthrough [--auto] [--delay 0.01] [--window 6] [--port 8100]
+  python3 -m examples.chat.walkthrough --attach --port 8100
 
 Ctrl-C quits.
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# `python3 examples/chat/{name}.py` as well as `-m examples.chat.{name}`: a script's own directory is
+# what goes on sys.path by default, and this example needs the repo root (it imports reflux).
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import sys
 import time
 
-from reflux.examples.chat.app import MAX_CHARS, WINDOW, make_app
-from reflux.examples.chat.client import Socket
-from reflux.examples.chat.model import Model, OpenAI, Scripted
+from examples.chat.app import MAX_CHARS, WINDOW, make_app
+from examples.chat.client import Socket
+from examples.chat.model import Model, OpenAI, Scripted
 
 
 def nodes(node: object) -> int:
@@ -234,7 +242,7 @@ def main() -> int:
             server.server_close()
 
     print("\n完成。六件事都在这条连接上发生过：出页、流式、停止、单飞、应用层拒绝、窗口裁剪。")
-    print("页面版：python3 -m reflux.examples.chat.app --port 8100，然后开 http://127.0.0.1:8100/")
+    print("页面版：python3 -m examples.chat.app --port 8100，然后开 http://127.0.0.1:8100/")
     return 0
 
 
