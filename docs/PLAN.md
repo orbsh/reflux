@@ -708,3 +708,20 @@ DOM 变更    set 1 条 · append 1 条 · create 12 条（MutationObserver，ch
   helper」）。
 - 一个坑：`rustfmt src/lib.rs` 会顺着 `mod types;` 把**生成**文件也格式化，`--check` 立刻红。生成文件头部已写明
   「别 fmt 它，按名字 fmt 手写文件」。今天正是这么踩了一次，然后重新生成修回。
+
+## 2026-10-20 · `reflux events`（事件名注册表）
+
+`cli.py` 里最后一条写着「还不在这儿」的动词落地了。它要的不是更多的打印代码，是一个约定：
+
+- **目标写法 `module:attr`**：`python3 -m reflux.cli events reflux.demo_app:make_app`。`attr` 可调就无参调用取
+  返回值，本身是 `App` 就直接用；别的（dict、模块、函数返回了非 App）一律报错并说出实际类型。
+- **不猜名字**：不试 `make_app`→`app`→`create_app`。`routes` 收包名是因为注册是 import 的副作用；事件注册表挂在
+  某个 `App` 实例上，没有副作用可等，所以必须指名。猜出来的约定没人找得到，而且报错会变成「怎么什么都没打印」。
+- **表只有三列**：`name` · `kind`（`builtin`/`app`）· `source`（handler 的 `module.qualname`）。按名字排序——注册表
+  是集合不是时间线。`calls`／`refused`／`log` **不进表**：那是运行中的数字。
+- `Registry.table()` 是新增的公开读口（`Routes.table()` 的同一个词）；`_builtin` 集合记下协议名，`kind` 才有依据。
+- **没有 Rust 对应物**，写进 DESIGN：注册表属于宿主，不属于生产者的词表。
+
+测试比打印格式更值的那一条：`tests/test_cli_events.py` 遍历参考应用两页的节点树，收集所有 `bind.kind == "event"`
+的名字，断言它们全在注册表里——`form(event="login.submit")` 打错字这类事现在不用起浏览器就会被抓住；行表单不在页面
+树里（它们走 `append`），所以 `row_node(...)` 自己也是被遍历的对象。新增 14 例。

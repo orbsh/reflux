@@ -30,6 +30,7 @@ class RegistryError(Exception):
 class Registry:
     def __init__(self) -> None:
         self._handlers: dict[str, Handler] = {}
+        self._builtin: set[str] = set()
         self.calls = 0
         self.refused = 0
         self.log: list[str] = []
@@ -70,6 +71,8 @@ class Registry:
         if name in self._handlers:
             raise RegistryError(f"{name!r} is already registered")
         self._handlers[name] = handler
+        if builtin:
+            self._builtin.add(name)
         return handler
 
     # --- dispatch ------------------------------------------------------------------------
@@ -77,6 +80,25 @@ class Registry:
     def names(self) -> list[str]:
         """What `reflux events` prints: the whole registry, sorted."""
         return sorted(self._handlers)
+
+    def table(self) -> list[tuple[str, str, str]]:
+        """(event name, source, kind) for every name, sorted by name.
+
+        `source` is where the handler was written (`module.qualname`) — the same rule the route
+        table's source column follows: report the place it was written, never a guess. `kind` is
+        `builtin` for the framework's own protocol names (`reflux:hello`, `reflux:nav`) and `app`
+        for everything the application registered.
+
+        Runtime counters (`calls`, `refused`, `log`) are deliberately not here: they describe a
+        running app, and mixing them into "what exists" makes a fresh process look like it has data.
+        """
+        rows: list[tuple[str, str, str]] = []
+        for name in sorted(self._handlers):
+            handler = self._handlers[name]
+            module = getattr(handler, "__module__", None) or type(handler).__module__
+            qualname = getattr(handler, "__qualname__", None) or type(handler).__qualname__
+            rows.append((name, f"{module}.{qualname}", "builtin" if name in self._builtin else "app"))
+        return rows
 
     def dispatch(self, session, frame: Any) -> bool:
         """Hand one uplink frame to its handler. False when it was refused."""
