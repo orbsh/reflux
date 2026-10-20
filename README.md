@@ -136,6 +136,24 @@ the shape of a frame.
 
 `python3 tools/gate_t10.py` builds seven frames with each SDK and compares them **byte for byte**.
 
+## An example: an AI chat app
+
+`reflux/examples/chat/` is a whole application whose subject is the backend: a conversation per
+connection, a reply streamed as `patch` frames, a stop that stops at a chunk boundary, a second
+message refused with a reason, the app's own size limits, and a model that fails into a bubble
+instead of a traceback.
+
+```
+python3 -m reflux.examples.chat.app --port 8100       # the app, then http://127.0.0.1:8100/
+python3 -m reflux.examples.chat.walkthrough --auto    # the same six behaviours, no browser
+python3 tools/gate_chat.py                            # 12 assertions: 9 over a socket, 3 in Chromium
+```
+
+The model is one method (`Model.reply`). `Scripted` runs offline and deterministic — the default, so
+the demo needs no key; `OpenAI` speaks the OpenAI-compatible SSE form and is configured by
+`OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` (its reader is tested against a stub; it has
+not been run against a live provider from this repo).
+
 ## Verify
 
 ```
