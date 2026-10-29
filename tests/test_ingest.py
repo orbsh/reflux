@@ -24,8 +24,9 @@ from reflux.sdk._parse import dump
 from reflux.protocol import MAX_OPS_PER_FRAME
 
 
-def frame(*ops: dict, sender: str = "s-1") -> dict:
-    return {"ev": "draw", "sender": sender, "content": list(ops)}
+def frame(*ops: dict) -> list[dict]:
+    """One turn: the operations, in order — a frame carries no envelope."""
+    return list(ops)
 
 
 def hand(action: str, node: Any, **rest: Any) -> dict:
@@ -37,7 +38,7 @@ def hand(action: str, node: Any, **rest: Any) -> dict:
     return {"action": action, "event": "", "data": node, **rest}
 
 
-def refused(case: unittest.TestCase, bad: dict, expects: str) -> None:
+def refused(case: unittest.TestCase, bad: Any, expects: str) -> None:
     """The frame is refused whole, and the reason names the defect."""
     with case.assertRaises(Refused) as caught:
         ingest.check_frame(bad)
@@ -53,27 +54,28 @@ class TestTheFrame(unittest.TestCase):
             wire.inject("chan", {"v": 1}),
         )
         ingest.check_frame(good)  # returns: nothing to report
-        self.assertEqual(good["ev"], "draw")
+        self.assertIsInstance(good, list)
 
-    def test_a_frame_without_content_is_refused(self) -> None:
-        # One dialect: the shell's `ops` frames retired with the shell (M1.7). A frame that is not
-        # shaped like a `draw` frame is an envelope defect, not somebody else's dialect.
-        refused(self, {"ev": "draw", "sender": "s-1"}, "content is missing")
-        refused(self, {"ev": "draw", "ops": [wire.empty()]}, "envelope: 'ops'")
+    def test_an_envelope_is_refused_and_named(self) -> None:
+        # The envelope is the host's (fluxen ADR 0021 decision 6): a frame here is the action list.
+        # Both the retired `Message` and the shell's `ops` dialect land in the same refusal, which
+        # says which one it saw — "expected a list" alone sends the reader after the wrong bug.
+        refused(self, {"ev": "draw", "sender": "s-1", "content": []}, "frame is an envelope")
+        refused(self, {"ev": "draw", "ops": [wire.empty()]}, "frame is an envelope")
+        refused(self, {"op": "create", "root": {}}, "frame is an object")
 
-    def test_the_envelope_shape(self) -> None:
+    def test_the_frame_shape(self) -> None:
         cases = [
-            ("not an object", [], "frame is list"),
-            ("an unknown key", {**frame(wire.empty()), "extra": 1}, "envelope: 'extra'"),
-            ("a second ev", {**frame(wire.empty()), "ev": "nav"}, "ev is 'nav'"),
-            ("no sender", frame(wire.empty(), sender=""), "sender is ''"),
-            ("content not a list", {"ev": "draw", "sender": "s", "content": {}}, "content is dict"),
-            ("no operations", frame(), "content is empty"),
+            ("not a list", {"a": 1}, "frame is an object"),
+            ("a string", "frame", "frame is str"),
+            ("no operations", [], "frame is empty"),
             (
                 "over the cap",
-                frame(*[wire.empty()] * (MAX_OPS_PER_FRAME + 1)),
+                [wire.empty()] * (MAX_OPS_PER_FRAME + 1),
                 f"the cap is {MAX_OPS_PER_FRAME}",
             ),
+            ("not an op", ["create"], "frame[0]: an operation is an object"),
+            ("an unknown action", [{"action": "move"}], "frame[0]: 'move' is not one of the eight actions"),
         ]
         for label, bad, expects in cases:
             with self.subTest(label):
@@ -166,8 +168,8 @@ class TestTheNode(unittest.TestCase):
         )
 
     def test_value_domains_are_pydantics(self) -> None:
-        refused(self, frame(hand("create", {"type": "input", "id": 7})), "content[0] (create).data")
-        refused(self, frame(hand("create", {"type": "input", "kind": "nope"})), "content[0] (create).data")
+        refused(self, frame(hand("create", {"type": "input", "id": 7})), "frame[0] (create).data")
+        refused(self, frame(hand("create", {"type": "input", "kind": "nope"})), "frame[0] (create).data")
 
     def test_a_defect_deep_in_the_tree_names_its_path(self) -> None:
         bad = {"type": "case", "children": [{"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}}, {"type": "nope"}]}
@@ -185,7 +187,7 @@ class TestTheNode(unittest.TestCase):
             {"action": "set", "event": "echo", "data": dump(b.text("x"))},
             {"action": "append", "event": "rows", "data": {"type": "nope"}},
         ]
-        refused(self, frame(*ops), "content[1] (append).data")
+        refused(self, frame(*ops), "frame[1] (append).data")
 
 
 class TestRowIdentity(unittest.TestCase):
@@ -292,7 +294,7 @@ class TestTheInboundDoor(unittest.TestCase):
         @app.events.register("gate.ok")
         def ok(session, received):
             seen.append(received)
-            session.send(frame(wire.create(b.text("ok")), sender=session.id))
+            session.send(frame(wire.create(b.text("ok"))))
 
         channel = ScriptedChannel(
             {"event": "gate.ok", "data": {"n": 1}, "extra": "hand written"},  # refused: unknown key

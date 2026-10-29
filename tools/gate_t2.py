@@ -91,7 +91,7 @@ def main() -> int:
             return 1
 
         def send(*ops) -> None:
-            session.send(wire.draw(session.id, *ops))
+            session.send(wire.draw(*ops))
 
         # tmpl first: a template node expands when the tree lands, so the body must be registered
         send(wire.tmpl("t1", TEMPLATE_BODY), wire.create(tree()))

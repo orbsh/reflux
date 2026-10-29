@@ -9,12 +9,13 @@
   七道旧门都已删除——**这个仓里没有第二个渲染器了**。
 - 一个页面：`www/` 是页面树，`/` 是它的根挂载，`/static/` 是它的资产树（`App.make_server` 自动挂，缺
   `static/` 就不挂）。深链与刷新都由根挂载的 `index.html` 接住，页面自己再向生产者要结构。
-- 帧只有一个方言：`reflux/wire.py`（accrete 的八个 action + `{ev:"draw", sender, content}`）。`ops`／`ui`／
+- 帧只有一个方言：`reflux/wire.py`（accrete 的八个 action，**一帧就是这份数组**——没有信封）。`ops`／`ui`／
   `node` 随壳删除，**没有翻译层**。
-- fluxen：`main` @ 0bf166d，工作树干净。`crates/ui_leptos/src/lib.rs` 是 M1.1 的唯一改动（入口多读
-  `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`）。
-- 仓里钉着的渲染器包是 fluxen 0bf166d 的 **release** 构建：`www/static/vendor/fluxen/`，4 件资产共
-  2 420 114 B（wasm 2 348 320 B），清单在 `versions.json`（rev + 逐文件 sha256/大小）。
+- fluxen：`main` @ 460d867（2026-10-29 起线上只有动作列表，信封归宿主）。`crates/ui_core/src/lib.rs` 的入口仍
+  多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
+- 仓里钉着的渲染器包是 fluxen 460d867 的 **release** 构建（`examples/renderer`，`trunk build --release`）：
+  `www/static/vendor/fluxen/`，4 件资产共 2 995 545 B（wasm 2 883 579 B；本机没有 `wasm-opt`，所以没有
+  压缩后的数字），清单在 `versions.json`（rev + 逐文件 sha256/大小）。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
@@ -67,10 +68,10 @@ README 里明说的「不做」，要做等于另开一轮。
 
 ## 四、硬约束（这些轮踩出来的，别再踩）
 
-- **一个方言**：`reflux/wire.py` 是唯一的出帧层（accrete 的八个 action + `draw` 信封）。没有第二个渲染器、
-  没有翻译层。M1.7 之前的 `ops` 方言已随壳删除——别照着旧文档或旧提交把它写回来。
-- **入站只认 `content`**：没有 `content` 的帧是**信封缺陷**，整帧拒收（`ingest.check_frame`）。曾经的「放行给壳」
-  那条缝在 M1.7 关掉了。
+- **一个方言**：`reflux/wire.py` 是唯一的出帧层（accrete 的八个 action，帧就是数组）。没有第二个渲染器、
+  没有翻译层、没有信封。M1.7 之前的 `ops` 方言已随壳删除——别照着旧文档或旧提交把它写回来。
+- **入站只认动作数组**：对象（旧信封 `{ev, sender, content}`、壳的 `{op, …}`）整帧拒收，理由点名它看到的键
+  （`ingest.check_frame`）。2026-10-29 起连「信封长什么样」都不在这一层判——线上没有信封。
 - **闭集只有一份**：`reflux/sdk/closed.py` 从生成的模型算允许的键（取 alias，减 profile 的 `hidden_attrs`），
   构造期（`wire`）与边界（`ingest`）共用。别在 `ingest.py` 里再写一张类型/属性表。
 - **`profile.expose` 不是线封闭度**：它是构造器面。`template` 节点线上合法（`tmpl`/`inject` 展开的替换节点），
@@ -102,8 +103,9 @@ README 里明说的「不做」，要做等于另开一轮。
   翻倍。`demo_app.frame_for` 用 `session.rows_seeded` 只种一次——生产者计数，这就是 DESIGN「操作」里认下的代价。
 - **fluxen 的装配必须在 `mount_to` 的闭包里**：`Ctx::new` 用 Leptos 的 executor，提前会 panic（白屏 + 一条
   `spawn_local before a global executor was initialized`）。
-- **不碰 fluxen 的 `Message`**：宿主 API 只有 `#main` 的 `data-path`/`data-codec` 与 `window.fluxen.send`
-  两处；要第二类下行帧就得改那个信封，已否决（Why Not）。
+- **不碰 fluxen 的帧形状**：宿主 API 只有 `#main` 的 `data-path`/`data-codec` 与 `window.fluxen.send`
+  两处；渲染器那条 socket 只解动作列表（信封已归宿主，ADR 0021 决策 6），要给框架一类自己的下行帧
+  就是另一条腿，已否决（Why Not）。
 - **写文档的纪律**：代码落地同轮改 DESIGN（形状 + Why Not）与 PLAN（状态 + 实测行）；裁决要把文档里被它推翻
   的旧话一起扫掉（用户会逐句读）。提交只在明确说「提交」时发生，一条提交一个主题。
 
@@ -122,7 +124,7 @@ README 里明说的「不做」，要做等于另开一轮。
 
 ```
 reflux/protocol.py             协议自己的两个数字：MAX_OPS_PER_FRAME、RESERVED_PREFIX
-reflux/wire.py                 出帧层：八个 action + draw 信封；生产者侧两条规则（上限、树内 id 唯一）
+reflux/wire.py                 出帧层：八个 action（帧就是数组）；生产者侧两条规则（上限、树内 id 唯一）
 reflux/ingest.py               入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
 reflux/sdk/closed.py           闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
 reflux/sdk/_parse.py           手写：parse／dump 边界（dump 补 by_alias）与 bind 条目组装

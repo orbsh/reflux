@@ -52,13 +52,13 @@ class TestEveryTypeIsLegal(unittest.TestCase):
 
     def test_all_of_them_in_one_frame(self) -> None:
         tree = {"type": "case", "children": list(NODES.values())}
-        ingest.check_frame(wire.draw("s-1", wire.create(tree)))
+        ingest.check_frame(wire.draw(wire.create(tree)))
 
     def test_a_defect_in_any_of_them_is_still_caught(self) -> None:
         # The fixture must not be legal *by accident*: the same boundary refuses a typo in it.
         broken = {**NODES["case"], "attrs": {"nope": 1}}
         with self.assertRaises(Refused):
-            ingest.check_frame({"ev": "draw", "sender": "s-1", "content": [{"action": "create", "event": "", "data": broken}]})
+            ingest.check_frame([{"action": "create", "event": "", "data": broken}])
 
     def test_the_round_trip_is_the_wire_s_dict(self) -> None:
         # dump(parse(x)) is what actually leaves on the socket; it must drop nothing the node meant.

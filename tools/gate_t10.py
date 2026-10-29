@@ -46,37 +46,31 @@ def python_turns() -> list[tuple[str, dict]]:
     from reflux.sdk import builders as b
 
     return [
-        ("echo", wire.draw(SESSION, wire.set(demo.ECHO, b.text("hello")))),
+        ("echo", wire.draw(wire.set(demo.ECHO, b.text("hello")))),
         (
             "add row",
-            wire.draw(SESSION, wire.append(demo.ROWS, demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append(demo.ROWS, demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
-        ("remove row", wire.draw(SESSION, wire.remove(demo.ROWS, "row-1"))),
+        ("remove row", wire.draw(wire.remove(demo.ROWS, "row-1"))),
         (
             "form submit",
             wire.draw(
-                SESSION,
-                wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}')),
-            ),
+wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         (
             "page turn",
             wire.draw(
-                SESSION,
-                wire.create(demo.demo.home()),
-                *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows],
-            ),
+wire.create(demo.demo.home()),
+                *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows]),
         ),
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.
-        ("about page", wire.draw(SESSION, wire.create(demo.demo.about()))),
+        ("about page", wire.draw(wire.create(demo.demo.about()))),
         # The `local` 落点 and its `path` rider: a client-side slot, addressed one level in.
         (
             "local binding",
             wire.draw(
-                SESSION,
-                wire.create(b.case(b.text(local="chan", path="/data", id="local-echo"), id="root")),
-            ),
+wire.create(b.case(b.text(local="chan", path="/data", id="local-echo"), id="root"))),
         ),
     ]
 

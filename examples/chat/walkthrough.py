@@ -52,7 +52,7 @@ def nodes(node: object) -> int:
 
 def describe(frame: dict) -> str:
     """One frame as a line: the ops it carries, with just enough shape to recognise them."""
-    content = frame.get("content") or []
+    content = frame
     parts: list[str] = []
     for op in content:
         action = op.get("action")
@@ -140,7 +140,7 @@ def patches(frames: list[dict]) -> str:
     """The text a run of patch frames appended, in order — the reply as the page assembled it."""
     out = []
     for frame in frames:
-        for op in frame.get("content") or []:
+        for op in frame:
             if op.get("action") == "patch" and isinstance(op.get("value"), str):
                 out.append(op["value"])
     return "".join(out)
@@ -150,7 +150,7 @@ def status_of(frames: list[dict]) -> str:
     """The last status line those frames wrote — the backend's own words about what just happened."""
     text = ""
     for frame in frames:
-        for op in frame.get("content") or []:
+        for op in frame:
             if op.get("action") == "set" and op.get("event") == "status":
                 value = ((op.get("data") or {}).get("bind") or {}).get("value") or {}
                 if isinstance(value.get("default"), str):

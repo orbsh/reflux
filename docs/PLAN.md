@@ -8,7 +8,7 @@
 - **壳退休，reflux 转成集成 fluxen 的 web 框架**（Next 之于 React 的分工）。渲染交给 fluxen 的渲染器；词表的单一来源变成 accrete 的类型——`cargo run -q -p stage -- schema` 导出 draft 2020-12 的 schema，SDK 由它生成。
 - 退场的是自带词表的 SolidJS 壳与手写的 `spec/components.json`；`tools/gen.py` 里的构造器生成逻辑留下，输入从规格换成那份 schema。
 - **封闭性与跨字段语义归 reflux**（生成的 SDK + 服务端入站校验 + 门）。accrete 刻意不拒未知字段（旧帧兼容），静默丢弃是那边的既定行为，不去改它——代价是绕过 SDK 手写 JSON 的生产者没有封闭性，这条写明。
-- **帧定义只有一套**：fluxen 的 `Message` / `Content` / `Outflow`。`ev = "draw"` 归渲染器；`reflux:hello` 与 `reflux:nav` 走上行的 `Outflow`（它的 `data` 是自由的），回答是一次 `draw`——今天没有第二类 ev，要一类下行框架帧得先给那个信封加字段（没走这条路）。
+- **帧定义只有一套**：下行是 fluxen 的 `Content` 数组（一帧就是动作列表，没有信封），上行是 `Outflow`。`reflux:hello` 与 `reflux:nav` 都走上行的 `Outflow`（它的 `data` 是自由的），回答是一次动作列表——渲染器那条 socket 只解数组，所以「第二类下行帧」不是一个字段的事（要框架自己的下行通道就是另一条腿，今天不需要）。2026-10-29 前的 `Message{ev, sender, content}` 已归宿主，见文末那条。
 - 不作判据（已裁决，不再论证）：资产体积与跨边界开销；「JS 门槛低、便于外部参与」——实测不成立。
 - **词表用 accrete 的既有词表，不往外长**（2026-10-17）：新类型与枚举属性都不加进 accrete；profile 是 reflux 侧一份可读数据——选哪些类型进应用面、哪个属性值是默认、变体落成哪些 class 令牌。现有 21 项与那 30 个根变体不是包含关系（同名 8 项），那 13 项逐条落法在 `DESIGN.md` 的「组件词表」。
 - **操作集取 accrete 的八个，逐字，四个平面各有各的寻址**（2026-10-17）：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`，不留翻译层；旧四个与它们的转换、以及代价（按 id 锚定的插入没了、结构数组里插一格要重写那一段、`title` 没有线上落点）写在 `DESIGN.md` 的「操作」。`payload`（声明带哪几件本地态）随之退场——送什么由组件自己定。
@@ -37,7 +37,7 @@
 | M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用仓里钉住的包，无需 fluxen 检出） |
 | M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ✅ 2026-10-19 | `python3 tools/gate_t0_next.py`（7 条）＋ `python3 -m unittest tests.test_page` |
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ✅ 2026-10-19 | `python3 tools/gate_t6_next.py`（8 条）＋ `python3 -m unittest tests.test_page` |
-| M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |
+| M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`；信封 2026-10-29 退场，见文末） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |
 | M1.5 服务端入站校验（封闭性与跨字段语义的落点） | ✅ 2026-10-20 | `python3 tools/gate_m1_5.py`（12 条，真 socket）＋ `python3 -m unittest tests.test_ingest`（22 例） |
 | M1.6 交互门重对（T2／T3 退场换两条；T4／T8 改写；profile 令牌接线） | ✅ 2026-10-20 | `python3 tools/gate_t3_next.py`（18 条）＋ `tools/gate_t4_next.py`（8 条）＋ `tools/gate_t8_next.py`（5 条）＋ `tests.test_types_drawable`（7 例） |
 | M1.7 退场（`spec/`、`shell/*`、壳侧生成物；`/__next` 提到 `/`；`draw_page`／`not_found` 切到 `wire`） | ✅ 2026-10-20 | 全套：148 例 ＋ 八道门（t0 7／t2 12／t3 18／t4 8／t6 8／t7 4／t8 5／ingest 12）＋ `python3 tools/gen_sdk.py --check` |
@@ -48,7 +48,7 @@
 reflux/protocol.py                协议的自家数字：一帧的操作数上限、保留前缀（不是词表，手写）
 tools/gate_t0.py                  T0 门：真起 chromium，经 CDP 断言（stdlib-only）
 tools/gate_t2.py / t3.py / t4.py  各任务的门；共用 tools/cdp.py 的夹具（含真鼠标/真按键/真历史）
-reflux/wire.py                    出帧层：accrete 的八个 action + draw 信封（唯一的方言）
+reflux/wire.py                    出帧层：accrete 的八个 action——一帧就是这份数组（唯一的方言）
 reflux/ingest.py                  入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
 reflux/sdk/closed.py              闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
 tools/gate_ingest.py              入站门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
@@ -770,3 +770,37 @@ console error）；`examples/chat/walkthrough.py` 借 fluxen `examples/walkthrou
 
 实测：`182 例 OK`（+19）；`gate_chat` 12/12；十道门与 `gen_sdk --check` 不回归。演示六步实跑：出页 14 节点、
 回话 129 字分 42 帧、停止留 `⏹`、单飞拒绝、空/超长两条拒绝原文、窗口 4 连发到 `裁掉 5`。
+
+## 2026-10-29 — 信封退场，渲染器包升级
+
+**触发**：fluxen `460d867`（ADR 0021 决策 6）把 `Message` 移出 `content` crate、搬进 `stage`，线上只剩
+动作列表；渲染器的 `ev` 闸随之删除。prism 那一侧由用户裁决「自己处理」，这一轮只跟进 reflux。
+
+**改了什么**（一条主题：帧不再是信封）：
+
+- `reflux/wire.py`：`draw(sender, *ops)` → `draw(*ops)`，返回的就是那份操作数组；`sender` 参数删掉（它只是
+  信封的必填项，渲染器从不读）。
+- `reflux/ingest.py`：`check_frame` 收数组；`ENVELOPE_KEYS` 与 `ev`/`sender` 的检查退场。对象一律整帧拒收，
+  理由点名它看到的键（`frame is an envelope (...) — the envelope is the host's`），比「expected a list」多给
+  一条线索：旧宿主一看就知道该改哪儿。
+- `Session.send`／`outbox`／`App._write` 的类型跟着改成 `list[dict]`。
+- `sdks/rust/src/wire.rs`：`draw(operations)` 返回 `Value::Array`；`frames.rs` 的七处调用去掉 `SESSION`（那个
+  常量随之删除）。T10 的字节对拍仍然成立，只是数字变了。
+- 钉住的渲染器包换成 fluxen 460d867 的 release 构建：`ui_leptos-d4327fdb6209fd4c.js`（88 681 B）+
+  `ui_leptos-a7dacf89d91c682_bg.wasm`（2 883 579 B）+ 两个 css，四件共 2 995 545 B，`versions.json` 的 rev
+  与逐文件 sha256 一起换了。wasm 比上一版大 535 KB——本机没有 `wasm-opt`，加上它会小一档，这轮没加。
+- 文档：DESIGN 的 I6／协议／标题标记／Why Not／词表几处按新形状重写（信封在词表里记成退场词），PLAN 的方向
+  裁决与文件地图同步，HANDOFF 的 fluxen rev 与包体积更新，README 那句 wire 说明改写。
+
+**实测**（这一轮的门与数字）：
+
+- `python3 -m unittest discover -s tests -t .` → **182 例 OK**；`python3 tools/gen_sdk.py --check` → in sync。
+- 十一道门全绿：t0 7 · t2 12 · t3 18 · t4 8 · t6 8 · t7 4 · t8 5 · t9 10 · ingest 12 · chat 12 · t10 8。
+- T10 七帧（紧凑 JSON）：**110 / 309 / 49 / 161 / 2 454 / 799 / 177 B**；上一版是 154 / 353 / 93 / 205 /
+  2 498 / 843 / 221 B，差的正是那 70 B 信封（每个回合一份）。
+- `tools/measure.py` 复测（数字进 `docs/PERF.md`）：回声 122 B（原 171）、加行 343、删行 54、表单 173、
+  翻页 2 712；`set` 一条 DOM 变更、`append` 一条、`create` 十二条不变；首屏 23 ms、DCL 15 ms；服务端
+  100 µs/帧、持续 3 594 帧/秒。
+
+**没做的**：prism（跨仓，用户裁决它自己处理）。它是 `path` 依赖 fluxen 的 `content`，而 `Message` 已经不在
+那儿了——换过去之前它编译不过，这是它自己那一步要解的，不是这里的漏项。

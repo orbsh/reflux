@@ -18,4 +18,4 @@ class FakeSession:
         self.frames.append(frame)
 
     def draw(self, *operations: dict) -> None:
-        self.send(wire.draw(self.id, *operations))
+        self.send(wire.draw(*operations))

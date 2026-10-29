@@ -26,7 +26,7 @@ def page_for(session, match):
 
 def drawn(session: FakeSession) -> list[dict]:
     """The operations of the last frame the app sent."""
-    return session.frames[-1]["content"]
+    return session.frames[-1]
 
 
 def shown(node: dict) -> str:
@@ -47,7 +47,7 @@ class TestPageResolution(unittest.TestCase):
         app.events.dispatch(session, {"event": "reflux:hello", "data": {"path": "/a"}})
         self.assertEqual(session.path, "/a")
         self.assertEqual(len(session.frames), 1)
-        self.assertEqual(session.frames[0]["ev"], "draw")
+        self.assertTrue(isinstance(session.frames[0], list), "一帧就是动作列表")
         root = drawn(session)[0]["data"]
         self.assertEqual(root["type"], "text")
         self.assertEqual(shown(root), "page:/a")

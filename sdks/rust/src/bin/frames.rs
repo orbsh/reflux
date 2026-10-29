@@ -1,8 +1,9 @@
 //! The reference application's frames, as JSON lines — the subject of `tools/gate_t10.py`.
 //!
-//! Five turns, the same five the Python reference app produces (and the same five `tools/measure.py`
-//! weighs): an echo, an added row, a removed row, a form submit, and a page turn with its seeded
-//! rows. The gate builds these with the Python SDK and compares bytes; nothing here talks to a
+//! The reference app's turns, the same ones the Python SDK produces (and the same ones
+//! `tools/measure.py` weighs): an echo, an added row, a removed row, a form submit, a page turn with
+//! its seeded rows, an about page, and a node with a `local` landing. Each is one frame, and a frame is
+//! the array of operations — nothing wraps them. The gate builds these with the Python SDK and compares bytes; nothing here talks to a
 //! server, because producing the frame is the SDK's whole job.
 
 use reflux_sdk::markers;
@@ -11,7 +12,6 @@ use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::Value;
 use std::io::Write;
 
-const SESSION: &str = "measure1";
 const ECHO: &str = "echo";
 const ROWS: &str = "rows";
 const SUBMITTED: &str = "submitted";
@@ -105,71 +105,57 @@ fn main() {
     let turns = [
         (
             "echo",
-            draw(
-                SESSION,
-                &[set(
-                    ECHO,
-                    text(Some("hello"), None, None, None, None, None, None),
-                )],
-            ),
+            draw(&[set(
+                ECHO,
+                text(Some("hello"), None, None, None, None, None, None),
+            )]),
         ),
-        (
-            "add row",
-            draw(SESSION, &[append(ROWS, row_node("row-4", "第 4 行"), 0)]),
-        ),
-        ("remove row", draw(SESSION, &[remove(ROWS, "row-1")])),
+        ("add row", draw(&[append(ROWS, row_node("row-4", "第 4 行"), 0)])),
+        ("remove row", draw(&[remove(ROWS, "row-1")])),
         (
             "form submit",
-            draw(
-                SESSION,
-                &[set(
-                    SUBMITTED,
-                    text(
-                        Some("已提交 {\"pass\": \"secret\", \"user\": \"ada\"}"),
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ),
-                )],
-            ),
+            draw(&[set(
+                SUBMITTED,
+                text(
+                    Some("已提交 {\"pass\": \"secret\", \"user\": \"ada\"}"),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            )]),
         ),
         (
             "page turn",
-            draw(
-                SESSION,
-                &[
-                    create(home()),
-                    append(ROWS, row_node("row-1", "第一行"), 0),
-                    append(ROWS, row_node("row-2", "第二行"), 0),
-                ],
-            ),
+            draw(&[
+                create(home()),
+                append(ROWS, row_node("row-1", "第一行"), 0),
+                append(ROWS, row_node("row-2", "第二行"), 0),
+            ]),
         ),
-        ("about page", draw(SESSION, &[create(about())])),
+        ("about page", draw(&[create(about())])),
         (
             "local binding",
-            draw(
-                SESSION,
-                &[create(case(
-                    &[text(
-                        None,
-                        None,
-                        None,
-                        Some("chan"),
-                        Some("/data"),
-                        Some("local-echo"),
-                        None,
-                    )],
+            draw(&[create(case(
+                &[text(
                     None,
                     None,
-                    Some("root"),
                     None,
-                ))],
-            ),
+                    Some("chan"),
+                    Some("/data"),
+                    Some("local-echo"),
+                    None,
+                )],
+                None,
+                None,
+                Some("root"),
+                None,
+            ))]),
         ),
     ];
+
 
     let mut out = std::io::stdout().lock();
     for (_label, frame) in turns {

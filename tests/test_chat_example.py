@@ -20,7 +20,7 @@ from tests.fakes import FakeSession
 def status_text(session: FakeSession) -> str:
     """The last status line a run of frames wrote."""
     for frame in reversed(session.frames):
-        for op in frame.get("content") or []:
+        for op in frame:
             if op.get("action") == "set" and op.get("event") == chat.STATUS:
                 return ((op.get("data") or {}).get("bind") or {}).get("value", {}).get("default", "")
     return ""
@@ -30,7 +30,7 @@ def patched(session: FakeSession) -> str:
     """Everything the run appended into slots, in order."""
     out = []
     for frame in session.frames:
-        for op in frame.get("content") or []:
+        for op in frame:
             if op.get("action") == "patch" and isinstance(op.get("value"), str):
                 out.append(op["value"])
     return "".join(out)
@@ -107,7 +107,7 @@ class Refusals(unittest.TestCase):
             chat.send(session, conversation, "你好")
         finally:
             chat.spawn = original
-        ops = [op for frame in session.frames for op in frame.get("content") or []]
+        ops = [op for frame in session.frames for op in frame]
         actions = [op.get("action") for op in ops]
         self.assertEqual(actions, ["append", "append", "set", "set"])
         self.assertEqual(ops[0]["event"], chat.MESSAGES)

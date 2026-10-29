@@ -64,32 +64,30 @@ def table(title: str, header: list[str], rows: list[list[str]]) -> None:
 def seed_frame() -> dict:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
-        SESSION,
-        wire.create(demo.demo.home()),
-        *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows],
-    )
+wire.create(demo.demo.home()),
+        *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows])
 
 
 def section_bytes() -> None:
     turns: list[tuple[str, dict]] = [
-        ("echo (`set`)", wire.draw(SESSION, wire.set(demo.ECHO, b.text("hello")))),
+        ("echo (`set`)", wire.draw(wire.set(demo.ECHO, b.text("hello")))),
         (
             "add row (`append`)",
-            wire.draw(SESSION, wire.append(demo.ROWS, demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append(demo.ROWS, demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
-        ("remove row (`remove`)", wire.draw(SESSION, wire.remove(demo.ROWS, "row-1"))),
+        ("remove row (`remove`)", wire.draw(wire.remove(demo.ROWS, "row-1"))),
         (
             "form submit (`set`)",
-            wire.draw(SESSION, wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}'))),
+            wire.draw(wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         ("page turn (`create` + 2 seeded rows)", seed_frame()),
     ]
     rows = [[label, str(size(frame)), str(len(json.dumps(frame, ensure_ascii=False)))] for label, frame in turns]
 
-    envelope = wire.draw(SESSION, wire.empty())
-    eleven = wire.draw(SESSION, *[wire.empty()] * 11)
+    envelope = wire.draw(wire.empty())
+    eleven = wire.draw(*[wire.empty()] * 11)
     per_op = (size(eleven) - size(envelope)) / 10
-    rows.append(["envelope alone (1 `empty` op)", str(size(envelope)), "—"])
+    rows.append(["1 `empty` op (a frame is just the array)", str(size(envelope)), "—"])
     rows.append(["each further `empty` op", f"{per_op:.1f}", "—"])
 
     table("one turn on the wire", ["turn", "bytes (utf-8)", "characters"], rows)
@@ -128,17 +126,17 @@ def section_mutations() -> None:
 
         turn(
             "narrow: `set` on a data slot",
-            wire.draw(session.id, wire.set(demo.ECHO, b.text("measured-echo"))),
+            wire.draw(wire.set(demo.ECHO, b.text("measured-echo"))),
             "measured-echo",
         )
         turn(
             "list: `append` one row",
-            wire.draw(session.id, wire.append(demo.ROWS, demo.row_node({"id": "row-m", "text": "measured-row"}))),
+            wire.draw(wire.append(demo.ROWS, demo.row_node({"id": "row-m", "text": "measured-row"}))),
             "measured-row",
         )
         turn(
             "whole tree: `create`",
-            wire.draw(session.id, wire.create(b.case(b.text("rebuilt-page", id="probe")))),
+            wire.draw(wire.create(b.case(b.text("rebuilt-page", id="probe")))),
             "rebuilt-page",
         )
 
@@ -249,7 +247,7 @@ def _client(url: str, per_second: int, seconds: float, ready) -> None:
 def check_cost() -> list[list[str]]:
     """What the two fences cost per frame — the price M1.5 accepted without a number."""
     op = wire.set(demo.ECHO, b.text("pong"))
-    frame = wire.draw(SESSION, op)
+    frame = wire.draw(op)
     uplink = {"event": "measure.ping", "id": "x", "data": "v"}
     rounds = 3000
 

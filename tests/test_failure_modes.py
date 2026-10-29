@@ -75,11 +75,9 @@ class TestFrameCap(unittest.TestCase):
         def ops(count: int) -> list[dict]:
             return [wire.empty() for _ in range(count)]
 
-        self.assertEqual(
-            len(wire.draw("s-1", *ops(MAX_OPS_PER_FRAME))["content"]), MAX_OPS_PER_FRAME
-        )
+        self.assertEqual(len(wire.draw(*ops(MAX_OPS_PER_FRAME))), MAX_OPS_PER_FRAME)
         with self.assertRaises(ValueError):
-            wire.draw("s-1", *ops(MAX_OPS_PER_FRAME + 1))
+            wire.draw(*ops(MAX_OPS_PER_FRAME + 1))
 
 
 class TestDuplicateIds(unittest.TestCase):
@@ -140,7 +138,7 @@ class TestSlowClient(unittest.TestCase):
                 time.sleep(0.01)
             self.assertGreaterEqual(self.app.stats["resync"], 1, "排空后必须重同步一帧")
             last = json.loads(slow.written[-1])
-            self.assertEqual(last["content"][0]["action"], "create", "重同步就是用一帧 create 重画")
+            self.assertEqual(last[0]["action"], "create", "重同步就是用一帧 create 重画")
             self.assertFalse(slow_session.stale, "重同步之后不再陈旧")
         finally:
             slow.gate.set()

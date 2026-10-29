@@ -53,7 +53,7 @@ def status_of(frames: list[dict]) -> str:
     """The last status line those frames wrote."""
     text = ""
     for frame in frames:
-        for op in frame.get("content") or []:
+        for op in frame:
             if op.get("action") == "set" and op.get("event") == "status":
                 value = ((op.get("data") or {}).get("bind") or {}).get("value") or {}
                 if isinstance(value.get("default"), str):
@@ -64,7 +64,7 @@ def status_of(frames: list[dict]) -> str:
 def patched(frames: list[dict]) -> str:
     out = []
     for frame in frames:
-        for op in frame.get("content") or []:
+        for op in frame:
             if op.get("action") == "patch" and isinstance(op.get("value"), str):
                 out.append(op["value"])
     return "".join(out)
@@ -74,7 +74,7 @@ def appends(frames: list[dict]) -> list[str]:
     return [
         op.get("data", {}).get("id", "")
         for frame in frames
-        for op in frame.get("content") or []
+        for op in frame
         if op.get("action") == "append"
     ]
 
@@ -117,7 +117,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             # 1 — the page, and the one seed it needs.
             ws.send({"event": "reflux:hello", "data": {"path": PAGE}})
             hello = read_until(ws, "", limit=2.0) or [ws.recv(timeout=3)]
-            ops = [op.get("action") for frame in hello for op in frame.get("content") or []]
+            ops = [op.get("action") for frame in hello for op in frame]
             checks.append(
                 (
                     "hello draws the page and seeds the status line",

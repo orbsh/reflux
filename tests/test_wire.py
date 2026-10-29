@@ -85,12 +85,10 @@ class TestShapes(unittest.TestCase):
     def test_empty_carries_nothing(self) -> None:
         self.assertEqual(wire.empty(), {"action": "empty"})
 
-    def test_draw_is_the_envelope(self) -> None:
-        frame = wire.draw("s-1", wire.empty(), wire.create(b.text("hi")))
-        self.assertEqual(frame["ev"], "draw")
-        self.assertEqual(frame["sender"], "s-1")
-        self.assertEqual([op["action"] for op in frame["content"]], ["empty", "create"])
-        self.assertNotIn("created", frame, "created is optional — we do not write it")
+    def test_a_frame_is_the_action_list(self) -> None:
+        frame = wire.draw(wire.empty(), wire.create(b.text("hi")))
+        self.assertEqual([op["action"] for op in frame], ["empty", "create"])
+        self.assertIsInstance(frame, list, "no envelope: the host wraps its own")
 
 
 class TestRefusals(unittest.TestCase):
@@ -129,13 +127,12 @@ class TestRefusals(unittest.TestCase):
             with self.assertRaises(ValueError):
                 call()
 
-    def test_draw_needs_a_sender_operations_and_known_actions(self) -> None:
+    def test_draw_needs_operations_and_known_actions(self) -> None:
         with self.assertRaises(ValueError):
-            wire.draw("", wire.empty())
+            wire.draw()
         with self.assertRaises(ValueError):
-            wire.draw("s-1")
-        with self.assertRaises(ValueError):
-            wire.draw("s-1", {"op": "create", "root": {}})
+            wire.draw({"op": "create", "root": {}})
+
 
 
 class TestTheBuildersBoundary(unittest.TestCase):

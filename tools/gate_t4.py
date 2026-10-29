@@ -108,7 +108,7 @@ def main() -> int:
             print("no session: the page never connected")
             return 1
 
-        session.send(wire.draw(session.id, wire.create(tree())))
+        session.send(wire.draw(wire.create(tree())))
         drawn = wait_for(lambda: cdp.eval("document.querySelectorAll('input').length === 4"))
         cdp.drain()
         if not drawn:

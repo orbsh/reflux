@@ -83,12 +83,10 @@ def main() -> int:
         # "half-way" can never reach the page — and the frame after it still must.
         session.send(
             wire.draw(
-                session.id,
-                wire.set("echo", b.text("half-way")),
-                {"action": "create", "event": "", "data": {"type": "widget"}},
-            )
+wire.set("echo", b.text("half-way")),
+                {"action": "create", "event": "", "data": {"type": "widget"}})
         )
-        session.send(wire.draw(session.id, wire.set("echo", b.text("whole"))))
+        session.send(wire.draw(wire.set("echo", b.text("whole"))))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
         session = next(iter(app.live()), None)
@@ -96,7 +94,7 @@ def main() -> int:
             print("no session: the page never connected")
             return 1
 
-        session.send(wire.draw(session.id, wire.create(tree())))
+        session.send(wire.draw(wire.create(tree())))
         drawn = wait_for(lambda: cdp.eval("document.querySelectorAll('input').length === 2"))
         cdp.drain()
         if not drawn:

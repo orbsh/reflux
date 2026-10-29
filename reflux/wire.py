@@ -3,8 +3,12 @@
 Fields are the wire's, taken from the renderer's `content` crate: `create` / `set` carry
 `Influx{event, data}`, `append` `AppendOp{event, position, data}`, `remove` `RemoveOp{event, id}`,
 `patch` `PatchOp{event, id?, path, op, value}`, `inject` `InjectOp{slot, event?, id?, data}`, `tmpl`
-`InfluxTmpl{name, data}`, and `empty` carries nothing. The frame is `Message{ev, sender, created?,
-content}`: we write `ev = "draw"` and leave `created` out (it is optional).
+`InfluxTmpl{name, data}`, and `empty` carries nothing.
+
+**A frame is the action list** — a bare JSON array, one element per operation. The envelope
+(`Message{ev, sender, created?}`) belongs to the host and this layer has none: the renderer decodes
+`[Content<Accrete>]` and nothing else (fluxen ADR 0021 decision 6). There is one verb here (`draw`),
+so an `ev` field would only restate it, and a `sender` would be a field no reader has.
 
 Shape is what this layer can check — not list length. `position`'s domain depends on how many rows the
 slot holds, so an out-of-range position is the renderer's refusal (`warn`, no counter); the gate asserts
@@ -197,10 +201,8 @@ def empty() -> dict:
     return {"action": "empty"}
 
 
-def draw(sender: str, *operations: dict) -> dict:
-    """One turn = one frame. `sender` is the session id the envelope requires."""
-    if not isinstance(sender, str) or not sender:
-        raise ValueError("draw: sender must be a non-empty string (the session id)")
+def draw(*operations: dict) -> list[dict]:
+    """One turn = one frame: the operations, in order. Nothing wraps them."""
     if not operations:
         raise ValueError("draw: a turn carries at least one operation")
     if len(operations) > MAX_OPS_PER_FRAME:
@@ -210,7 +212,7 @@ def draw(sender: str, *operations: dict) -> dict:
     for op in operations:
         if not isinstance(op, dict) or op.get("action") not in ACTIONS:
             raise ValueError(f"draw: {op!r} is not one of accrete's actions")
-    return {"ev": "draw", "sender": sender, "content": list(operations)}
+    return list(operations)
 
 
 def _slot_or_root(slot: Any, what: str) -> str:

@@ -18,10 +18,10 @@ Two boundaries stated rather than hidden:
 
 - **A slot name cannot be checked here.** "Was this slot declared?" needs the tree the session sent
   — shadow state — so it stays where it can be judged: the SDK's construction time.
-- **There is one dialect.** Every outbound frame carries `content` — accrete's eight actions — so a
-  frame without it is an envelope defect like any other. The shell's four-op `ops` dialect retired
-  in M1.7 and this boundary stopped tolerating it in the same change: a frame the renderer would
-  silently skip is not a frame this server should put on a socket.
+- **There is one dialect.** An outbound frame *is* accrete's action list — a bare array — so an
+  object arriving here is an envelope, and the envelope is the host's (fluxen ADR 0021 decision 6).
+  The shell's four-op `ops` dialect retired in M1.7 and this boundary stopped tolerating dicts in the
+  same change: a frame the renderer would refuse is not a frame this server should put on a socket.
 """
 
 from __future__ import annotations
@@ -33,11 +33,8 @@ from .sdk import closed
 from .sdk._parse import parse
 from .protocol import MAX_OPS_PER_FRAME
 
-__all__ = ["Refused", "check_frame", "check_uplink", "ENVELOPE_KEYS", "UPLINK_KEYS", "OP_KEYS"]
+__all__ = ["Refused", "check_frame", "check_uplink", "UPLINK_KEYS", "OP_KEYS"]
 
-# The accrete envelope (`Message` in the renderer's `content` crate): `created` is optional and left
-# to the renderer, the rest is required.
-ENVELOPE_KEYS = frozenset({"ev", "sender", "created", "content"})
 # An uplink frame (`Outflow`): the event's name, the row it claims, and its payload.
 UPLINK_KEYS = frozenset({"event", "id", "data"})
 
@@ -83,36 +80,33 @@ def _names(keys: Any) -> str:
 
 
 def check_frame(frame: Any) -> None:
-    """Refuse a frame the server is about to send, or return None."""
-    if not isinstance(frame, dict):
-        _refuse("frame is %s, not an object", type(frame).__name__)
+    """Refuse a frame the server is about to send, or return None.
 
-    extra = set(frame) - ENVELOPE_KEYS
-    if extra:
-        _refuse("envelope: %s is not a field of the frame", _names(extra))
-    if frame.get("ev") != "draw":
-        _refuse("envelope: ev is %r — this layer writes %r", frame.get("ev"), "draw")
-    sender = frame.get("sender")
-    if not isinstance(sender, str) or not sender:
-        _refuse("envelope: sender is %r, not a non-empty string", sender)
-
-    if "content" not in frame:
-        _refuse("envelope: content is missing — a frame carries its operations")
-    content = frame.get("content")
-    if not isinstance(content, list):
-        _refuse("envelope: content is %s, not a list", type(content).__name__)
-    if not content:
-        _refuse("envelope: content is empty — a turn carries at least one operation")
-    if len(content) > MAX_OPS_PER_FRAME:
+    A frame is the action list itself. A dict is the retired envelope (or the shell's `ops`
+    dialect): named as such, because "expected a list" alone sends the reader looking for the
+    wrong bug — the renderer refuses the same shape with the same words.
+    """
+    if isinstance(frame, dict):
+        if "content" in frame or "ev" in frame:
+            _refuse(
+                "frame is an envelope (%s) — the envelope is the host's; a frame is the action list",
+                _names(set(frame)),
+            )
+        _refuse("frame is an object — a frame is the action list, not a dict of %s", _names(set(frame)))
+    if not isinstance(frame, list):
+        _refuse("frame is %s, not a list of operations", type(frame).__name__)
+    if not frame:
+        _refuse("frame is empty — a turn carries at least one operation")
+    if len(frame) > MAX_OPS_PER_FRAME:
         _refuse(
-            "envelope: %d operations in one frame — the cap is %d",
-            len(content),
+            "frame: %d operations in one frame — the cap is %d",
+            len(frame),
             MAX_OPS_PER_FRAME,
         )
 
     appended: dict[str, set[str]] = {}
-    for i, op in enumerate(content):
-        _op(op, f"content[{i}]", appended)
+    for i, op in enumerate(frame):
+        _op(op, f"frame[{i}]", appended)
 
 
 def _op(op: Any, where: str, appended: dict[str, set[str]]) -> None:

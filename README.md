@@ -18,8 +18,9 @@ interface does.
 | host | `reflux/app.py` | serves the page, owns sessions, routes, the event registry |
 | page | `www/` | static shell + `reflux.js` runtime + the pinned renderer bundle |
 
-The wire between them is one dialect: accrete's eight actions inside a `{ev, sender, content}`
-envelope. `reflux/wire.py` is that layer, and it is the only place a frame is built.
+The wire between them is one dialect: accrete's eight actions, and a frame **is** the array of them —
+no envelope (the renderer decodes nothing else). `reflux/wire.py` is that layer, and it is the only
+place a frame is built.
 
 ## Requirements
 
@@ -97,7 +98,7 @@ Run it with `python3 myapp.py` and open <http://127.0.0.1:8000/>.
 
 ## The wire
 
-Eight actions. A frame carries a list of them:
+Eight actions. A frame **is** the list of them — a bare JSON array, with nothing wrapped around it:
 
 | action | payload | meaning |
 |---|---|---|
@@ -115,6 +116,7 @@ Rules the framework enforces rather than documents and forgets:
 - one turn is one frame; **1024 operations** per frame (`reflux/protocol.py`)
 - every node id is unique **within one tree** — a list renders by key, so a repeat is a half-drawn list
 - `position = 0` means "the tail" and is left off the wire
+- a frame is an array; an object is refused at both ends (the envelope belongs to the host, not the wire)
 - uplinks are `{event, id?, data}`; the reserved `reflux:` prefix belongs to the framework
 
 ## Two SDKs, one specification

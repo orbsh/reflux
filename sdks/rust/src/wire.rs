@@ -3,8 +3,11 @@
 //! Fields are the wire's, taken from the renderer's `content` crate: `create` / `set` carry
 //! `Influx{event, data}`, `append` `AppendOp{event, position, data}`, `remove` `RemoveOp{event, id}`,
 //! `patch` `PatchOp{event, id?, path, op, value}`, `inject` `InjectOp{slot, event?, id?, data}`,
-//! `tmpl` `InfluxTmpl{name, data}`, and `empty` carries nothing. The frame is
-//! `Message{ev, sender, created?, content}`: we write `ev = "draw"` and leave `created` out.
+//! `tmpl` `InfluxTmpl{name, data}`, and `empty` carries nothing.
+//!
+//! **A frame is the action list** — a bare JSON array, one element per operation. The envelope
+//! (`Message{ev, sender, created?}`) is the host's and this layer has none (fluxen ADR 0021
+//! decision 6): there is one verb here, so an `ev` would only restate it.
 //!
 //! This mirrors `reflux/wire.py`. Both are hand-written on purpose — what the *specification* owns is
 //! the vocabulary (`types`), not the shape of a frame. Where Python raises (`ValueError`) this
@@ -114,11 +117,7 @@ pub fn empty() -> Value {
     Value::Object(op)
 }
 
-/// One turn = one frame. `sender` is the session id the envelope requires.
-pub fn draw(sender: &str, operations: &[Value]) -> Value {
-    let mut frame = Map::new();
-    put(&mut frame, "ev", s("draw"));
-    put(&mut frame, "sender", s(sender));
-    put(&mut frame, "content", Value::Array(operations.to_vec()));
-    Value::Object(frame)
+/// One turn = one frame: the operations, in order. Nothing wraps them.
+pub fn draw(operations: &[Value]) -> Value {
+    Value::Array(operations.to_vec())
 }

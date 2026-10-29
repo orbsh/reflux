@@ -95,14 +95,14 @@ class Session:
         self.sent = 0
         self.draws = 0
         self.capacity = outbox
-        self.outbox: list[dict] = []  # waiting for the writer thread, oldest first
+        self.outbox: list[list[dict]] = []  # waiting for the writer thread, oldest first
         self.stale = False  # frames were shed: the client has a hole (a resync repairs it)
         self._record = record
         self._stats = stats
         self._note = note or (lambda line: None)
         self._wake = threading.Event()
 
-    def send(self, frame: dict) -> None:
+    def send(self, frame: list[dict]) -> None:
         """Queue one frame out. The writer writes it; nobody blocks on the socket here.
 
         Every outbound frame passes this one door, so this is where the ingest boundary stands:
@@ -137,9 +137,9 @@ class Session:
         self._wake.clear()
 
     def draw(self, *operations: dict) -> None:
-        """Send a batch of operations as one turn (one `draw` frame)."""
+        """Send a batch of operations as one turn — the frame is the list itself."""
         self.draws += 1
-        self.send(wire.draw(self.id, *operations))
+        self.send(wire.draw(*operations))
 
 
 class App:
@@ -368,7 +368,7 @@ class App:
     def _record(self, direction: str, frame: Any) -> None:
         self.log.append((direction, frame))
 
-    def _write(self, channel: Channel, frame: dict) -> bool:
+    def _write(self, channel: Channel, frame: list[dict]) -> bool:
         """One frame onto the socket. False when the client cannot take it — then it is its own."""
         try:
             channel.send(json.dumps(frame, ensure_ascii=False))

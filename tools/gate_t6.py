@@ -50,13 +50,7 @@ def page(path: str, title: str, *, label: str | None = None, markers: bool = Tru
 
 def draw(session, node) -> None:
     """One accrete `draw` frame: `create` on the layout root (`event` is required but unread)."""
-    session.send(
-        {
-            "ev": "draw",
-            "sender": session.id,
-            "content": [{"action": "create", "event": "", "data": dump(node)}],
-        }
-    )
+    session.send([{"action": "create", "event": "", "data": dump(node)}])
 
 
 def wait(predicate, timeout: float = 10.0):

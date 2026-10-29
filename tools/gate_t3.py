@@ -163,7 +163,7 @@ def main() -> int:
             print("no session: the page never connected")
             return 1
 
-        session.send(wire.draw(session.id, *seed_slots(), wire.create(tree())))
+        session.send(wire.draw(*seed_slots(), wire.create(tree())))
         wait_for(cdp, "!!document.querySelector('.rack')")
         cdp.drain()
         seen = json.loads(cdp.eval(f"JSON.stringify({probe})") or "{}")
