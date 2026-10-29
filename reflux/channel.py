@@ -1,4 +1,4 @@
-"""The WebSocket channel: one per session, ops down and events up, JSON text frames.
+"""The WebSocket channel: one per session, ops down and uplinks up, JSON text frames.
 
 stdlib only, like everything else on the producer side. The handshake is the HTTP upgrade the
 browser asks for on ``GET /ws``; after that it is frames, and the codec is deliberately the

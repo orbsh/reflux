@@ -9,7 +9,7 @@ whole wire. The vocabulary is no longer ours (it is accrete's types, reached thr
 and a namespace. They do not follow a spec out of the repo, and a spec that generates two
 integers would be a generator for two integers.
 
-Hand-written, and read from one place each: `app` / `events` take the prefix, `ingest` and `wire`
+Hand-written, and read from one place each: `app` / `intents` take the prefix, `ingest` and `wire`
 take the cap. Nothing here is generated, so nothing here drifts.
 """
 

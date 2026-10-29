@@ -50,7 +50,7 @@ def page(path: str, title: str, *, label: str | None = None, markers: bool = Tru
 
 def draw(session, node) -> None:
     """One accrete `draw` frame: `create` on the layout root (`event` is required but unread)."""
-    session.send([{"action": "create", "event": "", "data": dump(node)}])
+    session.send([{"action": "create", "slot": "", "data": dump(node)}])
 
 
 def wait(predicate, timeout: float = 10.0):
@@ -71,7 +71,7 @@ def frames(app: App, event: str) -> list[dict]:
     return [
         frame
         for direction, frame in list(app.log)
-        if direction == "recv" and isinstance(frame, dict) and frame.get("event") == event
+        if direction == "recv" and isinstance(frame, dict) and frame.get("dest") == event
     ]
 
 

@@ -28,7 +28,7 @@ fn s(value: &str) -> Value {
 pub fn create(data: Value) -> Value {
     let mut op = Map::new();
     put(&mut op, "action", s("create"));
-    put(&mut op, "event", s(""));
+    put(&mut op, "slot", s(""));
     put(&mut op, "data", data);
     Value::Object(op)
 }
@@ -37,7 +37,7 @@ pub fn create(data: Value) -> Value {
 pub fn set(slot: &str, data: Value) -> Value {
     let mut op = Map::new();
     put(&mut op, "action", s("set"));
-    put(&mut op, "event", s(slot));
+    put(&mut op, "slot", s(slot));
     put(&mut op, "data", data);
     Value::Object(op)
 }
@@ -49,7 +49,7 @@ pub fn set(slot: &str, data: Value) -> Value {
 pub fn append(slot: &str, data: Value, position: i64) -> Value {
     let mut op = Map::new();
     put(&mut op, "action", s("append"));
-    put(&mut op, "event", s(slot));
+    put(&mut op, "slot", s(slot));
     put(&mut op, "data", data);
     if position != 0 {
         put(&mut op, "position", Value::from(position));
@@ -61,7 +61,7 @@ pub fn append(slot: &str, data: Value, position: i64) -> Value {
 pub fn remove(slot: &str, id: &str) -> Value {
     let mut op = Map::new();
     put(&mut op, "action", s("remove"));
-    put(&mut op, "event", s(slot));
+    put(&mut op, "slot", s(slot));
     put(&mut op, "id", s(id));
     Value::Object(op)
 }
@@ -73,7 +73,7 @@ pub fn remove(slot: &str, id: &str) -> Value {
 pub fn patch(slot: &str, path: &str, value: Value, op_kind: &str, id: Option<&str>) -> Value {
     let mut op = Map::new();
     put(&mut op, "action", s("patch"));
-    put(&mut op, "event", s(slot));
+    put(&mut op, "slot", s(slot));
     put(&mut op, "path", s(path));
     put(&mut op, "op", s(op_kind));
     put(&mut op, "value", value);
@@ -93,6 +93,7 @@ pub fn inject(slot: &str, data: Value, event: Option<&str>, id: Option<&str>) ->
     put(&mut op, "slot", s(slot));
     put(&mut op, "data", data);
     if let Some(name) = event {
+        // `inject`'s rider is an EVENT name (the local emit it imitates), not an address
         put(&mut op, "event", s(name));
     }
     if let Some(row) = id {

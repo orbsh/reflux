@@ -10,13 +10,13 @@ Layering, so imports never cycle:
   sdk._parse          the boundary: `parse` / `dump`, and the assembly of a `bind` entry
   sdk.closed          the closure walk — the one vocabulary list the boundary reads
   wire                accrete's eight actions, and the `draw` frame that carries them
-  channel / events / app / server   the producer: the page tree, the /ws channel, the registry
+  channel / dests / app / server  the producer: the page tree, the /ws channel, the registry
   routes / cli        the route table (a path declared where its handler is) and the printing of it
 
     from reflux import route, wire
     from reflux.sdk import builders as b
 
-    page = b.case(b.text("hello", source="greeting"), b.input(event="name.change"))
+    page = b.case(b.text("hello", source="greeting"), b.input(dest="name.change"))
 
     @route("/blog/{slug}", title="文章")
     def post(session, match):
@@ -27,7 +27,7 @@ Layering, so imports never cycle:
 
 from . import sdk, wire
 from .app import App, Session
-from .events import Registry, RegistryError
+from .dests import Registry, RegistryError
 from .protocol import MAX_OPS_PER_FRAME, RESERVED_PREFIX
 from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
 from .sdk import builders

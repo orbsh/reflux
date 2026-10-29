@@ -7,7 +7,7 @@ prefix belongs to the framework, so an application registering on it is a startu
 framework's own protocol names come in through :meth:`Registry.builtin`, which is the one
 legitimate use of that prefix.
 
-    events = Registry()
+    intents = Registry()
 
     @events.register("chat.send")
     def send(session, frame): ...
@@ -102,11 +102,11 @@ class Registry:
 
     def dispatch(self, session, frame: Any) -> bool:
         """Hand one uplink frame to its handler. False when it was refused."""
-        if not isinstance(frame, dict) or not isinstance(frame.get("event"), str):
+        if not isinstance(frame, dict) or not isinstance(frame.get("dest"), str):
             self.refused += 1
             self.log.append(f"malformed frame from {session.id}: {frame!r}")
             return False
-        name = frame["event"]
+        name = frame["dest"]
         handler = self._handlers.get(name)
         if handler is None:
             self.refused += 1

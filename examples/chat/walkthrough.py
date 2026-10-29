@@ -189,11 +189,11 @@ def main() -> int:
             return 1
         with ws:
             step.wait("握手：hello 带路径上去，服务端回一帧页面")
-            ws.send({"event": "reflux:hello", "data": {"path": "/"}})
+            ws.send({"dest": "reflux:hello", "data": {"path": "/"}})
             show(read_for(ws, 0.6))
 
             step.wait("发一条消息：两行入场，回话逐块落进它自己的槽")
-            ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": "你好，先介绍一下你自己"}}})
+            ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": "你好，先介绍一下你自己"}}})
             early = read_for(ws, max(0.4, args.delay * 12))
             show(early, limit=4)
             rest = read_until(ws, "就绪", limit=20)
@@ -205,8 +205,8 @@ def main() -> int:
             # Both frames go out before anything is read: at a small --delay the whole reply would
             # otherwise finish in the time it takes us to read one frame, and the step would show a
             # stop that had nothing left to stop.
-            ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": "这一条我要中途停掉"}}})
-            ws.send({"event": "chat.stop", "id": "stop", "data": {}})
+            ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": "这一条我要中途停掉"}}})
+            ws.send({"dest": "chat.stop", "id": "stop", "data": {}})
             frames = read_until(ws, "已停止", limit=20)
             partial = patches(frames).replace(" ⏹", "")  # the ⏹ is the bubble's own mark, not reply text
             print(f"    ← 停之前流出 {len(partial)} 字：{partial[:24]!r}")
@@ -216,22 +216,22 @@ def main() -> int:
             # Send #2 goes out before we read anything: the refusal is decided in the handler, so
             # the only pacing that matters is that the first reply has not finished — sending two
             # frames back to back guarantees that (the reader thread handles them in order).
-            ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": "流未结束时的第一条"}}})
-            ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": "这一条应该被拒（单飞）"}}})
+            ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": "流未结束时的第一条"}}})
+            ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": "这一条应该被拒（单飞）"}}})
             frames = read_until(ws, "上一条还在流", limit=10)
             print(f"    ← 状态行：{status_of(frames) or '（没有拒绝——流已经结束，说明延迟太小）'}")
-            ws.send({"event": "chat.stop", "id": "stop", "data": {}})
+            ws.send({"dest": "chat.stop", "id": "stop", "data": {}})
             read_until(ws, "已停止", limit=20)
 
             step.wait("空消息与超长：应用层的两道门（协议层只查形状，不查长度）")
             for text, why in (("   ", "空"), ("字" * (MAX_CHARS + 1), f"超 {MAX_CHARS} 字")):
-                ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": text}}})
+                ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": text}}})
                 frames = read_until(ws, "没有发出去", limit=5)
                 print(f"    {why} → 状态行：{status_of(frames) or '（没收到）'}")
 
             step.wait(f"填满窗口：连发到超过 {args.window} 轮，状态行开始报裁剪")
             for i in range(1, args.window + 2):
-                ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": f"第 {i} 条填充消息"}}})
+                ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": f"第 {i} 条填充消息"}}})
                 frames = read_until(ws, "就绪", limit=20)
                 print(f"    第 {i} 条 → {status_of(frames) or '（状态行未变）'}")
     except KeyboardInterrupt:

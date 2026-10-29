@@ -6,7 +6,7 @@ routing.
     @route("/blog/{slug}", title="文章")
     def post(session, match): ...
 
-    @app.events.register("name.change")
+    @app.dests.register("name.change")
     def name_changed(session, frame):
         session.draw(wire.set("echo", b.text(frame["data"])))
 
@@ -46,7 +46,7 @@ from typing import Any, Callable
 
 from . import ingest, wire
 from .channel import JUDGED_DEAD, Channel, ChannelClosed
-from .events import Registry
+from .dests import Registry
 from .protocol import RESERVED_PREFIX
 from .routes import DEFAULT, Routes
 from .sdk import builders as b
@@ -157,7 +157,7 @@ class App:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
         self.root = Path(root) if root is not None else PAGE_ROOT
-        self.events = Registry()
+        self.dests = Registry()
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(session, path) -> a node, or the ops of this turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
@@ -179,8 +179,8 @@ class App:
         self.log: list[tuple[str, Any]] = []  # every frame in and out, in order
         self._stop = threading.Event()
         self._watchdog: threading.Thread | None = None
-        self.events.builtin(f"{RESERVED_PREFIX}hello", self._on_hello)
-        self.events.builtin(f"{RESERVED_PREFIX}nav", self._on_nav)
+        self.dests.builtin(f"{RESERVED_PREFIX}hello", self._on_hello)
+        self.dests.builtin(f"{RESERVED_PREFIX}nav", self._on_nav)
 
     # --- the framework's own protocol -----------------------------------------------------
 
@@ -244,7 +244,7 @@ class App:
             channel.close(JUDGED_DEAD)
             channel.abort()
             self.stats["dead"] += 1
-            self.events.log.append(f"session {session.id} judged dead ({self.dead_after}s quiet)")
+            self.dests.log.append(f"session {session.id} judged dead ({self.dead_after}s quiet)")
 
     def start_watchdog(self) -> None:
         """Start the thread that ticks ``watch()`` — one per server, so every server reclaims."""
@@ -300,7 +300,7 @@ class App:
     def handle(self, channel: Channel) -> None:
         """Read this connection's frames until it goes away: the session lives and dies with it."""
         session = Session(
-            secrets.token_hex(4), channel, self._record, self.stats, self.outbox, self.events.log.append
+            secrets.token_hex(4), channel, self._record, self.stats, self.outbox, self.dests.log.append
         )
         self.sessions[channel] = session
         self.stats["issued"] += 1
@@ -313,8 +313,8 @@ class App:
                 try:
                     frame = json.loads(raw)
                 except ValueError:
-                    self.events.refused += 1
-                    self.events.log.append(f"not JSON from {session.id}: {raw[:200]!r}")
+                    self.dests.refused += 1
+                    self.dests.log.append(f"not JSON from {session.id}: {raw[:200]!r}")
                     continue
                 self._record("recv", frame)
                 try:
@@ -323,19 +323,19 @@ class App:
                     # The registry never sees it: a frame that is not shaped like an uplink frame
                     # is refused before anything can dispatch on it. The session survives.
                     self.stats["refused"] += 1
-                    self.events.log.append(
+                    self.dests.log.append(
                         f"refused uplink from {session.id} on {session.path}: {bad}"
                     )
                     continue
-                self.events.dispatch(session, frame)
+                self.dests.dispatch(session, frame)
         except ChannelClosed as exc:
-            self.events.log.append(f"session {session.id} closed: {exc}")
+            self.dests.log.append(f"session {session.id} closed: {exc}")
         finally:
             # Identity, not id: a session the watchdog already reclaimed is not this thread's to
             # count, and no thread can remove a session that is not its own.
             if self.sessions.pop(channel, None) is not None:
                 self.stats["reclaimed"] += 1
-                self.events.log.append(f"session {session.id} reclaimed")
+                self.dests.log.append(f"session {session.id} reclaimed")
 
     def _pump(self, session: Session) -> None:
         """Write one session's frames until it is no longer live.
@@ -374,5 +374,5 @@ class App:
             channel.send(json.dumps(frame, ensure_ascii=False))
             return True
         except (ChannelClosed, OSError, ValueError) as exc:
-            self.events.log.append(f"write failed: {exc}")
+            self.dests.log.append(f"write failed: {exc}")
             return False

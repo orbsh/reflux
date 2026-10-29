@@ -419,30 +419,30 @@ pub fn fold(children: &[Value], float_body: Option<bool>, replace_header: Option
 }
 
 /// Build a `form` node (the wire type `form`).
-pub fn form(children: &[Value], instant: Option<bool>, event: Option<&str>, local: Option<&str>, path: Option<&str>, id: Option<&str>) -> Value {
+pub fn form(children: &[Value], instant: Option<bool>, dest: Option<&str>, local: Option<&str>, path: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = instant {
         put(&mut attrs, "instant", Value::Bool(v));
     }
     let mut bind = Map::new();
     {
-        let given = [event.is_some(), local.is_some()].into_iter().filter(|v| *v).count();
+        let given = [dest.is_some(), local.is_some()].into_iter().filter(|v| *v).count();
         assert!(given <= 1, "form: bind[value] takes one 落点 at a time, got {}", given);
     }
     if path.is_some() {
         assert!(local.is_some(), "form: path needs a local 落点 to ride on");
     }
-    if let Some(v) = event {
-        let mut fields: Vec<(&str, Value)> = vec![("event", s(v))];
-        fields.push(("kind", s("event")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "event", "kind"]));
+    if let Some(v) = dest {
+        let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
+        fields.push(("kind", s("dest")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
     } else if let Some(v) = local {
         let mut fields: Vec<(&str, Value)> = vec![("slot", s(v))];
         if let Some(p) = path {
             fields.push(("path", s(p)));
         }
         fields.push(("kind", s("local")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "event", "kind", "path", "slot"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "slot", "name"]));
     }
     let mut node = Map::new();
     if !attrs.is_empty() {
@@ -608,7 +608,7 @@ pub fn pages(horizontal: Option<bool>, display: Option<Value>, source: Option<&s
             fields.push(("path", s(p)));
         }
         fields.push(("kind", s("local")));
-        put(&mut bind, "select", ordered(&fields, &["default", "type", "event", "kind", "path", "slot"]));
+        put(&mut bind, "select", ordered(&fields, &["default", "type", "kind", "path", "slot", "name"]));
     }
     let mut node = Map::new();
     if !attrs.is_empty() {
@@ -685,14 +685,14 @@ pub fn image(value: Option<&str>, desc: Option<&str>, height: Option<&str>, thum
 }
 
 /// Build a `input` node (the wire type `input`).
-pub fn input(horizontal: Option<bool>, event: Option<&str>, field: Option<&str>, payload: Option<Value>, kind: Option<JsType>, id: Option<&str>) -> Value {
+pub fn input(horizontal: Option<bool>, dest: Option<&str>, field: Option<&str>, payload: Option<Value>, kind: Option<JsType>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = horizontal {
         put(&mut attrs, "horizontal", Value::Bool(v));
     }
     let mut bind = Map::new();
     {
-        let given = [event.is_some(), field.is_some()].into_iter().filter(|v| *v).count();
+        let given = [dest.is_some(), field.is_some()].into_iter().filter(|v| *v).count();
         assert!(given <= 1, "input: bind[value] takes one 落点 at a time, got {}", given);
     }
     if payload.is_some() {
@@ -701,10 +701,10 @@ pub fn input(horizontal: Option<bool>, event: Option<&str>, field: Option<&str>,
     if kind.is_some() {
         assert!(field.is_some(), "input: kind needs a field 落点 to ride on");
     }
-    if let Some(v) = event {
-        let mut fields: Vec<(&str, Value)> = vec![("event", s(v))];
-        fields.push(("kind", s("event")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "event", "kind"]));
+    if let Some(v) = dest {
+        let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
+        fields.push(("kind", s("dest")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
     } else if let Some(v) = field {
         let mut fields: Vec<(&str, Value)> = vec![("field", s(v))];
         if let Some(p) = payload {
@@ -731,14 +731,14 @@ pub fn input(horizontal: Option<bool>, event: Option<&str>, field: Option<&str>,
 }
 
 /// Build a `select` node (the wire type `select`).
-pub fn select(horizontal: Option<bool>, value: Option<&str>, source: Option<&str>, event: Option<&str>, options_source: Option<&str>, id: Option<&str>) -> Value {
+pub fn select(horizontal: Option<bool>, value: Option<&str>, source: Option<&str>, dest: Option<&str>, options_source: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = horizontal {
         put(&mut attrs, "horizontal", Value::Bool(v));
     }
     let mut bind = Map::new();
     {
-        let given = [value.is_some(), source.is_some(), event.is_some()].into_iter().filter(|v| *v).count();
+        let given = [value.is_some(), source.is_some(), dest.is_some()].into_iter().filter(|v| *v).count();
         assert!(given <= 1, "select: bind[value] takes one 落点 at a time, got {}", given);
     }
     if let Some(v) = value {
@@ -749,10 +749,10 @@ pub fn select(horizontal: Option<bool>, value: Option<&str>, source: Option<&str
         let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
         fields.push(("kind", s("source")));
         put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "source"]));
-    } else if let Some(v) = event {
-        let mut fields: Vec<(&str, Value)> = vec![("event", s(v))];
-        fields.push(("kind", s("event")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "event", "kind"]));
+    } else if let Some(v) = dest {
+        let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
+        fields.push(("kind", s("dest")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
     }
     if let Some(v) = options_source {
         let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
@@ -882,7 +882,7 @@ pub fn text(value: Option<&str>, format: Option<&str>, source: Option<&str>, loc
             fields.push(("path", s(p)));
         }
         fields.push(("kind", s("local")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "event", "kind", "path", "slot"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "slot", "name"]));
     }
     let mut node = Map::new();
     if !attrs.is_empty() {
@@ -899,14 +899,14 @@ pub fn text(value: Option<&str>, format: Option<&str>, source: Option<&str>, loc
 }
 
 /// Build a `textarea` node (the wire type `textarea`).
-pub fn textarea(horizontal: Option<bool>, value: Option<&str>, source: Option<&str>, event: Option<&str>, placeholder: Option<&str>, id: Option<&str>) -> Value {
+pub fn textarea(horizontal: Option<bool>, value: Option<&str>, source: Option<&str>, dest: Option<&str>, placeholder: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = horizontal {
         put(&mut attrs, "horizontal", Value::Bool(v));
     }
     let mut bind = Map::new();
     {
-        let given = [value.is_some(), source.is_some(), event.is_some()].into_iter().filter(|v| *v).count();
+        let given = [value.is_some(), source.is_some(), dest.is_some()].into_iter().filter(|v| *v).count();
         assert!(given <= 1, "textarea: bind[value] takes one 落点 at a time, got {}", given);
     }
     if let Some(v) = value {
@@ -917,10 +917,10 @@ pub fn textarea(horizontal: Option<bool>, value: Option<&str>, source: Option<&s
         let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
         fields.push(("kind", s("source")));
         put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "source"]));
-    } else if let Some(v) = event {
-        let mut fields: Vec<(&str, Value)> = vec![("event", s(v))];
-        fields.push(("kind", s("event")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "event", "kind"]));
+    } else if let Some(v) = dest {
+        let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
+        fields.push(("kind", s("dest")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
     }
     if let Some(v) = placeholder {
         let mut fields: Vec<(&str, Value)> = vec![("default", s(v))];

@@ -434,15 +434,9 @@
           ]
         },
         {
-          "description": "具名本地值槽（ADR 0008）：独立于 data（Accrete 展示形态）的\n裸 Value 平面——发射侧省略 `path`（整值写入），订阅侧带 `path`\n时进槽内 Value 的 JSON Pointer 提取子值（形状归生产端，\n与 wire-shape 无关）。\nADR 0010：落槽载荷与上行同形（`Outflow {event, id?, data}` 包装\n对象）——事件形状由事件定义、不由落点决定，`kind: event` 改绑\n`kind: local` 订阅方零改动。`event` 缺省 = 槽名（槽即频道）；\n`path` 仍是订阅侧字段，发射侧忽略。",
+          "description": "具名本地值槽（ADR 0008）：独立于 data（Accrete 展示形态）的\n裸 Value 平面——发射侧省略 `path`（整值写入），订阅侧带 `path`\n时进槽内 Value 的 JSON Pointer 提取子值（形状归生产端，\n与 wire-shape 无关）。\nADR 0010：落槽载荷与上行同形（`Outflow {intent, id?, data}` 包装\n对象）——事件形状由事件定义、不由落点决定，`kind: event` 改绑\n`kind: local` 订阅方零改动。`intent` 缺省 = 槽名（槽即频道）；\n`path` 仍是订阅侧字段，发射侧忽略。",
           "type": "object",
           "properties": {
-            "event": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "kind": {
               "type": "string",
               "const": "local"
@@ -455,6 +449,12 @@
             },
             "slot": {
               "type": "string"
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -465,18 +465,19 @@
         {
           "type": "object",
           "properties": {
-            "event": {
-              "type": "string"
-            },
             "kind": {
               "type": "string",
-              "const": "event"
+              "const": "dest"
+            },
+            "dest": {
+              "type": "string"
             }
           },
           "required": [
             "kind",
-            "event"
-          ]
+            "dest"
+          ],
+          "description": "上行目标：这个控件把交互送到宿主上的哪个目标（ADR 0023）"
         },
         {
           "type": "object",

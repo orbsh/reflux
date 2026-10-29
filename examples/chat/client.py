@@ -5,7 +5,7 @@ The producer side of this repo only ever *accepts* upgrades (`reflux.channel`), 
 out, text frames in, stdlib only.
 
     with Socket(port) as ws:
-        ws.send({"event": "reflux:hello", "data": {"path": "/"}})
+        ws.send({"dest": "reflux:hello", "data": {"path": "/"}})
         print(ws.recv())
 
 `recv` takes a deadline (`None` waits forever). Closing is our own: the server answers a close frame

@@ -33,8 +33,8 @@ PAGE = "/"
 
 def tree() -> Any:
     return b.case(
-        {"type": "input", "bind": {"value": {"kind": "event", "event": "gate.nowhere", "type": "text"}}},
-        {"type": "input", "bind": {"value": {"kind": "event", "event": "gate.boom", "type": "text"}}},
+        {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.nowhere", "type": "text"}}},
+        {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.boom", "type": "text"}}},
         # an emitter for the refused-frame case: bound to the `echo` data slot
         {"type": "text", "id": "echo", "bind": {"value": {"kind": "source", "source": "echo"}}},
     )
@@ -73,18 +73,18 @@ def main() -> int:
     app = App()
     checks: list[tuple[str, bool, str]] = []
 
-    @app.events.register("gate.boom")
+    @app.dests.register("gate.boom")
     def boom(session, frame):
         raise RuntimeError("the producer's own defect")
 
-    @app.events.register("gate.half")
+    @app.dests.register("gate.half")
     def half(session, frame):
         # One legal operation and one that is not a wire type: the whole frame must be refused, so
         # "half-way" can never reach the page — and the frame after it still must.
         session.send(
             wire.draw(
 wire.set("echo", b.text("half-way")),
-                {"action": "create", "event": "", "data": {"type": "widget"}})
+                {"action": "create", "slot": "", "data": {"type": "widget"}})
         )
         session.send(wire.draw(wire.set("echo", b.text("whole"))))
 
@@ -102,31 +102,31 @@ wire.set("echo", b.text("half-way")),
             return 1
 
         # 1 — an unregistered name: counted by the registry, never dispatched, page untouched.
-        before = app.events.refused
+        before = app.dests.refused
         uplink(cdp, 0, "hello")
-        wait_for(lambda: app.events.refused == before + 1)
-        counted = app.events.refused == before + 1
+        wait_for(lambda: app.dests.refused == before + 1)
+        counted = app.dests.refused == before + 1
         alive = bool(app.live()) and bool(cdp.eval("document.querySelectorAll('#main *').length > 0"))
         checks.append(
             (
                 "an unregistered event name is refused and counted",
                 counted and alive,
-                f"registry +{app.events.refused - before} live={len(app.live())}",
+                f"registry +{app.dests.refused - before} live={len(app.live())}",
             )
         )
 
         # 2 — a handler that raises: a traceback in the log, the session alive, the page answering.
-        before = app.events.refused
+        before = app.dests.refused
         uplink(cdp, 1, "boom")
         # The counter moves before the traceback is formatted, so wait for the line, not the number.
         traceback_logged = wait_for(
-            lambda: any("handler for 'gate.boom' raised" in line for line in app.events.log)
+            lambda: any("handler for 'gate.boom' raised" in line for line in app.dests.log)
         )
         checks.append(
             (
                 "a raising handler is logged and the session survives",
-                app.events.refused == before + 1 and traceback_logged and bool(app.live()),
-                f"registry +{app.events.refused - before} traceback={traceback_logged} live={len(app.live())}",
+                app.dests.refused == before + 1 and traceback_logged and bool(app.live()),
+                f"registry +{app.dests.refused - before} traceback={traceback_logged} live={len(app.live())}",
             )
         )
 

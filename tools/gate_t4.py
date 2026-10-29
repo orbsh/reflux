@@ -50,14 +50,14 @@ def field(name: str, *, id: str) -> dict:
 def tree() -> Any:
     return b.case(
         # 0: an event-emitting input with its own identity
-        {"type": "input", "id": "name-in", "bind": {"value": {"kind": "event", "event": "gate.name", "type": "text"}}},
+        {"type": "input", "id": "name-in", "bind": {"value": {"kind": "dest", "dest": "gate.name", "type": "text"}}},
         # 1: the same, with no id — an empty id is not an id
-        {"type": "input", "bind": {"value": {"kind": "event", "event": "gate.anon", "type": "text"}}},
+        {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.anon", "type": "text"}}},
         # 2: a form: two field inputs and its submit button
         {
             "type": "form",
             "id": "the-form",
-            "bind": {"value": {"kind": "event", "event": "gate.form"}},
+            "bind": {"value": {"kind": "dest", "dest": "gate.form"}},
             "children": [
                 field("who", id="who-in"),
                 field("n", id="n-in"),
@@ -100,7 +100,7 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     for event in ("gate.name", "gate.anon", "gate.form"):
-        app.events.register(event, lambda session, frame: SEEN.append(frame))
+        app.dests.register(event, lambda session, frame: SEEN.append(frame))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
         session = next(iter(app.live()), None)
@@ -124,7 +124,7 @@ def main() -> int:
         checks.append(
             (
                 "an input's Enter uplinks {event, id, data}",
-                first == {"event": "gate.name", "id": "name-in", "data": "hello"},
+                first == {"dest": "gate.name", "id": "name-in", "data": "hello"},
                 json.dumps(first, ensure_ascii=False),
             )
         )
@@ -150,7 +150,7 @@ def main() -> int:
         checks.append(
             (
                 "an input without an id sends no id key",
-                second == {"event": "gate.anon", "data": "anon"},
+                second == {"dest": "gate.anon", "data": "anon"},
                 json.dumps(second, ensure_ascii=False),
             )
         )
@@ -176,7 +176,7 @@ def main() -> int:
                 "a form submits once, with every field and the form's own id",
                 submit
                 == {
-                    "event": "gate.form",
+                    "dest": "gate.form",
                     "id": "the-form",
                     "data": {
                         "who": {"data": "ada", "payload": None},

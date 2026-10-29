@@ -88,7 +88,7 @@ def bind_entry(
     *,
     default: Any = None,
     source: str | None = None,
-    event: str | None = None,
+    dest: str | None = None,
     field: str | None = None,
     local: str | None = None,
     submit: Any = None,
@@ -100,15 +100,17 @@ def bind_entry(
     at a time. `key` is the entry's name on the wire (`value` for most types; `options` for a
     select's rows, `select` for a pages container's key, `placeholder` for a textarea's).
 
+    `dest` is the uplink's target (ADR 0023 — kind and field are both `dest`; the uplink is *not*
+    a `slot`: a slot is a place in the page, a dest is a handler on the host).
     `js_kind` is the entry's own `type` (accrete's `JsType`: bool → a checkbox, number, text,
-    password, …), a sibling of the variant, not part of it. `payload` rides a `field`落点 only.
+    password, …), a sibling of the variant, not part of it. `payload` rides a `field` entry only.
     `path` rides a `local`落点: a client-side slot holds the wrapper an in-page emit wrote, so a
     reader that wants the payload itself points at it (`path="/data"`).
     """
     picks = [
         ("default", default),
         ("source", source),
-        ("event", event),
+        ("dest", dest),
         ("field", field),
         ("local", local),
         ("submit", submit),
@@ -116,10 +118,10 @@ def bind_entry(
     chosen = [(kind, value) for kind, value in picks if value is not None]
     if len(chosen) > 1:
         names = [kind for kind, _ in chosen]
-        raise ValueError(f'bind[{key!r}] takes one落点 at a time, got {names}')
+        raise ValueError(f'bind[{key!r}] takes one target at a time, got {names}')
     if not chosen:
         if payload is not None or js_kind is not None or path is not None:
-            raise ValueError(f"bind[{key!r}]: payload / kind / path need a落点 to ride on")
+            raise ValueError(f"bind[{key!r}]: payload / type / path need an entry to ride on")
         return None
     kind, value = chosen[0]
     entry: dict[str, Any] = {"kind": kind}
@@ -133,10 +135,12 @@ def bind_entry(
         entry["slot"] = value
         if path is not None:
             entry["path"] = path
-    else:  # source / event carry their own field, named after the kind
+    elif kind == "dest":
+        entry["dest"] = value  # 上行目标
+    else:  # source carries its own field, named after the kind
         entry[kind] = value
     if path is not None and kind != "local":
-        raise ValueError(f"bind[{key!r}]: `path` rides a local落点, got {kind!r}")
+        raise ValueError(f"bind[{key!r}]: `path` rides a `local` entry, got {kind!r}")
     if js_kind is not None:
         entry["type"] = getattr(js_kind, "value", js_kind)
     return entry

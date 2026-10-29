@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-from reflux.events import Registry, RegistryError
+from reflux.dests import Registry, RegistryError
 
 from tests.fakes import FakeSession
 
@@ -50,7 +50,7 @@ class TestRegistration(unittest.TestCase):
 
         self.assertEqual(events.names(), ["chat.send"])
         session = FakeSession()
-        self.assertTrue(events.dispatch(session, {"event": "chat.send", "data": {}}))
+        self.assertTrue(events.dispatch(session, {"dest": "chat.send", "data": {}}))
         self.assertEqual(len(session.seen), 1)
 
 
@@ -58,7 +58,7 @@ class TestDispatch(unittest.TestCase):
     def test_unregistered_name_is_refused_counted_and_logged(self) -> None:
         events = Registry()
         session = FakeSession()
-        self.assertFalse(events.dispatch(session, {"event": "ghost.press", "id": None, "data": {}}))
+        self.assertFalse(events.dispatch(session, {"dest": "ghost.press", "id": None, "data": {}}))
         self.assertEqual(events.refused, 1)
         self.assertEqual(events.calls, 0)
         self.assertIn("ghost.press", events.log[-1])
@@ -66,7 +66,7 @@ class TestDispatch(unittest.TestCase):
 
     def test_malformed_frame_is_refused(self) -> None:
         events = Registry()
-        for bad in ("not a frame", [], {"id": None}, {"event": 7}):
+        for bad in ("not a frame", [], {"id": None}, {"dest": 7}):
             with self.subTest(frame=bad):
                 self.assertFalse(events.dispatch(FakeSession(), bad))
         self.assertEqual(events.refused, 4)
@@ -79,11 +79,11 @@ class TestDispatch(unittest.TestCase):
 
         events.register("boom.now", boom)
         session = FakeSession()
-        self.assertFalse(events.dispatch(session, {"event": "boom.now", "data": {}}))
+        self.assertFalse(events.dispatch(session, {"dest": "boom.now", "data": {}}))
         self.assertIn("bad handler", events.log[-1])
         # and the next frame still gets through: a defect is a log line, not a dead session
         events.register("fine.now", lambda session, frame: None)
-        self.assertTrue(events.dispatch(session, {"event": "fine.now", "data": {}}))
+        self.assertTrue(events.dispatch(session, {"dest": "fine.now", "data": {}}))
 
 
 if __name__ == "__main__":

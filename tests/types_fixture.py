@@ -65,7 +65,7 @@ NODES: dict[str, dict] = {
     # No `bind.value` prefill: the renderer starts an input from its js-kind's default ("" for
     # text) and reads neither `default` nor `source` for display — measured, and the reason the
     # profile no longer offers them for `input`.
-    "input": {"type": "input", "bind": {"value": {"kind": "event", "event": "gate.input"}}},
+    "input": {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.input"}}},
     "select": {
         "type": "select",
         "bind": {"options": {"kind": "source", "source": "opts"}, "value": {"kind": "default", "default": "a"}},

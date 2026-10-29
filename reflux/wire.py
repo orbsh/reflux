@@ -10,6 +10,10 @@ Fields are the wire's, taken from the renderer's `content` crate: `create` / `se
 `[Content<Accrete>]` and nothing else (fluxen ADR 0021 decision 6). There is one verb here (`draw`),
 so an `ev` field would only restate it, and a `sender` would be a field no reader has.
 
+**An address is a `slot`; an `event` is a name** (fluxen ADR 0022). `create`/`set`/`append`/`remove`/
+`patch` carry `slot` (`""` = the layout root); `event` appears only on the way *up* (`Outflow.event`,
+and inside a node's `bind`), plus `inject`'s optional `event?` — the local event it imitates.
+
 Shape is what this layer can check — not list length. `position`'s domain depends on how many rows the
 slot holds, so an out-of-range position is the renderer's refusal (`warn`, no counter); the gate asserts
 that the row did not land. `create`'s `event` is required on the wire but unread, so we write `""`.
@@ -108,13 +112,13 @@ def _position(position: Any, what: str) -> int:
 
 
 def create(data: Any) -> dict:
-    """Replace the whole layout root. `Influx.event` is required and unread — we write `""`."""
-    return {"action": "create", "event": "", "data": _node(data, "create")}
+    """Replace the whole layout root: `slot: ""` is the root address (the same as `patch`)."""
+    return {"action": "create", "slot": "", "data": _node(data, "create")}
 
 
 def set(slot: str, data: Any) -> dict:
     """Replace the node in the named data slot."""
-    return {"action": "set", "event": _slot(slot, "set"), "data": _node(data, "set")}
+    return {"action": "set", "slot": _slot(slot, "set"), "data": _node(data, "set")}
 
 
 def append(slot: str, data: Any, *, position: int = 0) -> dict:
@@ -125,7 +129,7 @@ def append(slot: str, data: Any, *, position: int = 0) -> dict:
     """
     op: dict[str, Any] = {
         "action": "append",
-        "event": _slot(slot, "append"),
+        "slot": _slot(slot, "append"),
         "data": _node(data, "append"),
     }
     position = _position(position, "append")
@@ -138,7 +142,7 @@ def remove(slot: str, id: str) -> dict:
     """Drop the row carrying `id` from the list slot."""
     if not isinstance(id, str) or not id:
         raise ValueError(f"remove: the row id must be a non-empty string, got {id!r}")
-    return {"action": "remove", "event": _slot(slot, "remove"), "id": id}
+    return {"action": "remove", "slot": _slot(slot, "remove"), "id": id}
 
 
 def patch(
@@ -159,7 +163,7 @@ def patch(
         raise ValueError(f'patch: op must be "replace" or "append", got {op!r}')
     out: dict[str, Any] = {
         "action": "patch",
-        "event": _slot_or_root(slot, "patch"),
+        "slot": _slot_or_root(slot, "patch"),
         "path": _pointer(path, "patch"),
         "op": op,
         "value": value,
@@ -171,15 +175,16 @@ def patch(
     return out
 
 
-def inject(slot: str, data: Any, *, event: str | None = None, id: str | None = None) -> dict:
-    """Write the vals plane as if the page had emitted a `local` event on `slot`.
+def inject(slot: str, data: Any, *, name: str | None = None, id: str | None = None) -> dict:
+    """Write the vals plane as if the page had emitted a `local` intent on `slot`.
 
     `data` is a bare JSON value: the vals plane's currency is not display form (no node). The renderer
-    short-circuits an equal value, so this is safe to repeat.
+    short-circuits an equal value, so this is safe to repeat. `name` is the name stamped into the
+    wrapper the slot receives (it defaults to the slot name on the renderer's side).
     """
     out: dict[str, Any] = {"action": "inject", "slot": _slot(slot, "inject"), "data": data}
-    if event is not None:
-        out["event"] = _slot(event, "inject")
+    if name is not None:
+        out["name"] = _slot(name, "inject")
     if id is not None:
         if not isinstance(id, str) or not id:
             raise ValueError(f"inject: the id must be a non-empty string, got {id!r}")

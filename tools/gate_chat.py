@@ -54,7 +54,7 @@ def status_of(frames: list[dict]) -> str:
     text = ""
     for frame in frames:
         for op in frame:
-            if op.get("action") == "set" and op.get("event") == "status":
+            if op.get("action") == "set" and op.get("slot") == "status":
                 value = ((op.get("data") or {}).get("bind") or {}).get("value") or {}
                 if isinstance(value.get("default"), str):
                     text = value["default"]
@@ -97,11 +97,11 @@ def read_until(ws: Socket, marker: str, *, limit: float = 25.0) -> list[dict]:
 
 
 def send(ws: Socket, text: str) -> None:
-    ws.send({"event": "chat.send", "id": "send", "data": {"text": {"data": text}}})
+    ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": text}}})
 
 
 def stop(ws: Socket) -> None:
-    ws.send({"event": "chat.stop", "id": "stop", "data": {}})
+    ws.send({"dest": "chat.stop", "id": "stop", "data": {}})
 
 
 # --- phase A ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
     try:
         with Socket(port) as ws:
             # 1 — the page, and the one seed it needs.
-            ws.send({"event": "reflux:hello", "data": {"path": PAGE}})
+            ws.send({"dest": "reflux:hello", "data": {"path": PAGE}})
             hello = read_until(ws, "", limit=2.0) or [ws.recv(timeout=3)]
             ops = [op.get("action") for frame in hello for op in frame]
             checks.append(
@@ -223,7 +223,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             )
 
         # 7 — the framework's own accounting stayed clean while all of that ran.
-        raised = [line for line in app.events.log if "raised" in line]
+        raised = [line for line in app.dests.log if "raised" in line]
         checks.append(
             (
                 "no frame was refused and no handler raised",

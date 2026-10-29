@@ -15,7 +15,7 @@ interface does.
 | part | lives in | does |
 |---|---|---|
 | producer | your code, Python or Rust | builds nodes + frames with a generated SDK |
-| host | `reflux/app.py` | serves the page, owns sessions, routes, the event registry |
+| host | `reflux/app.py` | serves the page, owns sessions, routes, the uplink registry |
 | page | `www/` | static shell + `reflux.js` runtime + the pinned renderer bundle |
 
 The wire between them is one dialect: accrete's eight actions, and a frame **is** the array of them —
@@ -44,7 +44,7 @@ Two tools tell you what a running app declared:
 
 ```
 python3 -m reflux.cli routes reflux.demo_app                  # path → source module → metadata
-python3 -m reflux.cli events reflux.demo_app:make_app         # event name → kind → handler source
+python3 -m reflux.cli uplinks reflux.demo_app:make_app       # uplink slot → kind → handler source
 ```
 
 ## Your first app
@@ -63,7 +63,7 @@ def home(session, match):
         "/",
         "Hello",
         b.text("Hello", variant="heading-1"),
-        b.input(event="name.change", id="name"),
+        b.input(uplink="name.change", id="name"),
         b.text(source="echo", id="echo"),
     )
 
@@ -71,7 +71,7 @@ def home(session, match):
 app = App()
 
 
-@app.events.register("name.change")
+@app.uplinks.register("name.change")
 def on_name(session, frame):
     session.draw(wire.set("echo", b.text(str(frame["data"]))))
 
@@ -89,8 +89,8 @@ What the pieces are:
 - **`markers.page(path, title, *children)`** puts the two markers the page runtime mirrors into the
   address bar and the tab title, then your content. It is a convention, not a wire type.
 - **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
-  values. `b.text(source="echo")` reads a slot; `b.input(event="name.change")` sends one.
-- **`@app.events.register("name.change")`** is the only way an uplink frame reaches your code. An
+  values. `b.text(source="echo")` reads a slot; `b.input(uplink="name.change")` sends one.
+- **`@app.uplinks.register("name.change")`** is the only way an uplink frame reaches your code. An
   unregistered name is refused and counted — never dispatched dynamically.
 - **`session.draw(*ops)`** is exactly one frame, flushed in order.
 
@@ -98,16 +98,19 @@ Run it with `python3 myapp.py` and open <http://127.0.0.1:8000/>.
 
 ## The wire
 
-Eight actions. A frame **is** the list of them — a bare JSON array, with nothing wrapped around it:
+Eight actions. A frame **is** the list of them — a bare JSON array, with nothing wrapped around it. An
+address inside the tree is a `slot` (`""` = the layout root), and so is the uplink's landing point
+(`Outflow.slot`) — one word, and the frame's direction says which side it lands on. `event` stays with
+the DOM and with the host's own events; it never appears on this wire:
 
 | action | payload | meaning |
 |---|---|---|
-| `create` | `data` (a node) | replace the layout root |
-| `set` | `event` (slot), `data` | replace the node in a data slot |
-| `append` | `event` (slot), `data`, `position?` | add a row to a list slot |
-| `remove` | `event` (slot), `id` | drop a row by identity |
-| `patch` | `event`, `path` (JSON Pointer), `op`, `value`, `id?` | change one value inside the addressed plane |
-| `inject` | `slot`, `data`, `event?`, `id?` | write the values plane, as if a local event fired |
+| `create` | `slot: ""`, `data` (a node) | replace the layout root |
+| `set` | `slot`, `data` | replace the node in a data slot |
+| `append` | `slot`, `data`, `position?` | add a row to a list slot |
+| `remove` | `slot`, `id` | drop a row by identity |
+| `patch` | `slot`, `path` (JSON Pointer), `op`, `value`, `id?` | change one value inside the addressed plane |
+| `inject` | `slot`, `data`, `name?`, `id?` | write the values plane, as if a local emit fired (`name` defaults to the slot) |
 | `tmpl` | `name`, `data` (JSON text) | register a substitution table |
 | `empty` | — | a no-op, for keeping a frame's shape |
 
@@ -117,7 +120,7 @@ Rules the framework enforces rather than documents and forgets:
 - every node id is unique **within one tree** — a list renders by key, so a repeat is a half-drawn list
 - `position = 0` means "the tail" and is left off the wire
 - a frame is an array; an object is refused at both ends (the envelope belongs to the host, not the wire)
-- uplinks are `{event, id?, data}`; the reserved `reflux:` prefix belongs to the framework
+- uplinks are `{slot, id?, data}`; the reserved `reflux:` prefix belongs to the framework
 
 ## Two SDKs, one specification
 
@@ -179,7 +182,7 @@ The browser gates drive a real headless Chromium over CDP using only the standar
 ## Layout
 
 ```
-reflux/            the host: app, sessions, wire, ingest, routes, events, cli
+reflux/            the host: app, sessions, wire, ingest, routes, uplinks, cli
 reflux/sdk/        the Python SDK — generated types/builders, hand-written parse/markers
 www/               the page: index.html, reflux.js runtime, css, pinned renderer bundle
 schema/ profile/   the wire's snapshot and this framework's selection over it

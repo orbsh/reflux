@@ -90,7 +90,7 @@ def half_open_phase() -> list[tuple[str, bool, str]]:
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
     client = Ws(f"ws://127.0.0.1:{port}/ws")
-    client.send({"event": "reflux:hello", "data": {"path": "/"}})
+    client.send({"dest": "reflux:hello", "data": {"path": "/"}})
     registered = wait_for(lambda: len(app.live()) == 1, timeout=3.0)
     live_after_connect = len(app.live())  # read it now: later it is legitimately gone
 

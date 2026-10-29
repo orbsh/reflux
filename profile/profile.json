@@ -141,7 +141,7 @@
       "item": false,
       "bind": {
         "value": [
-          "event",
+          "dest",
           "local"
         ]
       }
@@ -234,7 +234,7 @@
       "js_kind": true,
       "bind": {
         "value": [
-          "event",
+          "dest",
           "field"
         ]
       }
@@ -248,7 +248,7 @@
         "value": [
           "default",
           "source",
-          "event"
+          "dest"
         ],
         "options": [
           "source"
@@ -319,7 +319,7 @@
         "value": [
           "default",
           "source",
-          "event"
+          "dest"
         ],
         "placeholder": [
           "default"

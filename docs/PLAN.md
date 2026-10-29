@@ -59,7 +59,7 @@ tests/types_fixture.py            29 个暴露类型各一个最小合法节点�
 tests/test_types_drawable.py      词表完整性：夹具 == profile 暴露集，每个节点过闭集与取值域
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
-reflux/events.py                  事件名注册表：注册期报错、未注册拒收计数
+reflux/intents.py                 意图名注册表：注册期报错、未注册拒收计数
 reflux/app.py                     应用：根挂载 + /static/ + /ws + 注册表 + 一页钩子
 reflux/demo_app.py                参考应用：回声／列表增删／表单一次提交／两条路由（T9 的种子）
 reflux/routes.py                  路由表：声明（Route）、一次匹配（Match）、择优键、发现
@@ -797,10 +797,52 @@ console error）；`examples/chat/walkthrough.py` 借 fluxen `examples/walkthrou
 - `python3 -m unittest discover -s tests -t .` → **182 例 OK**；`python3 tools/gen_sdk.py --check` → in sync。
 - 十一道门全绿：t0 7 · t2 12 · t3 18 · t4 8 · t6 8 · t7 4 · t8 5 · t9 10 · ingest 12 · chat 12 · t10 8。
 - T10 七帧（紧凑 JSON）：**110 / 309 / 49 / 161 / 2 454 / 799 / 177 B**；上一版是 154 / 353 / 93 / 205 /
-  2 498 / 843 / 221 B，差的正是那 70 B 信封（每个回合一份）。
+  2 498 / 843 / 221 B，差的正是那 70 B 信封（每个回合一份）。（同日槽位改名后这一组再各少 1 B／op：
+  109 / 308 / 48 / 160 / 2 451 / 798 / 176，见下一节。）
 - `tools/measure.py` 复测（数字进 `docs/PERF.md`）：回声 122 B（原 171）、加行 343、删行 54、表单 173、
   翻页 2 712；`set` 一条 DOM 变更、`append` 一条、`create` 十二条不变；首屏 23 ms、DCL 15 ms；服务端
   100 µs/帧、持续 3 594 帧/秒。
 
 **没做的**：prism（跨仓，用户裁决它自己处理）。它是 `path` 依赖 fluxen 的 `content`，而 `Message` 已经不在
 那儿了——换过去之前它编译不过，这是它自己那一步要解的，不是这里的漏项。
+
+### 2026-10-29 之二 — 地址叫 `slot`，`event` 只留给名字
+
+**触发**：fluxen ADR 0022（同日用户裁决）。同一帧里 `event` 有两个意思——下行是槽位地址、上行是
+事件名，"后端处理的时候名字撞车，太乱"。下行那一侧改名。
+
+**改了什么**：
+
+- `reflux/wire.py`：`create` 写 `slot: ""`（根地址，与 `patch` 同一约定）／`set`／`append`／`remove`／
+  `patch` 的键改为 `slot`；`inject` 不动（它的 `slot` 是通道、`event?` 是被模拟的事件名）。
+- `reflux/ingest.py`：`OP_KEYS`／`OP_REQUIRED` 里五个动作的字段集改 `slot`，形状检查与重复行 id 的
+  记账跟着改；错误路径从 `frame[0].event` 变成 `frame[0].slot`。`inject` 的 `event?` 仍在允许集里。
+- Rust SDK：`wire.rs` 六个 `put("slot")`；`inject` 的 rider 加了注释——它是事件名，不是地址。
+- 测试与门：`test_wire`／`test_app`／`test_chat_example`／`test_ingest`／`test_types_drawable` 的断言与
+  fixture、`gate_ingest`／`gate_t6`／`gate_t8`／`gate_chat` 的取值路径。
+- 钉住的渲染器包重新构建：`ui_leptos-5617bc7e8b2b2491.js`（88 681 B）+ `ui_leptos-3cb1392bc7247b70_bg.wasm`
+  （2 884 097 B）+ 两个 css，共 2 996 063 B；`versions.json` 逐文件 sha256 换掉。`rev` 记成
+  `uncommitted`——这一版出自 fluxen 工作树，等那次提交 land 再补真 sha。
+- 文档：DESIGN 的动词表／四个平面／旧协议对照／M1.4 台账里的签名、README 的动词表加一段判据、
+  HANDOFF 的包体积。
+
+**数字**：T10 八帧（紧凑 JSON）**109 / 308 / 48 / 160 / 2 451 / 798 / 176 B**——每个 op 少 1 B
+（`"event":` 是 9 字节，`"slot":` 是 8）。`measure.py` 复测：回声 121 B、加行 342、删行 53、表单 172、
+翻页 2 709；首屏 23 ms、DCL 12 ms；服务端 100 µs/帧、3 374 帧/秒；包 2 996 063 B。
+
+### 2026-10-29 之三 — 上行落点也叫 `slot`
+
+**触发**：fluxen ADR 0023（同一轮用户裁决）。`event` 在 UI 侧同时指着 DOM 事件、后端事件、上行落点，
+"前端传来的数据里又有 event 就乱了"；并且"上行的 event 实际对应的是下行的 slot"——同一种东西一个词。
+
+- `frame.slot`（原 `frame.event`）；`bind.<key>` 的 `kind: uplink` + `slot:`（原 `kind: event` + `event:`）；
+  `inject` 的另起名字 `name?`（缺省 = 槽名）。
+- 生产者侧同步：`reflux/events.py` → `reflux/uplinks.py`、`app.events` → `app.uplinks`、CLI
+  `reflux events` → `reflux uplinks`、测试 `test_cli_events.py`；`ingest` 的入站错误前缀
+  `envelope:` → `uplink:`（上行不是信封）。
+- SDK 重新生成：schema 快照的 bind 分支改成 `kind: uplink` + `slot`，profile 的四个条目改 `"uplink"`，
+  `gen_rust.py` 补一条（`local` 与 `uplink` 的落点字段都叫 `slot`）。
+- 钉住的渲染器包重打：`ui_leptos-5617bc7e8b2b2491.js` + `ui_leptos-49a420050d16eda4_bg.wasm`，四件
+  共 2 995 410 B。
+
+**验证**：182 例 OK；`gen_sdk --check` in sync；十一门全绿（含真 Chromium 的 t3/t4/t6/t9/chat，T10 8/8）。

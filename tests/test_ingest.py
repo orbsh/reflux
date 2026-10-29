@@ -35,7 +35,7 @@ def hand(action: str, node: Any, **rest: Any) -> dict:
     Its nodes are hand-written too: `wire`'s builders would refuse a bad one at construction time
     (that is the *first* fence), so going around them is the only way to reach this one.
     """
-    return {"action": action, "event": "", "data": node, **rest}
+    return {"action": action, "slot": "", "data": node, **rest}
 
 
 def refused(case: unittest.TestCase, bad: Any, expects: str) -> None:
@@ -88,13 +88,13 @@ class TestTheFrame(unittest.TestCase):
     def test_each_actions_field_set(self) -> None:
         node = dump(b.text("x"))
         cases = [
-            ("create grows a field", {"action": "create", "event": "", "data": node, "root": 1}, "'root'"),
-            ("set needs its slot", {"action": "set", "data": node}, "'event' is required"),
-            ("append's position is an int", {"action": "append", "event": "rows", "data": node, "position": "0"}, "position is '0'"),
-            ("remove needs an id", {"action": "remove", "event": "rows"}, "'id' is required"),
-            ("patch's pointer", {"action": "patch", "event": "", "path": "a/b", "op": "replace", "value": 1}, "not a JSON Pointer"),
-            ("patch's op", {"action": "patch", "event": "", "path": "", "op": "insert", "value": 1}, '"replace" or "append"'),
-            ("patch needs a value", {"action": "patch", "event": "", "path": "", "op": "replace"}, "'value' is required"),
+            ("create grows a field", {"action": "create", "slot": "", "data": node, "root": 1}, "'root'"),
+            ("set needs its slot", {"action": "set", "data": node}, "'slot' is required"),
+            ("append's position is an int", {"action": "append", "slot": "rows", "data": node, "position": "0"}, "position is '0'"),
+            ("remove needs an id", {"action": "remove", "slot": "rows"}, "'id' is required"),
+            ("patch's pointer", {"action": "patch", "slot": "", "path": "a/b", "op": "replace", "value": 1}, "not a JSON Pointer"),
+            ("patch's op", {"action": "patch", "slot": "", "path": "", "op": "insert", "value": 1}, '"replace" or "append"'),
+            ("patch needs a value", {"action": "patch", "slot": "", "path": "", "op": "replace"}, "'value' is required"),
             ("inject's slot", {"action": "inject", "slot": "", "data": 1}, "is not a non-empty string"),
             ("tmpl's body", {"action": "tmpl", "name": "t", "data": {"k": 1}}, "not the template's JSON as text"),
             ("tmpl's body text", {"action": "tmpl", "name": "t", "data": "{nope"}, "data is not JSON"),
@@ -184,8 +184,8 @@ class TestTheNode(unittest.TestCase):
 
     def test_every_node_of_the_turn_is_checked(self) -> None:
         ops = [
-            {"action": "set", "event": "echo", "data": dump(b.text("x"))},
-            {"action": "append", "event": "rows", "data": {"type": "nope"}},
+            {"action": "set", "slot": "echo", "data": dump(b.text("x"))},
+            {"action": "append", "slot": "rows", "data": {"type": "nope"}},
         ]
         refused(self, frame(*ops), "frame[1] (append).data")
 
@@ -208,18 +208,18 @@ class TestRowIdentity(unittest.TestCase):
 
 class TestTheUplink(unittest.TestCase):
     def test_a_legal_uplink(self) -> None:
-        ingest.check_uplink({"event": "name.change", "data": {"value": "x"}})
-        ingest.check_uplink({"event": "name.change", "id": "input-1", "data": {}})
+        ingest.check_uplink({"dest": "name.change", "data": {"value": "x"}})
+        ingest.check_uplink({"dest": "name.change", "id": "input-1", "data": {}})
 
     def test_its_failures(self) -> None:
         cases = [
             ("not an object", "x", "frame is str"),
-            ("an unknown key", {"event": "e", "data": 1, "path": "/a"}, "envelope: 'path'"),
-            ("no event", {"data": 1}, "event is None"),
-            ("an empty event", {"event": "", "data": 1}, "event is ''"),
-            ("a non-string id", {"event": "e", "id": 3, "data": 1}, "id is 3"),
-            ("an empty id", {"event": "e", "id": "", "data": 1}, "id is ''"),
-            ("no data", {"event": "e"}, "data is missing"),
+            ("an unknown key", {"dest": "e", "data": 1, "path": "/a"}, "uplink: 'path'"),
+            ("no dest", {"data": 1}, "dest is None"),
+            ("an empty dest", {"dest": "", "data": 1}, "dest is ''"),
+            ("a non-string id", {"dest": "e", "id": 3, "data": 1}, "id is 3"),
+            ("an empty id", {"dest": "e", "id": "", "data": 1}, "id is ''"),
+            ("no data", {"dest": "e"}, "data is missing"),
         ]
         for label, bad, expects in cases:
             with self.subTest(label):
@@ -291,15 +291,15 @@ class TestTheInboundDoor(unittest.TestCase):
         app = App(heartbeat=0.05, dead_after=0.5)
         seen: list[dict] = []
 
-        @app.events.register("gate.ok")
+        @app.dests.register("gate.ok")
         def ok(session, received):
             seen.append(received)
             session.send(frame(wire.create(b.text("ok"))))
 
         channel = ScriptedChannel(
-            {"event": "gate.ok", "data": {"n": 1}, "extra": "hand written"},  # refused: unknown key
-            {"event": "gate.ok", "id": 7, "data": {}},                     # refused: id is not a string
-            {"event": "gate.ok", "data": {"n": 2}},                        # dispatched
+            {"dest": "gate.ok", "data": {"n": 1}, "extra": "hand written"},  # refused: unknown key
+            {"dest": "gate.ok", "id": 7, "data": {}},                     # refused: id is not a string
+            {"dest": "gate.ok", "data": {"n": 2}},                        # dispatched
         )
         app.handle(channel)  # returns when the scripted connection ends
 
@@ -308,7 +308,7 @@ class TestTheInboundDoor(unittest.TestCase):
         self.assertEqual(app.stats["refused"], 2)
         self.assertEqual(app.stats["issued"], 1)
         self.assertEqual(app.stats["reclaimed"], 1)
-        self.assertTrue(any("refused uplink" in line and "extra" in line for line in app.events.log), app.events.log)
+        self.assertTrue(any("refused uplink" in line and "extra" in line for line in app.dests.log), app.dests.log)
         app.stop()
 
 

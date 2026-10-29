@@ -21,7 +21,7 @@ def status_text(session: FakeSession) -> str:
     """The last status line a run of frames wrote."""
     for frame in reversed(session.frames):
         for op in frame:
-            if op.get("action") == "set" and op.get("event") == chat.STATUS:
+            if op.get("action") == "set" and op.get("slot") == chat.STATUS:
                 return ((op.get("data") or {}).get("bind") or {}).get("value", {}).get("default", "")
     return ""
 
@@ -110,9 +110,9 @@ class Refusals(unittest.TestCase):
         ops = [op for frame in session.frames for op in frame]
         actions = [op.get("action") for op in ops]
         self.assertEqual(actions, ["append", "append", "set", "set"])
-        self.assertEqual(ops[0]["event"], chat.MESSAGES)
+        self.assertEqual(ops[0]["slot"], chat.MESSAGES)
         self.assertEqual(ops[1]["data"]["id"], "row-bot-1")
-        self.assertEqual(ops[2]["event"], "reply.1")
+        self.assertEqual(ops[2]["slot"], "reply.1")
         self.assertTrue(conversation.busy)
         self.assertEqual([t.role for t in conversation.turns], ["user"])
 

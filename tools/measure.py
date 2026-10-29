@@ -224,7 +224,7 @@ def _client(url: str, per_second: int, seconds: float, ready) -> None:
         end = time.monotonic() + seconds
         while time.monotonic() < end:
             try:
-                ws.send({"event": "measure.ping", "id": "x", "data": "v"})
+                ws.send({"dest": "measure.ping", "id": "x", "data": "v"})
                 ws.recv()
             except (EOFError, OSError):
                 return
@@ -248,7 +248,7 @@ def check_cost() -> list[list[str]]:
     """What the two fences cost per frame — the price M1.5 accepted without a number."""
     op = wire.set(demo.ECHO, b.text("pong"))
     frame = wire.draw(op)
-    uplink = {"event": "measure.ping", "id": "x", "data": "v"}
+    uplink = {"dest": "measure.ping", "id": "x", "data": "v"}
     rounds = 3000
 
     def per_call(fn) -> float:
@@ -266,7 +266,7 @@ def check_cost() -> list[list[str]]:
 
 def section_cpu() -> None:
     app = demo.make_app()
-    app.events.register("measure.ping", lambda session, frame: session.draw(wire.set(demo.ECHO, b.text("pong"))))
+    app.dests.register("measure.ping", lambda session, frame: session.draw(wire.set(demo.ECHO, b.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -292,19 +292,19 @@ def section_cpu() -> None:
     # The burst is over when no new frame has landed for half a second — seconds are not the
     # denominator of anything here, frames are.
     cpu_before, wall_before = time.process_time(), time.monotonic()
-    handled, quiet_since = app.events.calls, time.monotonic()
+    handled, quiet_since = app.dests.calls, time.monotonic()
     deadline = wall_before + SECONDS * 2 + 20
     while time.monotonic() < deadline:
         time.sleep(0.05)
-        if app.events.calls != handled:
-            handled, quiet_since = app.events.calls, time.monotonic()
+        if app.dests.calls != handled:
+            handled, quiet_since = app.dests.calls, time.monotonic()
         elif time.monotonic() - quiet_since > 0.5:
             break
     cpu, wall = time.process_time() - cpu_before, time.monotonic() - wall_before
     sampling.set()
     child.join(timeout=10)
 
-    frames = app.events.calls
+    frames = app.dests.calls
     expected = SESSIONS * PER_SECOND * SECONDS
     rows = [
         ["connections issued", f"{app.stats['issued']:,}", f"of {SESSIONS} clients"],

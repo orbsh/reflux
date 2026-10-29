@@ -113,7 +113,7 @@ class UnionTest(unittest.TestCase):
         kinds = {
             "default": {"kind": "default", "default": "x"},
             "source": {"kind": "source", "source": "slot"},
-            "event": {"kind": "event", "event": "save"},
+            "slot": {"kind": "dest", "dest": "save"},
             "field": {"kind": "field", "field": "name", "payload": {"k": 1}},
             "submit": {"kind": "submit", "default": "提交"},
             "local": {"kind": "local", "slot": "draft"},
@@ -201,10 +201,10 @@ class ProfileTest(unittest.TestCase):
         node = sdk.input(field="name", kind=sdk.JsType.text)
         self.assertEqual(sdk.dump(node)["bind"],
                          {"value": {"kind": "field", "field": "name", "type": "text"}})
-        self.assertEqual(sdk.dump(sdk.input(event="save"))["bind"],
-                         {"value": {"kind": "event", "event": "save"}})
+        self.assertEqual(sdk.dump(sdk.input(dest="save"))["bind"],
+                         {"value": {"kind": "dest", "dest": "save"}})
         with self.assertRaises(ValueError):
-            sdk.input(event="save", field="name")  # one落点 at a time
+            sdk.input(dest="save", field="name")  # one落点 at a time
         with self.assertRaises(ValueError):
             sdk.input(payload={"k": 1})  # payload rides a field落点, not thin air
 

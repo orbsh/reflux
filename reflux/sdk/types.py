@@ -181,17 +181,17 @@ class Bind1(BaseModel):
 class Bind2(BaseModel):
     default: Any | None = None
     type: JsType | None = None
-    event: str | None = None
     kind: Literal['local']
     path: str | None = None
     slot: str
+    name: str | None = None
 
 
 class Bind3(BaseModel):
     default: Any | None = None
     type: JsType | None = None
-    event: str
-    kind: Literal['event']
+    kind: Literal['dest']
+    dest: str
 
 
 class Bind4(BaseModel):

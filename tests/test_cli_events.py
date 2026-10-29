@@ -1,4 +1,4 @@
-"""`reflux events` — the registry a real app registers, plus the one check that earns its keep.
+"""`reflux uplinks` — the registry a real app registers, plus the one check that earns its keep.
 
 Offline by design: no browser, no socket, no cargo. Two jobs:
 
@@ -6,7 +6,7 @@ Offline by design: no browser, no socket, no cargo. Two jobs:
   loudly, because a target that silently becomes "nothing registered" would teach people that the
   verb is broken rather than their spelling;
 - the **check** the tests here are really for: every event a page can send has a handler. Walking the
-  reference app's two pages and collecting `bind.kind == "event"` catches `form(event="login.submit")`
+  reference app's two pages and collecting `bind.kind == "intent"` catches `form(dest="login.submit")`
   typos before a browser run does, and it keeps the demo honest as it grows.
 
 `kind=builtin` is the framework's own names (`reflux:hello`, `reflux:nav`); everything else is `app`.
@@ -24,11 +24,12 @@ from reflux.app import App
 from reflux.sdk import dump
 
 
-def sent_events(node) -> set[str]:
-    """Every event name the nodes of one page can send.
+def sent_dests(node) -> set[str]:
+    """Every uplink destination the nodes of one page can send.
 
-    `bind.kind == "event"` is the uplink 落点: an input's Enter, a form's submit, a row's own event.
-    `submit`/`field`/`default` bindings carry values, not event names, so they are not collected.
+    `bind.kind == "dest"` is the uplink target and its `dest` is where it goes: an input's Enter, a
+    form's submit, a row's own button. `submit`/`field`/`default` bindings carry values, not
+    destinations, so they are not collected.
     """
     names: set[str] = set()
 
@@ -36,8 +37,8 @@ def sent_events(node) -> set[str]:
         if not isinstance(node, dict):
             return
         for entry in (node.get("bind") or {}).values():
-            if isinstance(entry, dict) and entry.get("kind") == "event":
-                name = entry.get("event")
+            if isinstance(entry, dict) and entry.get("kind") == "dest":
+                name = entry.get("dest")
                 if isinstance(name, str):
                     names.add(name)
         for key in ("children", "item"):
@@ -53,7 +54,7 @@ class EventsCommand(unittest.TestCase):
         self.app = demo.make_app()
 
     def test_the_reference_app_lists_every_name_it_registers(self) -> None:
-        rows = self.app.events.table()
+        rows = self.app.dests.table()
         names = [name for name, _, _ in rows]
         self.assertEqual(names, sorted(names), "the table is sorted by name")
         self.assertEqual(
@@ -71,13 +72,13 @@ class EventsCommand(unittest.TestCase):
         )
 
     def test_builtin_names_are_marked_and_app_names_are_not(self) -> None:
-        kinds = {name: kind for name, _, kind in self.app.events.table()}
+        kinds = {name: kind for name, _, kind in self.app.dests.table()}
         self.assertEqual(kinds["reflux:hello"], "builtin")
         self.assertEqual(kinds["reflux:nav"], "builtin")
         self.assertEqual(kinds["row.add"], "app")
 
     def test_the_source_column_is_where_the_handler_was_written(self) -> None:
-        sources = {name: source for name, source, _ in self.app.events.table()}
+        sources = {name: source for name, source, _ in self.app.dests.table()}
         self.assertEqual(sources["row.add"], "reflux.demo_app.Demo.on_add")
         self.assertTrue(sources["reflux:hello"].startswith("reflux."), sources["reflux:hello"])
 
@@ -85,14 +86,14 @@ class EventsCommand(unittest.TestCase):
         # A fresh App is not "the app": the registry belongs to the instance, so its table is the
         # builtin protocol names only — the demo's names live on the demo's instance.
         alone = App()
-        self.assertEqual([name for name, _, _ in alone.events.table()], ["reflux:hello", "reflux:nav"])
+        self.assertEqual([name for name, _, _ in alone.dests.table()], ["reflux:hello", "reflux:nav"])
 
 
 class TargetResolution(unittest.TestCase):
     def test_a_factory_is_called(self) -> None:
         app = cli.resolve_app("reflux.demo_app:make_app")
         self.assertIsInstance(app, App)
-        self.assertIn("row.add", app.events.names())
+        self.assertIn("row.add", app.dests.names())
 
     def test_an_app_instance_is_taken_as_it_is(self) -> None:
         mine = App()
@@ -118,20 +119,20 @@ class TargetResolution(unittest.TestCase):
         self.assertIn("dict", str(caught.exception))
 
 
-class EverySendableEventHasAHandler(unittest.TestCase):
+class EverySendableDestHasAHandler(unittest.TestCase):
     """The check that makes this file more than a formatter test."""
 
     def setUp(self) -> None:
         self.app = demo.make_app()
-        self.registered = set(self.app.events.names())
+        self.registered = set(self.app.dests.names())
 
-    def test_the_reference_page_sends_only_registered_events(self) -> None:
-        sent = sent_events(demo.demo.home())
+    def test_the_reference_page_sends_only_registered_dests(self) -> None:
+        sent = sent_dests(demo.demo.home())
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
         self.assertEqual(sent - self.registered, set(), "the page sends an event nobody handles")
 
-    def test_the_about_page_sends_only_registered_events(self) -> None:
-        sent = sent_events(demo.demo.about())
+    def test_the_about_page_sends_only_registered_dests(self) -> None:
+        sent = sent_dests(demo.demo.about())
         self.assertTrue(sent)
         self.assertEqual(sent - self.registered, set())
 
@@ -139,7 +140,7 @@ class EverySendableEventHasAHandler(unittest.TestCase):
         # Rows arrive through `append`, not through the page tree, so the row template is its own
         # subject — a row's remove event is exactly the kind of thing a page walk would miss.
         row = demo.row_node({"id": "row-9", "text": "x"})
-        self.assertEqual(sent_events(row), {"row.remove"})
+        self.assertEqual(sent_dests(row), {"row.remove"})
         self.assertIn("row.remove", self.registered)
 
 
@@ -150,8 +151,8 @@ class Printing(unittest.TestCase):
             code = cli.main(list(argv))
         return code, out.getvalue()
 
-    def test_events_prints_a_header_and_one_line_per_name(self) -> None:
-        code, text = self.run_cli("events", "reflux.demo_app:make_app")
+    def test_intents_prints_a_header_and_one_line_per_name(self) -> None:
+        code, text = self.run_cli("dests", "reflux.demo_app:make_app")
         self.assertEqual(code, 0)
         lines = [line for line in text.splitlines() if line.strip()]
         self.assertTrue(lines[0].startswith("event"))

@@ -22,20 +22,20 @@ class TestShapes(unittest.TestCase):
         node = b.text("hi")
         self.assertEqual(
             wire.create(node),
-            {"action": "create", "event": "", "data": dump(node)},
+            {"action": "create", "slot": "", "data": dump(node)},
         )
 
     def test_set_replaces_a_named_slot(self) -> None:
         node = b.text("hi")
         self.assertEqual(
             wire.set("echo", node),
-            {"action": "set", "event": "echo", "data": dump(node)},
+            {"action": "set", "slot": "echo", "data": dump(node)},
         )
 
     def test_append_leaves_the_default_position_off_the_wire(self) -> None:
         op = wire.append("rows", b.text("a"))
         self.assertEqual(op["action"], "append")
-        self.assertEqual(op["event"], "rows")
+        self.assertEqual(op["slot"], "rows")
         self.assertNotIn("position", op, "position 0 is the default — writing it is noise")
 
     def test_append_carries_a_real_position(self) -> None:
@@ -45,19 +45,19 @@ class TestShapes(unittest.TestCase):
     def test_remove_is_by_identity(self) -> None:
         self.assertEqual(
             wire.remove("rows", "row-2"),
-            {"action": "remove", "event": "rows", "id": "row-2"},
+            {"action": "remove", "slot": "rows", "id": "row-2"},
         )
 
     def test_patch_defaults_to_replace(self) -> None:
         op = wire.patch("echo", "/bind/value/default", "x")
         self.assertEqual(op["action"], "patch")
-        self.assertEqual(op["event"], "echo")
+        self.assertEqual(op["slot"], "echo")
         self.assertEqual(op["path"], "/bind/value/default")
         self.assertEqual(op["op"], "replace")
         self.assertNotIn("id", op)
 
-    def test_patch_addresses_the_layout_root_with_an_empty_event(self) -> None:
-        self.assertEqual(wire.patch("", "/children/0", {})["event"], "")
+    def test_patch_addresses_the_layout_root_with_an_empty_slot(self) -> None:
+        self.assertEqual(wire.patch("", "/children/0", {})["slot"], "")
 
     def test_patch_append_extends_a_string(self) -> None:
         self.assertEqual(wire.patch("echo", "/bind/value/default", "!", op="append")["op"], "append")
@@ -71,9 +71,9 @@ class TestShapes(unittest.TestCase):
             {"action": "inject", "slot": "chan", "data": {"v": 1}},
         )
 
-    def test_inject_can_carry_an_event_and_an_id(self) -> None:
-        op = wire.inject("chan", None, event="chan", id="row-1")
-        self.assertEqual(op["event"], "chan")
+    def test_inject_can_carry_a_name_and_an_id(self) -> None:
+        op = wire.inject("chan", None, name="chan", id="row-1")
+        self.assertEqual(op["name"], "chan")
         self.assertEqual(op["id"], "row-1")
 
     def test_tmpl_registers_a_body_string(self) -> None:

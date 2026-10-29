@@ -65,7 +65,7 @@ def frames(app, event: str) -> list[dict]:
     return [
         frame
         for direction, frame in list(app.log)
-        if direction == "recv" and isinstance(frame, dict) and frame.get("event") == event
+        if direction == "recv" and isinstance(frame, dict) and frame.get("dest") == event
     ]
 
 

@@ -144,14 +144,14 @@ def fold(
 def form(
     *children: Accrete,
     instant: bool | None = None,
-    event: Any = None,
+    dest: Any = None,
     local: Any = None,
     path: str | None = None,
     id: str | None = None,
 ) -> Form:
     """Build a `form` node (the wire type `form`)."""
     attrs = drop_none(instant=instant)
-    bind = drop_none(value=bind_value(event=event, local=local, path=path))
+    bind = drop_none(value=bind_value(dest=dest, local=local, path=path))
     return parse(drop_none(type='form', attrs=attrs, bind=bind, id=id, children=list(children) or None), Form)
 
 
@@ -260,7 +260,7 @@ def image(
 def input(
     *,
     horizontal: bool | None = None,
-    event: Any = None,
+    dest: Any = None,
     field: Any = None,
     payload: Any = None,
     kind: JsType = None,
@@ -268,7 +268,7 @@ def input(
 ) -> Input:
     """Build a `input` node (the wire type `input`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(event=event, field=field, payload=payload, js_kind=kind))
+    bind = drop_none(value=bind_value(dest=dest, field=field, payload=payload, js_kind=kind))
     return parse(drop_none(type='input', attrs=attrs, bind=bind, id=id), Input)
 
 
@@ -277,13 +277,13 @@ def select(
     horizontal: bool | None = None,
     value: Any = None,
     source: Any = None,
-    event: Any = None,
+    dest: Any = None,
     options_source: Any = None,
     id: str | None = None,
 ) -> Select:
     """Build a `select` node (the wire type `select`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value, source=source, event=event), options=bind_entry('options', source=options_source))
+    bind = drop_none(value=bind_value(default=value, source=source, dest=dest), options=bind_entry('options', source=options_source))
     return parse(drop_none(type='select', attrs=attrs, bind=bind, id=id), Select)
 
 
@@ -368,11 +368,11 @@ def textarea(
     horizontal: bool | None = None,
     value: Any = None,
     source: Any = None,
-    event: Any = None,
+    dest: Any = None,
     placeholder: Any = None,
     id: str | None = None,
 ) -> TextArea:
     """Build a `textarea` node (the wire type `textarea`)."""
     attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value, source=source, event=event), placeholder=bind_entry('placeholder', default=placeholder))
+    bind = drop_none(value=bind_value(default=value, source=source, dest=dest), placeholder=bind_entry('placeholder', default=placeholder))
     return parse(drop_none(type='textarea', attrs=attrs, bind=bind, id=id), TextArea)

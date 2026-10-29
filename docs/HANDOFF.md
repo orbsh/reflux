@@ -14,8 +14,9 @@
 - fluxen：`main` @ 460d867（2026-10-29 起线上只有动作列表，信封归宿主）。`crates/ui_core/src/lib.rs` 的入口仍
   多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
 - 仓里钉着的渲染器包是 fluxen 460d867 的 **release** 构建（`examples/renderer`，`trunk build --release`）：
-  `www/static/vendor/fluxen/`，4 件资产共 2 995 545 B（wasm 2 883 579 B；本机没有 `wasm-opt`，所以没有
-  压缩后的数字），清单在 `versions.json`（rev + 逐文件 sha256/大小）。
+  `www/static/vendor/fluxen/`，4 件资产共 2 995 305 B（wasm 2 883 339 B；本机没有 `wasm-opt`，所以没有
+  压缩后的数字），清单在 `versions.json`（rev + 逐文件 sha256/大小）。`rev` 现在写的是 `uncommitted`：
+  这一版是从 fluxen 工作树（ADR 0022 + 0023（落点一律叫 `slot`） 之后）构建的，revision 随那次提交一起补。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
@@ -42,7 +43,7 @@ python3 tools/gate_chat.py                       # 12 条：示例应用的后�
 python3 -m examples.chat.app --port 8100  # 手工起示例应用（AI 对话）
 python3 -m examples.chat.walkthrough --auto   # 示例的快速演示（自己起 app，六个行为各一步）
 python3 -m reflux.cli routes reflux.demo_app       # 路由表（import 的副作用）
-python3 -m reflux.cli events reflux.demo_app:make_app   # 事件名注册表（名字 / builtin|app / 来源）
+python3 -m reflux.cli uplinks reflux.demo_app:make_app  # 上行落点注册表（名字 / builtin|app / 来源）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
 python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／表单／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
@@ -96,7 +97,7 @@ README 里明说的「不做」，要做等于另开一轮。
 - **资源一律源站绝对路径**（`/static/…`）：相对路径会被深链解析到深链目录底下（实测白屏 + `Unexpected token '<'`）。
   页面的 `<img>` 也一样——`tests/types_fixture.py` 那个 `image` 节点指向 `www/static/logo.svg` 是有原因的
   （它原指 `/favicon.svg`，那是壳的挂载根里的文件，M1.7 之后 404）。
-- **`inject` 落的是 Outflow 形状的包装**：vals 槽里是 `{event, data}`，订阅方要 `bind.path = "/data"`。
+- **`inject` 落的是 Outflow 形状的包装**：vals 槽里是 `{slot, data}`，订阅方要 `bind.path = "/data"`。
 - **`position` 的域外只有渲染器判得了**（它要知道列表多长）；我们只校验「是整数」。同一帧里同一个列表槽的行 id
   出现两次才是我们能判的——那条在入站整帧拒收。
 - **槽里的种子是一次性的**：`create` 换树，数据平面（槽）不换，所以「页面每次重画都 append 一遍种子行」会把行
@@ -113,7 +114,7 @@ README 里明说的「不做」，要做等于另开一轮。
 
 - `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
 - 这三件是**已落地**的，列在这里是为了说明它们不在「未做」里：标记糖（`reflux.sdk.markers` + `sdks/rust/src/markers.rs`
-  手写同一份约定，不进 vocabulary）、`reflux events` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
+  手写同一份约定，不进 vocabulary）、`reflux uplinks` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
   注册表属于宿主）、`text` 的 `local` 落点与它的 `path` 随行键（`gate_t2` 的 vals 平面检查已从手写 dict 换成构造器）。
 - 示例应用不持久化、不做账号与刷新后的历史（会话挂在连接上，刷新即新对话）；没有工具调用与检索；没有 token 计量与
   限流。`model.OpenAI` 的 SSE 读器用本地 stub 测过，**没有对真端点跑过**（本机没有 key）——别把它当已验收。
@@ -153,7 +154,7 @@ sdks/rust/                     第二语言的 SDK：生成的 src/types.rs + �
 tools/gate_t0.py … gate_t10.py   十道门（t2/t3/t4/t6/t9/t10 用浏览器或 cargo，t7 真浏览器 + 离线，t8 页面侧，ingest 真 socket）
 tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
-tests/test_cli_events.py       `reflux events` 的表、目标解析的四种拒绝、以及「页面能发的事件都有处理器」
+tests/test_cli_events.py       `reflux uplinks` 的表、目标解析的四种拒绝、以及「页面能发的意图都有处理器」
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
 tests/test_chat_example.py     示例后端 19 例：窗口、两道门、流式、停止、失败、SSE（本地 stub）
 tools/gate_chat.py             示例的门：真 socket 的九条 + 真浏览器的三条

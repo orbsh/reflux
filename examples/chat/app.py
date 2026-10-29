@@ -130,8 +130,8 @@ def page(session: Session, path: str = "/") -> list[dict]:
                 b.text("对话", variant="heading-1"),
                 b.text(source=STATUS, variant="muted", id="status"),
                 b.rack(source=MESSAGES, scroll=True, id="messages"),
-                b.form(b.input(field="text", id="composer"), b.button("发送"), event="chat.send", id="send"),
-                b.form(b.button("停止"), event="chat.stop", id="stop"),
+                b.form(b.input(field="text", id="composer"), b.button("发送"), dest="chat.send", id="send"),
+                b.form(b.button("停止"), dest="chat.stop", id="stop"),
                 b.text(
                     "一个最小可用的后端：会话挂在连接上，回答逐块流出，可停止，可拒绝，模型出错变一条气泡。",
                     variant="muted",
@@ -239,7 +239,7 @@ def make_app(model: Model | None = None, *, delay: float = 0.02, window: int = W
         chat.delay = delay
         return chat
 
-    @app.events.register("chat.send")
+    @app.dests.register("chat.send")
     def on_send(session: Session, frame: dict) -> None:
         text = prompt_of(frame)
         if text is None:
@@ -247,7 +247,7 @@ def make_app(model: Model | None = None, *, delay: float = 0.02, window: int = W
             return
         send(session, chat_of(session), text)
 
-    @app.events.register("chat.stop")
+    @app.dests.register("chat.stop")
     def on_stop(session: Session, frame: dict) -> None:
         chat = chat_of(session)
         if not chat.busy:

@@ -33,29 +33,31 @@ from .sdk import closed
 from .sdk._parse import parse
 from .protocol import MAX_OPS_PER_FRAME
 
-__all__ = ["Refused", "check_frame", "check_uplink", "UPLINK_KEYS", "OP_KEYS"]
+__all__ = ["Refused", "check_frame", "check_uplink", "DEST_KEYS", "OP_KEYS"]
 
-# An uplink frame (`Outflow`): the event's name, the row it claims, and its payload.
-UPLINK_KEYS = frozenset({"event", "id", "data"})
+# An uplink frame (`Outflow`): the destination it targets, the row it claims, and its payload.
+DEST_KEYS = frozenset({"dest", "id", "data"})
 
-# Each action's field set, verbatim from `content`: `Influx` (create/set), `AppendOp`, `RemoveOp`,
-# `PatchOp`, `InjectOp`, `InfluxTmpl`, and the unit `Empty`.
+# Each action's field set, verbatim from `content`: `Influx` (create/set — its address is `slot`,
+# `""` meaning the layout root), `AppendOp`, `RemoveOp`, `PatchOp`, `InjectOp`, `InfluxTmpl`, and the
+# unit `Empty`. An address is a `slot`; `event` is a name, and only `inject` carries one (fluxen
+# ADR 0022).
 OP_KEYS: dict[str, frozenset[str]] = {
-    "create": frozenset({"action", "event", "data"}),
-    "set": frozenset({"action", "event", "data"}),
-    "append": frozenset({"action", "event", "position", "data"}),
-    "remove": frozenset({"action", "event", "id"}),
-    "patch": frozenset({"action", "event", "id", "path", "op", "value"}),
-    "inject": frozenset({"action", "slot", "event", "id", "data"}),
+    "create": frozenset({"action", "slot", "data"}),
+    "set": frozenset({"action", "slot", "data"}),
+    "append": frozenset({"action", "slot", "position", "data"}),
+    "remove": frozenset({"action", "slot", "id"}),
+    "patch": frozenset({"action", "slot", "id", "path", "op", "value"}),
+    "inject": frozenset({"action", "slot", "name", "id", "data"}),
     "tmpl": frozenset({"action", "name", "data"}),
     "empty": frozenset({"action"}),
 }
 OP_REQUIRED: dict[str, frozenset[str]] = {
-    "create": frozenset({"action", "event", "data"}),
-    "set": frozenset({"action", "event", "data"}),
-    "append": frozenset({"action", "event", "data"}),
-    "remove": frozenset({"action", "event", "id"}),
-    "patch": frozenset({"action", "event", "path", "op", "value"}),
+    "create": frozenset({"action", "slot", "data"}),
+    "set": frozenset({"action", "slot", "data"}),
+    "append": frozenset({"action", "slot", "data"}),
+    "remove": frozenset({"action", "slot", "id"}),
+    "patch": frozenset({"action", "slot", "path", "op", "value"}),
     "inject": frozenset({"action", "slot", "data"}),
     "tmpl": frozenset({"action", "name", "data"}),
     "empty": frozenset({"action"}),
@@ -130,12 +132,12 @@ def _op(op: Any, where: str, appended: dict[str, set[str]]) -> None:
             _row_id(op, where, appended)
 
     if action in ("create", "set", "append"):
-        _text(op["event"], f"{where}.event", allow_empty=action == "create")
+        _text(op["slot"], f"{where}.slot", allow_empty=action == "create")
     elif action == "remove":
-        _text(op["event"], f"{where}.event")
+        _text(op["slot"], f"{where}.slot")
         _text(op["id"], f"{where}.id")
     elif action == "patch":
-        _text(op["event"], f"{where}.event", allow_empty=True)
+        _text(op["slot"], f"{where}.slot", allow_empty=True)
         if "id" in op:
             _text(op["id"], f"{where}.id")
         path = op["path"]
@@ -145,8 +147,8 @@ def _op(op: Any, where: str, appended: dict[str, set[str]]) -> None:
             _refuse('%s: op is %r — "replace" or "append"', where, op["op"])
     elif action == "inject":
         _text(op["slot"], f"{where}.slot")
-        if "event" in op:
-            _text(op["event"], f"{where}.event")
+        if "name" in op:
+            _text(op["name"], f"{where}.name")
         if "id" in op:
             _text(op["id"], f"{where}.id")
     elif action == "tmpl":
@@ -194,7 +196,7 @@ def _row_id(op: dict, where: str, appended: dict[str, set[str]]) -> None:
     row = data.get("id") if isinstance(data, dict) else None
     if not isinstance(row, str) or not row:
         return
-    seen = appended.setdefault(op["event"], set())
+    seen = appended.setdefault(op["slot"], set())
     if row in seen:
         _refuse("%s: row id %r appears twice in one frame", where, row)
     seen.add(row)
@@ -212,15 +214,15 @@ def check_uplink(frame: Any) -> None:
     """Refuse a frame a client sent up, or return None. The event *name* is the registry's call."""
     if not isinstance(frame, dict):
         _refuse("frame is %s, not an object", type(frame).__name__)
-    extra = set(frame) - UPLINK_KEYS
+    extra = set(frame) - DEST_KEYS
     if extra:
-        _refuse("envelope: %s is not a field of an uplink frame", _names(extra))
-    event = frame.get("event")
-    if not isinstance(event, str) or not event:
-        _refuse("envelope: event is %r, not a non-empty string", event)
+        _refuse("uplink: %s is not a field of an uplink frame", _names(extra))
+    landed = frame.get("dest")
+    if not isinstance(landed, str) or not landed:
+        _refuse("uplink: dest is %r, not a non-empty string", landed)
     if "id" in frame:
         row = frame["id"]
         if not isinstance(row, str) or not row:
-            _refuse("envelope: id is %r, not a non-empty string", row)
+            _refuse("uplink: id is %r, not a non-empty string", row)
     if "data" not in frame:
-        _refuse("envelope: data is missing — a frame carries its payload")
+        _refuse("uplink: data is missing — a frame carries its payload")

@@ -50,26 +50,26 @@ def legacy_op() -> dict:
 
 def hand(node: dict, *, action: str = "create", **rest) -> list:
     """A frame the SDK would never build: its op is written out by hand, nodes included."""
-    return wire.draw({"action": action, "event": "", "data": node, **rest})
+    return wire.draw({"action": action, "slot": "", "data": node, **rest})
 
 
 def send_all_events() -> None:
     """Every outbound check, as one batch of frames from one handler (order is the queue's)."""
 
-    @APP.events.register("gate.legal")
+    @APP.dests.register("gate.legal")
     def legal(session, frame):
         session.send(wire.draw(wire.create(b.case(b.text("landed", id="ok")))))
 
-    @APP.events.register("gate.unknown-type")
+    @APP.dests.register("gate.unknown-type")
     def unknown_type(session, frame):
         session.send(hand({"type": "widget"}))
 
-    @APP.events.register("gate.unknown-attr")
+    @APP.dests.register("gate.unknown-attr")
     def unknown_attr(session, frame):
         # `selector` is hidden for every type (unlike `class`, which is the token lane now).
         session.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
 
-    @APP.events.register("gate.duplicate-row")
+    @APP.dests.register("gate.duplicate-row")
     def duplicate_row(session, frame):
         session.send(
             wire.draw(
@@ -77,27 +77,27 @@ wire.append("rows", b.text("a", id="r")),
                 wire.append("rows", b.text("b", id="r")))
         )
 
-    @APP.events.register("gate.over-cap")
+    @APP.dests.register("gate.over-cap")
     def over_cap(session, frame):
         # Written out by hand on purpose: `wire.draw` refuses to *build* a frame over the cap (the
         # producer's half of the rule), so only a hand-written one can reach the server's door —
         # and that door is what this gate proves.
         session.send([wire.empty()] * (MAX_OPS_PER_FRAME + 1))
 
-    @APP.events.register("gate.unknown-key")
+    @APP.dests.register("gate.unknown-key")
     def unknown_key(session, frame):
         # An op with a field its action does not have — serde would ignore it silently.
         bad = hand({"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}})
         bad[0]["root"] = {}
         session.send(bad)
 
-    @APP.events.register("gate.legacy")
+    @APP.dests.register("gate.legacy")
     def legacy(session, frame):
         # The retired envelope (`Message`) and, behind it, the shell's `ops` dialect: both are
         # objects, and a frame is the action list. Refused whole, and the reason names the shape.
         session.send({"ev": "draw", "ops": [legacy_op()]})
 
-    @APP.events.register("gate.alive")
+    @APP.dests.register("gate.alive")
     def alive(session, frame):
         session.send(wire.draw(wire.set("echo", b.text("alive"))))
 
@@ -105,7 +105,7 @@ wire.append("rows", b.text("a", id="r")),
 def uplink_handlers() -> list[dict]:
     """One handler that answers, so a refused uplink is visible as a *missing* answer."""
 
-    @APP.events.register("gate.uplink")
+    @APP.dests.register("gate.uplink")
     def uplink(session, frame):
         SEEN.append(frame)
         session.send(wire.draw(wire.set("echo", b.text(repr(frame["data"])))))
@@ -123,7 +123,7 @@ def recv(ws: Ws, timeout: float = 3.0) -> dict | None:
 
 
 def ask(ws: Ws, event: str, data: dict | None = None, **extra) -> None:
-    ws.send({"event": event, "data": {} if data is None else data, **extra})
+    ws.send({"dest": event, "data": {} if data is None else data, **extra})
 
 
 def main() -> int:
@@ -169,7 +169,7 @@ def main() -> int:
         got = recv(ws, 0.4)
         counted = APP.stats["refused"] == before + 1
         logged = any(
-            "refused frame" in line and SESSION[0] in line and reason in line for line in APP.events.log
+            "refused frame" in line and SESSION[0] in line and reason in line for line in APP.dests.log
         )
         checks.append(
             (

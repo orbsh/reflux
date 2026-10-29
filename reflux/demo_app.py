@@ -44,14 +44,14 @@ ECHO, ROWS, SUBMITTED = "echo", "rows", "submitted"
 GO = {"go.home": "/", "go.about": "/about"}
 
 
-def nav_form(label: str, event: str) -> Accrete:
+def nav_form(label: str, dest: str) -> Accrete:
     """A one-button form — the vocabulary's only clickable, and the demo's way between pages."""
-    return b.form(b.button(label), event=event, id=f"nav-{event}")
+    return b.form(b.button(label), dest=dest, id=f"nav-{dest}")
 
 
 def row_node(row: dict) -> Accrete:
     """One row: its text, and the form whose submit carries the row's own id up."""
-    return b.form(b.text(row["text"]), b.button("删"), event="row.remove", id=row["id"])
+    return b.form(b.text(row["text"]), b.button("删"), dest="row.remove", id=row["id"])
 
 
 class Demo:
@@ -85,15 +85,15 @@ class Demo:
             "/",
             "演示",
             b.text("演示", variant="heading-1"),
-            b.input(event="name.change", id="name-input"),
+            b.input(dest="name.change", id="name-input"),
             b.text(source=ECHO, id="echo"),
-            b.form(b.button("加一行"), event="row.add", id="add-row"),
+            b.form(b.button("加一行"), dest="row.add", id="add-row"),
             b.rack(source=ROWS, id="rows"),
             b.form(
                 b.input(field="user", id="f-user"),
                 b.input(field="pass", kind=JsType.password, id="f-pass"),
                 b.button("保存"),
-                event="login.submit",
+                dest="login.submit",
                 id="login",
             ),
             b.text(source=SUBMITTED, id="submitted"),
@@ -142,7 +142,7 @@ class Demo:
 
     def on_go(self, session, frame) -> None:
         """A submit that moves the client: new structure and the new path marker, one frame."""
-        session.path = GO[frame["event"]]
+        session.path = GO[frame["dest"]]
         session.draw(*self.frame_for(session, session.path))
 
 
@@ -163,12 +163,12 @@ def make_app() -> App:
     """The demo's app: the routes declared above (a side effect of importing this module) and
     this app's event handlers."""
     app = App()
-    app.events.register("name.change", demo.on_name)
-    app.events.register("row.add", demo.on_add)
-    app.events.register("row.remove", demo.on_remove)
-    app.events.register("login.submit", demo.on_submit)
+    app.dests.register("name.change", demo.on_name)
+    app.dests.register("row.add", demo.on_add)
+    app.dests.register("row.remove", demo.on_remove)
+    app.dests.register("login.submit", demo.on_submit)
     for name in GO:
-        app.events.register(name, demo.on_go)
+        app.dests.register(name, demo.on_go)
     return app
 
 

@@ -58,7 +58,7 @@ class TestEveryTypeIsLegal(unittest.TestCase):
         # The fixture must not be legal *by accident*: the same boundary refuses a typo in it.
         broken = {**NODES["case"], "attrs": {"nope": 1}}
         with self.assertRaises(Refused):
-            ingest.check_frame([{"action": "create", "event": "", "data": broken}])
+            ingest.check_frame([{"action": "create", "slot": "", "data": broken}])
 
     def test_the_round_trip_is_the_wire_s_dict(self) -> None:
         # dump(parse(x)) is what actually leaves on the socket; it must drop nothing the node meant.

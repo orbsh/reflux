@@ -135,7 +135,7 @@ class Cdp:
     def __init__(self, ws_url: str) -> None:
         self.ws = Ws(ws_url)
         self.next_id = 0
-        self.events: list[dict] = []
+        self.dests: list[dict] = []
 
     def call(self, method: str, **params) -> dict:
         self.next_id += 1
@@ -147,7 +147,7 @@ class Cdp:
                 if "error" in msg:
                     raise RuntimeError(f"{method}: {msg['error']}")
                 return msg.get("result", {})
-            self.events.append(msg)
+            self.dests.append(msg)
 
     def drain(self) -> None:
         """Pull whatever the browser has queued, by issuing a trivial call."""
@@ -162,7 +162,7 @@ class Cdp:
         return res.get("result", {}).get("value")
 
     def of(self, method: str) -> list[dict]:
-        return [e["params"] for e in self.events if e.get("method") == method]
+        return [e["params"] for e in self.dests if e.get("method") == method]
 
     # --- real input (the browser's own event pipeline, not synthetic dispatches) -----------
 
