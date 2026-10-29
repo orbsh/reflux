@@ -14,7 +14,7 @@
 - fluxen：`main` @ 460d867（2026-10-29 起线上只有动作列表，信封归宿主）。`crates/ui_core/src/lib.rs` 的入口仍
   多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
 - 仓里钉着的渲染器包是 fluxen 460d867 的 **release** 构建（`examples/renderer`，`trunk build --release`）：
-  `www/static/vendor/fluxen/`，4 件资产共 2 995 305 B（wasm 2 883 339 B；本机没有 `wasm-opt`，所以没有
+  `www/static/vendor/fluxen/`，4 件资产共 2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有
   压缩后的数字），清单在 `versions.json`（rev + 逐文件 sha256/大小）。`rev` 现在写的是 `uncommitted`：
   这一版是从 fluxen 工作树（ADR 0022 + 0023（落点一律叫 `slot`） 之后）构建的，revision 随那次提交一起补。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，

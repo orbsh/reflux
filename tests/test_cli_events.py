@@ -155,7 +155,7 @@ class Printing(unittest.TestCase):
         code, text = self.run_cli("dests", "reflux.demo_app:make_app")
         self.assertEqual(code, 0)
         lines = [line for line in text.splitlines() if line.strip()]
-        self.assertTrue(lines[0].startswith("event"))
+        self.assertTrue(lines[0].startswith("dest"))
         self.assertIn("kind", lines[0])
         self.assertIn("source", lines[0])
         self.assertEqual(len(lines), 1 + 8, "header + the eight names the demo registers")

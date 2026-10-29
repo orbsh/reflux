@@ -91,7 +91,7 @@ def print_dests(target: str) -> int:
         print(f"[dests] {target} registered no uplink names")
         return 0
     width = max(len(name) for name, _, _ in rows)
-    print(f"{'event':<{width}}  {'kind':<8} source")
+    print(f"{'dest':<{width}}  {'kind':<8} source")
     for name, source, kind in rows:
         print(f"{name:<{width}}  {kind:<8} {source}")
     return 0

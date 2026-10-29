@@ -59,15 +59,15 @@ def describe(frame: dict) -> str:
         if action == "create":
             parts.append(f"create({nodes(op.get('data'))} nodes)")
         elif action == "append":
-            parts.append(f"append→{op.get('event')}")
+            parts.append(f"append→{op.get('slot')}")
         elif action == "set":
-            parts.append(f"set({op.get('event')})")
+            parts.append(f"set({op.get('slot')})")
         elif action == "patch":
             value = op.get("value")
             shown = repr(value if len(str(value)) <= 12 else str(value)[:9] + "…")
-            parts.append(f"patch({op.get('event')} += {shown})")
+            parts.append(f"patch({op.get('slot')} += {shown})")
         elif action == "remove":
-            parts.append(f"remove({op.get('event')})")
+            parts.append(f"remove({op.get('slot')})")
         else:
             parts.append(str(action))
     return f"{len(content)} op · " + " · ".join(parts)
@@ -151,7 +151,7 @@ def status_of(frames: list[dict]) -> str:
     text = ""
     for frame in frames:
         for op in frame:
-            if op.get("action") == "set" and op.get("event") == "status":
+            if op.get("action") == "set" and op.get("slot") == "status":
                 value = ((op.get("data") or {}).get("bind") or {}).get("value") or {}
                 if isinstance(value.get("default"), str):
                     text = value["default"]
