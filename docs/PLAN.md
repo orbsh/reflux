@@ -34,7 +34,7 @@
 | T11 测量 | ✅ 2026-10-20 | `python3 tools/measure.py`（四段）＋ 数字在 `docs/PERF.md` |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
 | M1 与 fluxen 合流（渲染器换成它的包；退场：`spec/`、`shell/*`、壳侧生成物；T7–T11 的门重新对到新客户端；封闭性与跨字段语义落到 SDK + 服务端入站 + 门） | ✅ 2026-10-20（M1.1–M1.7 全部落地） | 见下七行 |
-| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用仓里钉住的包，无需 fluxen 检出） |
+| M1.1 入口把手（`#main` 的 `data-codec`／`data-path`；挂载后发布页面级 send） | ✅ 2026-10-19 | `python3 tools/gate_m1_1.py`（5 条；用 `www/static/vendor/` 里本地构建好的包） |
 | M1.2 资产与伺服（reflux 出页面；渲染器 dist 按 `VERSIONS` 钉版本；reflux 自己的样式表） | ✅ 2026-10-19 | `python3 tools/gate_t0_next.py`（7 条）＋ `python3 -m unittest tests.test_page` |
 | M1.3 客户端 runtime（两个标记的镜像、hello、popstate） | ✅ 2026-10-19 | `python3 tools/gate_t6_next.py`（8 条）＋ `python3 -m unittest tests.test_page` |
 | M1.4 出帧层（accrete 的八个 action + `Message` 信封，`reflux/wire.py`；信封 2026-10-29 退场，见文末） | ✅ 2026-10-19 | `python3 tools/gate_t2_next.py`（12 条）＋ `python3 -m unittest tests.test_wire` |

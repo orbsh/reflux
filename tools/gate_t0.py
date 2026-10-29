@@ -2,14 +2,15 @@
 """T0 gate — the page boots with nothing but its own pinned assets.
 
 Does the page load with zero console errors and zero off-origin requests? The answer is pinned to a
-manifest: the request set must be *exactly* what `www/vendor/fluxen/versions.json` says plus the
+manifest: the request set must be *exactly* what `www/static/vendor/fluxen/versions.json` says plus the
 page's own stylesheet, and every served byte must hash to the value in that manifest. A stale
 vendored file, a hand-edited manifest, or a mount pointing at the wrong directory all fail here
 rather than in a browser someone has to read.
 
     python3 tools/gate_t0.py
 
-Needs no renderer checkout: the bundle is vendored under `www/`. Exit code 0 = gate passed.
+Needs no fluxen checkout once the bundle has been built: it lives, gitignored, under
+`www/static/vendor/`. Exit code 0 = gate passed.
 """
 
 from __future__ import annotations
