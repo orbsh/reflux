@@ -13,9 +13,10 @@
   `node` 随壳删除，**没有翻译层**。
 - fluxen：`main` @ 460d867（2026-10-29 起线上只有动作列表，信封归宿主）。`crates/ui_core/src/lib.rs` 的入口仍
   多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
-- 仓里钉着的渲染器包是 fluxen 460d867 的 **release** 构建（`examples/renderer`，`trunk build --release`）：
-  `www/static/vendor/fluxen/`，4 件资产共 2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有
-  压缩后的数字），清单在 `versions.json`（rev + 逐文件 sha256/大小）。`rev` 现在写的是 `uncommitted`：
+- 渲染器包是 fluxen 460d867 的 **release** 构建（`examples/renderer`，`trunk build --release`），落在
+  `www/static/vendor/fluxen/`——**这份包不入版本控制**（gitignore），仓里只有消费它的代码；4 件资产共
+  2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有压缩后的数字），清单在 `versions.json`
+  （rev + 逐文件 sha256/大小），随包一起在本地生成。`rev` 现在写的是 `uncommitted`：
   这一版是从 fluxen 工作树（ADR 0022 + 0023（落点一律叫 `slot`） 之后）构建的，revision 随那次提交一起补。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
@@ -143,7 +144,7 @@ www/index.html                 页面：静态；`#main` 钉通道与编码；<b
 www/static/reflux.js           客户端 runtime：标记镜像、hello、popstate（只读 DOM，不持 socket）
 www/static/reflux.css          @layer reflux 的七条令牌规则 + 藏两个保留标记
 www/static/logo.svg            页面自己的图片资产（fixture 与示例都用它）
-www/static/vendor/fluxen/      钉住的渲染器包 + versions.json（升版只改这里）
+www/static/vendor/fluxen/      本地构建的渲染器包 + versions.json（gitignore，不入仓库）
 tools/cdp.py                   CDP 夹具：open_page（起服务、等启动、注入 error hook）、真鼠标/按键、Ws 客户端
 tools/gate_ingest.py           入站门（真 socket，无 chromium）
 tools/measure.py               T11 的测量（帧字节 / DOM 变更 / 首屏 / 服务端 CPU）；数字落 docs/PERF.md

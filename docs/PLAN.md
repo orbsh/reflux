@@ -75,8 +75,8 @@ reflux/sdk/profile.py             手写：读 profile/profile.json
 www/index.html                    页面：静态；`#main` 钉通道与编码，资源走 /static/ 绝对路径
 www/static/reflux.css             框架自己的样式表（今天只藏两个保留标记）
 www/static/reflux.js              客户端 runtime：两个标记的镜像、hello、popstate（约 90 行）
-www/static/vendor/fluxen/         钉版本的渲染器包：versions.json + js + wasm + assets/*.css
-www/static/vendor/fluxen/versions.json  ← 资产清单：rev、逐文件 sha256 与大小（升版只改这里）
+www/static/vendor/fluxen/         本地构建的渲染器包（gitignore，不入版本控制）：versions.json + js + wasm + assets/*.css
+www/static/vendor/fluxen/versions.json  ← 资产清单：rev、逐文件 sha256 与大小（从 fluxen 构建产出，生成本地不提交）
 tools/gate_t0.py                  T0 门：请求清单 == 清单、逐件哈希（过 HTTP）、深链、缺模块 404
 tests/test_wire.py                八种 action 形状逐字对表 + 四类拒收（指针/position/op/节点）
 tools/gate_t7.py                  T7 门：会话（真浏览器的重载 + 离线判死，两套时钟）
@@ -409,8 +409,8 @@ socket 的内核缓冲把 8 帧都收下了，队列没停在排空状态，所�
 `spawn_local before a global executor was initialized`——`Ctx::new` 的读循环要 Leptos 的 executor。
 修法是把装配搬回闭包，发布那行跟着进去。
 
-M1.2 落地后这道门改了取材：探针页围绕**仓里钉住的**那份包拼（`www/static/vendor/fluxen/`，名字按
-`versions.json`），不再读兄弟仓——渲染器升级把它弄丢了，这道门就会红。
+M1.2 落地后这道门改了取材：探针页围绕**本地构建好的**那份包拼（`www/static/vendor/fluxen/`，gitignore、不入仓库，
+名字按 `versions.json`），不再读兄弟仓——包里少一件，这道门就会红。
 
 ## M1.2 门的实测结果（2026-10-19）
 
