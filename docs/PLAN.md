@@ -865,3 +865,10 @@ console error）；`examples/chat/walkthrough.py` 借 fluxen `examples/walkthrou
 
 **验证**：`install` → 打 tarball（907 410 B）→ 用 tarball 走 `unpack` 装回，四件 2 995 260 B 与逐文件
 sha256 一致；182 例 OK；`gate_t0` 与浏览器门在装好的包上全绿。
+
+**首个自动发布**：推 main 后 CI 失败一次——`actions/checkout` 拿 `ref: 5ec9b4d` 当分支名去找（短 sha
+不是 ref，`--depth=1` 也解析不了对象）。改成先用 commits API 换全 id 再 checkout，重跑成功，产出
+`renderer-5ec9b4d`：`fluxen-renderer-5ec9b4d.tar.gz`（910 265 B）+ `SHA256SUMS`。消费侧实测：把本地包
+移走后 `python3 tools/vendor.py fetch` 装回 `ui_leptos-4fffe41885540d62{,_bg.wasm}`，四件 3 004 176 B，
+逐件 sha256 与清单一致，tarball 自身 sha256 与发布的 `SHA256SUMS` 一致；182 例 OK、`gate_t0/t2/t4/t6/t9/
+chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏览器门**。

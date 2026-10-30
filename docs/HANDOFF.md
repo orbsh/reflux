@@ -15,9 +15,11 @@
   的入口仍多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
 - 渲染器包是 fluxen `5ec9b4d` 的 **release** 构建（`examples/renderer`，`trunk build --release`），落在
   `www/static/vendor/fluxen/`——**这份包不入版本控制**（gitignore），仓里只有 `vendor/pin.json` 与装它的
-  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）；装了才知道数字：
-  4 件资产共 2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有压缩后的数字），清单在
-  `versions.json`（rev + 逐文件 sha256/大小），随包一起生成。发布那边是 CI：`.github/workflows/renderer.yml`
+  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）。落地的数字来自
+  CI 那次构建：`ui_leptos-4fffe41885540d62.js` + `ui_leptos-4fffe41885540d62_bg.wasm`（2 892 210 B）+ 两个
+  css，4 件共 3 004 176 B（本机没有 `wasm-opt`，所以没有压缩后的数字）；本机用 nix 的工具链编同一份源码
+  得到的是 2 995 260 B——trunk／rustc 版本不同，字节就不同，**以 release 那份为准**，`versions.json`
+  （rev + 逐文件 sha256/大小）随包生成。发布那边是 CI：`.github/workflows/renderer.yml`
   每次推 main 都看 pin——该 tag 还没发就用那个 fluxen 修订构建，产出
   `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS` 挂到本仓的 release；已发则只装下来跑一遍测试。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
