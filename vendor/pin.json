@@ -1,0 +1,10 @@
+{
+  "renderer": "fluxen",
+  "source": "orbsh/fluxen",
+  "releases": "orbsh/reflux",
+  "rev": "5ec9b4d",
+  "tag": "renderer-5ec9b4d",
+  "asset": "fluxen-renderer-5ec9b4d.tar.gz",
+  "asset_url": "https://github.com/orbsh/reflux/releases/download/renderer-5ec9b4d/fluxen-renderer-5ec9b4d.tar.gz",
+  "install": "python3 tools/vendor.py fetch"
+}

@@ -830,19 +830,38 @@ console error）；`examples/chat/walkthrough.py` 借 fluxen `examples/walkthrou
 （`"event":` 是 9 字节，`"slot":` 是 8）。`measure.py` 复测：回声 121 B、加行 342、删行 53、表单 172、
 翻页 2 709；首屏 23 ms、DCL 12 ms；服务端 100 µs/帧、3 374 帧/秒；包 2 996 063 B。
 
-### 2026-10-29 之三 — 上行落点也叫 `slot`
+### 2026-10-29 之三 — 上行目标叫 `dest`
 
-**触发**：fluxen ADR 0023（同一轮用户裁决）。`event` 在 UI 侧同时指着 DOM 事件、后端事件、上行落点，
-"前端传来的数据里又有 event 就乱了"；并且"上行的 event 实际对应的是下行的 slot"——同一种东西一个词。
+**触发**：fluxen ADR 0023（同一轮用户裁决，词由用户定为 `dest`）。`event` 在 UI 侧同时指着 DOM 事件、
+后端事件与上行落点，"前端传来的数据里又有 event 就乱了"；而"上下行的关系，包括数据形状都是不对称的，
+确实不应该用同一个名字"——下行留 `slot`（ADR 0022），上行另起一个词。
 
-- `frame.slot`（原 `frame.event`）；`bind.<key>` 的 `kind: uplink` + `slot:`（原 `kind: event` + `event:`）；
-  `inject` 的另起名字 `name?`（缺省 = 槽名）。
-- 生产者侧同步：`reflux/events.py` → `reflux/uplinks.py`、`app.events` → `app.uplinks`、CLI
-  `reflux events` → `reflux uplinks`、测试 `test_cli_events.py`；`ingest` 的入站错误前缀
+- `frame.dest`（原 `frame.event`）；`bind.<key>` 的 `kind: dest` + `dest:`（原 `kind: event` + `event:`）；
+  `inject` 的另起名字 `name?`（缺省 = 槽名——那里 `slot` 是通道，一个对象里不能两个 `slot`）。
+- 生产者侧同步：`reflux/events.py` → `reflux/dests.py`、`app.events` → `app.dests`、CLI
+  `reflux events` → `reflux dests`、`test_cli_events.py` → `test_cli_dests.py`；`ingest` 的入站错误前缀
   `envelope:` → `uplink:`（上行不是信封）。
-- SDK 重新生成：schema 快照的 bind 分支改成 `kind: uplink` + `slot`，profile 的四个条目改 `"uplink"`，
-  `gen_rust.py` 补一条（`local` 与 `uplink` 的落点字段都叫 `slot`）。
-- 钉住的渲染器包重打：`ui_leptos-5617bc7e8b2b2491.js` + `ui_leptos-49a420050d16eda4_bg.wasm`，四件
-  共 2 995 410 B。
+- SDK 重新生成：schema 快照的 bind 分支改成 `kind: dest` + `dest`，profile 的四个条目改 `"dest"`，
+  `gen_rust.py` 的落点字段规则改回"只有 `local` 用 `slot`"——`dest` 用自己的字段名。
+- 帧复述：`examples/chat/walkthrough.py` 打印下行帧时读 `op["slot"]`（它原来读 `event`，改名后一路打出
+  `append→None`）；`reflux dests` 的表头也从 `event` 改成 `dest`。
 
 **验证**：182 例 OK；`gen_sdk --check` in sync；十一门全绿（含真 Chromium 的 t3/t4/t6/t9/chat，T10 8/8）。
+
+### 2026-10-30 — 渲染器包不入库：一个 pin、一个装它的工具、一条发布流水线
+
+**触发**：用户裁决——包不进 git，README 写清怎么构建，CI 构建并发 release。前一版把包提交进了仓库
+（一次 `git add -A` 顺手带进去的），`www/static/vendor/` 随后被 gitignore 并从历史移除。
+
+- `vendor/pin.json`：唯一入库的"包在哪"——fluxen 修订、release tag、资产名与 URL。
+- `tools/vendor.py` 三个动词，一个落地布局：`fetch`（从 pin 指的 release 取，不需要 Rust）、
+  `build --fluxen <path>`（trunk 构建那个 checkout 再装，`rev` 取它的 HEAD）、`install --dist <dir>`
+  （接管已有产物）。装完写 `versions.json`（rev + 逐文件 sha256/大小），旧哈希文件清掉。
+- `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS`：一个包一件事（四件核心资产 + 清单），
+  mtime/uid 归零，可重打。
+- `.github/workflows/renderer.yml`：dispatch 给一个 fluxen 修订 → 构建 → 装 → 发 release（`renderer-<rev>`）；
+  PR 只验 pin（fetch + `unittest` + `gen_sdk --check`）。顺序是**先发 release 再改 pin**，pin 指到不存在的
+  tag 就该红。
+
+**验证**：`install` → 打 tarball（907 410 B）→ 用 tarball 走 `unpack` 装回，四件 2 995 260 B 与逐文件
+sha256 一致；182 例 OK；`gate_t0` 与浏览器门在装好的包上全绿。

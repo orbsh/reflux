@@ -9,3 +9,4 @@ __pycache__/
 .uv/
 sdks/rust/target/
 www/static/vendor/
+dist-release/

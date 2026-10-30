@@ -11,13 +11,14 @@
   `static/` 就不挂）。深链与刷新都由根挂载的 `index.html` 接住，页面自己再向生产者要结构。
 - 帧只有一个方言：`reflux/wire.py`（accrete 的八个 action，**一帧就是这份数组**——没有信封）。`ops`／`ui`／
   `node` 随壳删除，**没有翻译层**。
-- fluxen：`main` @ 460d867（2026-10-29 起线上只有动作列表，信封归宿主）。`crates/ui_core/src/lib.rs` 的入口仍
-  多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
-- 渲染器包是 fluxen 460d867 的 **release** 构建（`examples/renderer`，`trunk build --release`），落在
-  `www/static/vendor/fluxen/`——**这份包不入版本控制**（gitignore），仓里只有消费它的代码；4 件资产共
-  2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有压缩后的数字），清单在 `versions.json`
-  （rev + 逐文件 sha256/大小），随包一起在本地生成。`rev` 现在写的是 `uncommitted`：
-  这一版是从 fluxen 工作树（ADR 0022 + 0023（落点一律叫 `slot`） 之后）构建的，revision 随那次提交一起补。
+- fluxen：`main` @ 5ec9b4d（ADR 0022 下行叫 `slot`、ADR 0023 上行叫 `dest`；信封归宿主）。`crates/ui_core/src/lib.rs`
+  的入口仍多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
+- 渲染器包是 fluxen `5ec9b4d` 的 **release** 构建（`examples/renderer`，`trunk build --release`），落在
+  `www/static/vendor/fluxen/`——**这份包不入版本控制**（gitignore），仓里只有 `vendor/pin.json` 与装它的
+  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）；装了才知道数字：
+  4 件资产共 2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有压缩后的数字），清单在
+  `versions.json`（rev + 逐文件 sha256/大小），随包一起生成。发布那边是 CI：`.github/workflows/renderer.yml`
+  按给的 fluxen 修订构建，产出 `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS` 挂到本仓的 release。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
@@ -28,6 +29,7 @@
 ## 二、怎么跑（全绿才算数）
 
 ```
+python3 tools/vendor.py fetch                    # 先装渲染器包（不入库；离线用 build --fluxen <path>）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
 python3 -m unittest discover -s tests -t .       # 182 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
@@ -144,9 +146,11 @@ www/index.html                 页面：静态；`#main` 钉通道与编码；<b
 www/static/reflux.js           客户端 runtime：标记镜像、hello、popstate（只读 DOM，不持 socket）
 www/static/reflux.css          @layer reflux 的七条令牌规则 + 藏两个保留标记
 www/static/logo.svg            页面自己的图片资产（fixture 与示例都用它）
-www/static/vendor/fluxen/      本地构建的渲染器包 + versions.json（gitignore，不入仓库）
+www/static/vendor/fluxen/      装出来的渲染器包 + versions.json（gitignore，不入仓库；`tools/vendor.py fetch`）
+vendor/pin.json                该装哪个 release：fluxen 修订 / tag / 资产 URL
 tools/cdp.py                   CDP 夹具：open_page（起服务、等启动、注入 error hook）、真鼠标/按键、Ws 客户端
-tools/gate_ingest.py           入站门（真 socket，无 chromium）
+tools/vendor.py                装渲染器包：fetch（release）/ build（trunk 构建）/ install（已有 dist）
+tools/gate_ingest.py          入站门（真 socket，无 chromium）
 tools/measure.py               T11 的测量（帧字节 / DOM 变更 / 首屏 / 服务端 CPU）；数字落 docs/PERF.md
 tools/vocabulary.py            词表模型：schema + profile + 类型层的字段序，两个 emitter 共用
 tools/gen_rust.py              Rust emitter：词表 → sdks/rust/src/types.rs

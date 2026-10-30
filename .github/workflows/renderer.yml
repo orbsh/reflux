@@ -1,0 +1,120 @@
+name: renderer
+
+# The renderer bundle is a build product of another repository (fluxen's
+# `examples/renderer`), so it is not committed here: this workflow builds it from a
+# fluxen revision and publishes it as a release asset, and `vendor/pin.json` names the
+# release a clone installs. `python3 tools/vendor.py fetch` is the whole install step
+# for anyone not changing the renderer.
+#
+# Publishing is a deliberate dispatch. A pull request only *verifies* the pin: install
+# it, then run the tests that read `versions.json`. Publish first, bump the pin second —
+# a pin that names an unpublished tag fails the verify job, which is the point.
+#
+# The browser gates are not here: they drive a real Chromium over CDP, and CI is not the
+# place to argue about a headless browser's fonts. `tools/vendor.py fetch` plus
+# `python3 -m unittest discover` is what a machine can settle.
+
+on:
+  workflow_dispatch:
+    inputs:
+      rev:
+        description: "fluxen revision to build (commit, branch or tag)"
+        required: true
+      tag:
+        description: "release tag to publish (default: renderer-<rev>)"
+        required: false
+  pull_request:
+    paths: ["vendor/**", "tools/vendor.py", "www/**", ".github/workflows/renderer.yml"]
+
+env:
+  # The version development uses; fluxen's own ui-release pins the same one.
+  TRUNK_VERSION: "0.21.14"
+  FLUXEN_REPO: orbsh/fluxen
+
+jobs:
+  verify:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the pinned bundle
+        run: python3 tools/vendor.py fetch
+      - name: Tests that read the manifest
+        run: |
+          python3 -m unittest discover -s tests -t .
+          python3 tools/gen_sdk.py --check
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FLUXEN_REPO }}
+          ref: ${{ inputs.rev }}
+          path: .fluxen
+
+      # The input may be a branch or a tag; what the bundle and the manifest record is
+      # the commit that was actually built.
+      - name: Resolve the revision
+        id: rel
+        env:
+          ASKED: ${{ inputs.rev }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          rev="$(git -C .fluxen rev-parse --short HEAD)"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG:-renderer-${rev}}" >> "$GITHUB_OUTPUT"
+          echo "asked=$ASKED" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .fluxen
+
+      - name: Install trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@${{ env.TRUNK_VERSION }}
+
+      - name: Build the renderer and assemble the release
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+          REV: ${{ steps.rel.outputs.rev }}
+        run: |
+          trunk --version
+          python3 tools/vendor.py build --fluxen .fluxen --rev "$REV" --tag "$TAG"
+
+      - name: Keep the manifest in the summary
+        run: |
+          {
+            echo '```json'
+            cat www/static/vendor/fluxen/versions.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: renderer ${{ steps.rel.outputs.rev }}
+          draft: false
+          body: |
+            The fluxen renderer bundle, built from `${{ env.FLUXEN_REPO }}@${{ steps.rel.outputs.rev }}` with
+            `trunk build --release`, installed into this host's layout by `tools/vendor.py build`.
+
+            Install it by pointing `vendor/pin.json` at this tag and running
+            `python3 tools/vendor.py fetch`. The tarball carries `versions.json` (rev, entry names,
+            per-file sha256) and the four files a page loads; module media (monaco, mermaid,
+            3d-force-graph, …) is not in it — frames that name those fetch them.
+          files: |
+            dist-release/*.tar.gz
+            dist-release/SHA256SUMS

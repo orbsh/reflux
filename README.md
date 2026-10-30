@@ -26,9 +26,40 @@ place a frame is built.
 
 - Python ≥ 3.11 and `pydantic` 2 — the generated type layer is pydantic models
 - `cargo` only if you want to build the Rust SDK
+- the renderer bundle, one command: `python3 tools/vendor.py fetch` (see below)
 
 There is nothing to install: the producer side runs from the repository (the package is not a wheel).
 Everything except the SDK's type layer is standard library.
+
+## The renderer bundle
+
+The page runs a WebAssembly renderer that belongs to another repository (fluxen), so it is **not
+committed here** — a 3 MB wasm with a content-hashed name is not something a diff can review. What is
+committed is the pin and the means to install it:
+
+```
+vendor/pin.json          the release to install: fluxen rev, tag, asset, URL
+tools/vendor.py          fetch | build | install — one output layout
+www/static/vendor/fluxen/versions.json   written on install; every gate reads it
+```
+
+```bash
+python3 tools/vendor.py fetch                          # from the pinned release (no Rust needed)
+python3 tools/vendor.py build --fluxen ../fluxen       # trunk build a fluxen checkout, then install
+python3 tools/vendor.py install --dist ../fluxen/examples/renderer/dist   # adopt an existing build
+```
+
+`fetch` installs four files — the JS glue, its wasm, `assets/main.css`, `assets/custom.css` — and
+writes `versions.json` with the rev plus a sha256 and size per file. The gates compare against that
+file over HTTP (`gate_t0`), so a stale or hand-edited bundle fails as a red gate rather than a page
+that half-loads. Bumping the renderer is: change `rev`/`tag` in `vendor/pin.json`, run `fetch`, run
+the gates, commit the pin. Nothing else moves.
+
+Publishing a bundle is CI's job (`.github/workflows/renderer.yml`): dispatch it with a fluxen
+revision. It builds that revision with `trunk build --release`,
+installs it here, and attaches `dist-release/fluxen-renderer-<rev>.tar.gz` plus `SHA256SUMS` to a
+release of this repository. The module media (monaco, mermaid, 3d-force-graph, …) is not in it —
+frames that name those fetch them, so the bundle stays ~3 MB.
 
 ## Try the reference app
 
@@ -176,6 +207,8 @@ python3 tools/gate_t10.py                      # Rust vs Python frames (needs ca
 python3 tools/measure.py                       # bytes, DOM changes, first paint, CPU
 ```
 
+Every gate needs the renderer installed first: `python3 tools/vendor.py fetch`.
+
 The browser gates drive a real headless Chromium over CDP using only the standard library; the first
 `cargo build` needs crates.io.
 
@@ -184,10 +217,12 @@ The browser gates drive a real headless Chromium over CDP using only the standar
 ```
 reflux/            the host: app, sessions, wire, ingest, routes, uplinks, cli
 reflux/sdk/        the Python SDK — generated types/builders, hand-written parse/markers
-www/               the page: index.html, reflux.js runtime, css, pinned renderer bundle
+www/               the page: index.html, reflux.js runtime, css (the renderer bundle is
+                   installed into www/static/vendor/fluxen/ by tools/vendor.py, not committed)
 schema/ profile/   the wire's snapshot and this framework's selection over it
 sdks/rust/         the second SDK, generated from the same two files
-tools/             generators, gates, the CDP fixture, the measurement script
+tools/             generators, gates, the CDP fixture, the measurement script, vendor.py
+vendor/pin.json    which renderer release to install
 tests/             everything that needs no browser
 docs/              design and decision record (in Chinese)
 ```
