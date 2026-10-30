@@ -18,7 +18,8 @@
   `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）；装了才知道数字：
   4 件资产共 2 995 260 B（wasm 2 883 294 B；本机没有 `wasm-opt`，所以没有压缩后的数字），清单在
   `versions.json`（rev + 逐文件 sha256/大小），随包一起生成。发布那边是 CI：`.github/workflows/renderer.yml`
-  按给的 fluxen 修订构建，产出 `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS` 挂到本仓的 release。
+  每次推 main 都看 pin——该 tag 还没发就用那个 fluxen 修订构建，产出
+  `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS` 挂到本仓的 release；已发则只装下来跑一遍测试。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。

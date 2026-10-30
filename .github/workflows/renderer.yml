@@ -1,28 +1,28 @@
 name: renderer
 
 # The renderer bundle is a build product of another repository (fluxen's
-# `examples/renderer`), so it is not committed here: this workflow builds it from a
-# fluxen revision and publishes it as a release asset, and `vendor/pin.json` names the
-# release a clone installs. `python3 tools/vendor.py fetch` is the whole install step
-# for anyone not changing the renderer.
+# `examples/renderer`), so it is not committed here: every push to main builds the
+# revision `vendor/pin.json` names and attaches the result to a release of this
+# repository, tagged `renderer-<rev>`. No button.
 #
-# Publishing is a deliberate dispatch. A pull request only *verifies* the pin: install
-# it, then run the tests that read `versions.json`. Publish first, bump the pin second —
-# a pin that names an unpublished tag fails the verify job, which is the point.
+# Idempotent by construction, which is what makes "always" safe:
 #
-# The browser gates are not here: they drive a real Chromium over CDP, and CI is not the
-# place to argue about a headless browser's fonts. `tools/vendor.py fetch` plus
-# `python3 -m unittest discover` is what a machine can settle.
+#   * a push whose pin is already published does not build — it installs the release
+#     and runs the tests that read `versions.json`, so the twenty commits that merely
+#     touch the producer cost twenty cheap jobs and zero wasm builds;
+#   * a push that moves the pin publishes, because that tag cannot exist yet: the tag
+#     *is* the revision.
+#
+# Bumping the renderer is therefore a one-line commit (`rev`/`tag`/`asset` in
+# `vendor/pin.json`) and CI does the rest. "Publish first, then bump" stops being a
+# rule anyone must remember — it is what the trigger enforces.
+#
+# The browser gates are not here: they drive a real Chromium over CDP, and CI is not
+# the place to argue about a headless browser's fonts.
 
 on:
-  workflow_dispatch:
-    inputs:
-      rev:
-        description: "fluxen revision to build (commit, branch or tag)"
-        required: true
-      tag:
-        description: "release tag to publish (default: renderer-<rev>)"
-        required: false
+  push:
+    branches: [main]
   pull_request:
     paths: ["vendor/**", "tools/vendor.py", "www/**", ".github/workflows/renderer.yml"]
 
@@ -48,53 +48,81 @@ jobs:
           python3 tools/gen_sdk.py --check
 
   publish:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: What the pin asks for, and whether it is already published
+        id: pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rev="$(python3 -c 'import json;print(json.load(open("vendor/pin.json"))["rev"])')"
+          tag="$(python3 -c 'import json;print(json.load(open("vendor/pin.json"))["tag"])')"
+          # The pin keeps a short rev because that is what a human reads. checkout needs the
+          # full object id: it fetches *refs*, so `5ec9b4d` asks for a branch or tag of that
+          # name and dies — the abbreviated sha only means something once the object is here.
+          full="$(gh api "repos/${FLUXEN_REPO}/commits/${rev}" --jq .sha)"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "\`$tag\` is already published: this run installs and verifies it, and builds nothing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "\`$tag\` is not published yet: this run builds it." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Already published — prove the pin still installs, then stop
+        if: steps.pin.outputs.exists == 'true'
+        run: |
+          python3 tools/vendor.py fetch
+          python3 -m unittest discover -s tests -t .
+          python3 tools/gen_sdk.py --check
 
       - uses: actions/checkout@v4
+        if: steps.pin.outputs.exists == 'false'
         with:
+          # A public repository, cloned read-only: the default token is enough, so no
+          # cross-repository secret has to exist for this workflow to work. Make fluxen
+          # private and this needs a PAT in secrets instead.
           repository: ${{ env.FLUXEN_REPO }}
-          ref: ${{ inputs.rev }}
+          ref: ${{ steps.pin.outputs.full }}
           path: .fluxen
 
-      # The input may be a branch or a tag; what the bundle and the manifest record is
-      # the commit that was actually built.
-      - name: Resolve the revision
-        id: rel
-        env:
-          ASKED: ${{ inputs.rev }}
-          TAG: ${{ inputs.tag }}
-        run: |
-          rev="$(git -C .fluxen rev-parse --short HEAD)"
-          echo "rev=$rev" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG:-renderer-${rev}}" >> "$GITHUB_OUTPUT"
-          echo "asked=$ASKED" >> "$GITHUB_OUTPUT"
-
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.pin.outputs.exists == 'false'
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        if: steps.pin.outputs.exists == 'false'
         with:
           workspaces: .fluxen
 
       - name: Install trunk
+        if: steps.pin.outputs.exists == 'false'
         uses: taiki-e/install-action@v2
         with:
           tool: trunk@${{ env.TRUNK_VERSION }}
 
       - name: Build the renderer and assemble the release
+        if: steps.pin.outputs.exists == 'false'
         env:
-          TAG: ${{ steps.rel.outputs.tag }}
-          REV: ${{ steps.rel.outputs.rev }}
+          TAG: ${{ steps.pin.outputs.tag }}
+          REV: ${{ steps.pin.outputs.rev }}
         run: |
           trunk --version
           python3 tools/vendor.py build --fluxen .fluxen --rev "$REV" --tag "$TAG"
 
       - name: Keep the manifest in the summary
+        if: steps.pin.outputs.exists == 'false'
         run: |
           {
             echo '```json'
@@ -103,18 +131,19 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: softprops/action-gh-release@v2
+        if: steps.pin.outputs.exists == 'false'
         with:
-          tag_name: ${{ steps.rel.outputs.tag }}
-          name: renderer ${{ steps.rel.outputs.rev }}
+          tag_name: ${{ steps.pin.outputs.tag }}
+          name: renderer ${{ steps.pin.outputs.rev }}
           draft: false
           body: |
-            The fluxen renderer bundle, built from `${{ env.FLUXEN_REPO }}@${{ steps.rel.outputs.rev }}` with
-            `trunk build --release`, installed into this host's layout by `tools/vendor.py build`.
+            The fluxen renderer bundle, built from `${{ env.FLUXEN_REPO }}@${{ steps.pin.outputs.rev }}`
+            with `trunk build --release`, installed into this host's layout by `tools/vendor.py build`.
 
-            Install it by pointing `vendor/pin.json` at this tag and running
-            `python3 tools/vendor.py fetch`. The tarball carries `versions.json` (rev, entry names,
-            per-file sha256) and the four files a page loads; module media (monaco, mermaid,
-            3d-force-graph, …) is not in it — frames that name those fetch them.
+            `python3 tools/vendor.py fetch` installs it; that is what `vendor/pin.json` points at while
+            it names this tag. The tarball carries `versions.json` (rev, entry names, per-file sha256)
+            and the four files a page loads; module media (monaco, mermaid, 3d-force-graph, …) is not
+            in it, because frames that name those fetch them.
           files: |
             dist-release/*.tar.gz
             dist-release/SHA256SUMS

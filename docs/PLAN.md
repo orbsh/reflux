@@ -859,9 +859,9 @@ console error）；`examples/chat/walkthrough.py` 借 fluxen `examples/walkthrou
   （接管已有产物）。装完写 `versions.json`（rev + 逐文件 sha256/大小），旧哈希文件清掉。
 - `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS`：一个包一件事（四件核心资产 + 清单），
   mtime/uid 归零，可重打。
-- `.github/workflows/renderer.yml`：dispatch 给一个 fluxen 修订 → 构建 → 装 → 发 release（`renderer-<rev>`）；
-  PR 只验 pin（fetch + `unittest` + `gen_sdk --check`）。顺序是**先发 release 再改 pin**，pin 指到不存在的
-  tag 就该红。
+- `.github/workflows/renderer.yml`：**推 main 即发**——读 pin，该 tag 未发布就 checkout 那个 fluxen 修订、
+  构建、装、发 release（`renderer-<rev>`）；已发布则只 `fetch` + 跑测试，不构建。tag 就是修订号，所以
+  "先发后改 pin" 的次序由触发器保证，不需要人记。PR 只验 pin（fetch + `unittest` + `gen_sdk --check`）。
 
 **验证**：`install` → 打 tarball（907 410 B）→ 用 tarball 走 `unpack` 装回，四件 2 995 260 B 与逐文件
 sha256 一致；182 例 OK；`gate_t0` 与浏览器门在装好的包上全绿。

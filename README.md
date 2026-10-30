@@ -52,14 +52,17 @@ python3 tools/vendor.py install --dist ../fluxen/examples/renderer/dist   # adop
 `fetch` installs four files — the JS glue, its wasm, `assets/main.css`, `assets/custom.css` — and
 writes `versions.json` with the rev plus a sha256 and size per file. The gates compare against that
 file over HTTP (`gate_t0`), so a stale or hand-edited bundle fails as a red gate rather than a page
-that half-loads. Bumping the renderer is: change `rev`/`tag` in `vendor/pin.json`, run `fetch`, run
-the gates, commit the pin. Nothing else moves.
+that half-loads.
 
-Publishing a bundle is CI's job (`.github/workflows/renderer.yml`): dispatch it with a fluxen
-revision. It builds that revision with `trunk build --release`,
-installs it here, and attaches `dist-release/fluxen-renderer-<rev>.tar.gz` plus `SHA256SUMS` to a
-release of this repository. The module media (monaco, mermaid, 3d-force-graph, …) is not in it —
-frames that name those fetch them, so the bundle stays ~3 MB.
+Publishing is automatic (`.github/workflows/renderer.yml`), because the tag is the revision and so
+the two cannot disagree: every push to main publishes the pin's revision *if that tag does not
+exist yet*, by building it with `trunk build --release` and attaching
+`dist-release/fluxen-renderer-<rev>.tar.gz` plus `SHA256SUMS` to a release of this repository. A push
+whose tag is already published builds nothing — it installs the release and runs the tests against
+it. So bumping the renderer is: `build --fluxen ../fluxen` locally to run the browser gates against
+the new bundle, then commit `rev`/`tag`/`asset` in `vendor/pin.json`. CI publishes on that push;
+`fetch` works everywhere afterwards. The module media (monaco, mermaid, 3d-force-graph, …) is not in
+the bundle — frames that name those fetch them, so it stays ~3 MB.
 
 ## Try the reference app
 
