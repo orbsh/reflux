@@ -12,22 +12,33 @@ routing.
 
     app.serve(port=8000)
 
-The page speaks first. Its ``reflux:hello`` carries the path it stands on, and every later page
-request is ``reflux:nav`` — back and forward, the only navigation this wire has. Both go down the
-same road: the path lands on the session, one frame comes back, so the client never sees a wrong
-tree first and a correction second. Every other uplink goes to the handler registered for its name.
+The page speaks first. Its ``reflux:hello`` carries the location it stands on — path and query
+string — and every later page request is ``reflux:nav`` (back and forward, the only navigation this
+wire has), carrying the same two. Both land on the session, one frame comes back, so the client
+never sees a wrong tree first and a correction second. Every other uplink goes to the handler
+registered for its name.
+
+Three names are the *host's* rather than the wire's, and an application registers them like any
+other: ``connect`` (the hello landed), ``location`` (the client navigated) and ``disconnect`` (the
+session ended). They have no uplink address — a client cannot fake its own connect — so the frame
+boundary refuses them and `dests.announce` is how they are raised.
 
 A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
 default the route table answers; an app with a single page sets `app.page` instead of declaring
-routes. Frames are built by `wire` — accrete's eight actions, the renderer's own vocabulary. There
-is no second dialect and no translation layer: everything that leaves here is checked at
-`Session.send` and reaches one renderer.
+routes. An app with a **shell** — a frame around every page, its navigation and its header — sets
+`App(shell=…)` and puts a reader of the `routes` slot where pages belong: the first frame then
+carries `create(shell)` plus the page in that slot, and a later page turn replaces only the slot.
+No shell, no routes slot: the page replaces the layout root (the single-page-app case).
+
+Frames are built by `wire` — accrete's eight actions, the renderer's own vocabulary. There is no
+second dialect and no translation layer: everything that leaves here is checked at `Session.send`
+and reaches one renderer.
 
 A session is one connection — created when it opens, reclaimed when it closes or when it stops
 answering. Nothing crosses connections: the socket is the state, and a refresh is a new session
-holding nothing but the path its hello carried. Identity, when a deployment needs it, arrives as
-an ordinary event on the live socket (`login`), not as a credential checked before it. Sessions
-hold their path and where their frames go — not the interface's state, which lives in the page
+holding nothing but the location its hello carried. Identity, when a deployment needs it, arrives
+as an ordinary event on the live socket (`login`), not as a credential checked before it. Sessions
+hold their location and where their frames go — not the interface's state, which lives in the page
 tree; a hundred sessions are a hundred small records.
 
 Frames queue per session and one writer thread drains each queue, so a client that stopped reading
@@ -43,11 +54,12 @@ import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs
 
 from . import ingest, wire
 from .channel import JUDGED_DEAD, Channel, ChannelClosed
 from .dests import Registry
-from .protocol import RESERVED_PREFIX
+from .protocol import RESERVED_PREFIX, ROUTES_SLOT
 from .routes import DEFAULT, Routes
 from .sdk import builders as b
 from .sdk.types import Accrete
@@ -71,8 +83,54 @@ def not_found(path: str) -> Accrete:
     )
 
 
+def query_of(raw: Any) -> dict[str, list[str]]:
+    """A query string as a mapping of its repeated values, or {} when there is nothing to read.
+
+    The client sends `location.search` as it stands (`?a=1&b=2`, or `a=1` without the `?`), so the
+    leading `?` is optional here. Blank values are kept: `?q=` and no `q` at all are different
+    questions, and only the app can say which one it meant.
+    """
+    if isinstance(raw, str):
+        return parse_qs(raw[1:] if raw.startswith("?") else raw, keep_blank_values=True)
+    return {}
+
+
+def location_of(frame: Any) -> tuple[str, dict[str, list[str]]]:
+    """The location a `hello` or a `nav` carried: its path and its query, both total."""
+    data = frame.get("data") if isinstance(frame, dict) else None
+    if not isinstance(data, dict):
+        return "/", {}
+    path = data.get("path")
+    return (path if isinstance(path, str) and path else "/"), query_of(data.get("query"))
+
+
+def into_routes(operations: list[dict]) -> list[dict]:
+    """A page's own operations, with its structure written into the `routes` slot instead of the root.
+
+    A page in shell mode owes a structure — a node (which `draw_page` wrapped in `create`) or a
+    `create` of its own. That single operation becomes `set(routes, …)`; everything else (the slot
+    seeds a view sends along) passes through in order, so "structure first, data after" still reads
+    the same way in the frame. No structure at all is a producer defect and says so here: the slot
+    would keep the previous page and nothing would look wrong until someone clicked.
+    """
+    out: list[dict] = []
+    landed = False
+    for op in operations:
+        if not landed and op.get("action") == "create":
+            out.append(wire.set(ROUTES_SLOT, op.get("data")))
+            landed = True
+            continue
+        out.append(op)
+    if not landed:
+        raise ValueError(
+            "a page in shell mode must produce its structure (a node, or a create operation): "
+            f"nothing would reach the {ROUTES_SLOT!r} slot"
+        )
+    return out
+
+
 class Session:
-    """One connection: the path it stands on, and where its frames go.
+    """One connection: the location it stands on, and where its frames go.
 
     Frames *queue* here instead of being written inline: a client that stopped reading must not be
     able to hold the thread that produced a frame (that may be the app's own handler, another
@@ -92,6 +150,10 @@ class Session:
         self.id = id
         self.channel = channel
         self.path = "/"
+        # What the address bar carried after the path: `?q=1&tag=a&tag=b` is {"q": ["1"], "tag": ["a","b"]}.
+        self.query: dict[str, list[str]] = {}
+        self.connected = False  # the hello landed: `connect` is raised once, not per hello frame
+        self.shell_drawn = False  # the shell is on the client; a page turn now only writes `routes`
         self.sent = 0
         self.draws = 0
         self.capacity = outbox
@@ -153,15 +215,20 @@ class App:
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
         outbox: int = 256,
+        shell: Callable[[Session], Any] | None = None,
     ) -> None:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
         self.root = Path(root) if root is not None else PAGE_ROOT
         self.dests = Registry()
         self.routes: Routes = routes if routes is not None else DEFAULT
-        # page(session, path) -> a node, or the ops of this turn; left None the route table answers
+        # page(session, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
         self.page: Callable[[Session, str], Any] | None = None
+        # shell(session) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
+        # Set it and a page turn replaces that one slot; leave it None and the page replaces the
+        # layout root — the single-page-app shape.
+        self.shell: Callable[[Session], Any] | None = shell
         # Live sessions, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a session that is not its own.
         self.sessions: dict[Any, Session] = {}
@@ -185,19 +252,33 @@ class App:
     # --- the framework's own protocol -----------------------------------------------------
 
     def _on_hello(self, session: Session, frame: dict) -> None:
-        data = frame.get("data")
-        if isinstance(data, dict):
-            session.path = data.get("path") or "/"
+        """The client says where it stands; the first frame answers, then `connect` is raised."""
+        session.path, session.query = location_of(frame)
         self.draw_page(session)
+        if not session.connected:
+            session.connected = True
+            # After the frame is queued: a handler that draws more lands on top of a page the
+            # client already has, never under one it is about to lose.
+            self.dests.announce("connect", session, frame)
 
     def _on_nav(self, session: Session, frame: dict) -> None:
-        """The page asked for another path — back or forward: the only navigation this wire has."""
-        data = frame.get("data")
-        session.path = (data.get("path") if isinstance(data, dict) else None) or "/"
+        """The page asked for another path — back or forward: the only navigation this wire has.
+
+        The browser already moved its address bar before this arrived, so the framework only
+        re-draws and tells the app: `location` is the host's event, not a wire address.
+        """
+        session.path, session.query = location_of(frame)
         self.draw_page(session)
+        self.dests.announce(
+            "location", session, {"dest": "location", "data": {"path": session.path, "query": session.query}}
+        )
 
     def draw_page(self, session: Session) -> None:
-        """One frame for the session's current path: a create, or the ops the app gave for it.
+        """One frame for the session's current location: a create, or the ops the app gave for it.
+
+        With a shell the frame is `create(shell)` (once per connection) followed by the page written
+        into the `routes` slot — so a page turn after that replaces one slot and leaves the frame
+        around it alone. Without one, the page replaces the layout root: the single-page-app shape.
 
         An app that declares neither a page nor any route draws nothing at all — that is the gates
         that drive the plane themselves; the page keeps whatever it has.
@@ -210,7 +291,16 @@ class App:
         else:
             match = self.routes.match(session.path)
             drawn = not_found(session.path) if match is None else match.resolve(session)
-        session.draw(*(drawn if isinstance(drawn, list) else [wire.create(drawn)]))
+        operations = drawn if isinstance(drawn, list) else [wire.create(drawn)]
+        if self.shell is None:
+            session.draw(*operations)
+            return
+        frame: list[dict] = []
+        if not session.shell_drawn:
+            session.shell_drawn = True
+            frame.append(wire.create(self.shell(session)))
+        frame.extend(into_routes(operations))
+        session.draw(*frame)
 
     # --- the session table -----------------------------------------------------------------
 
@@ -238,8 +328,8 @@ class App:
                 continue
             # Take it out before closing it: one removal, one accounting. Otherwise the reader
             # thread (woken by the shutdown below) could get there first and the same session
-            # would be counted twice — as reclaimed *and* as dead.
-            if self.sessions.pop(channel, None) is None:
+            # would be accounted twice — as reclaimed *and* as dead.
+            if not self._gone(session, "dead"):
                 continue
             channel.close(JUDGED_DEAD)
             channel.abort()
@@ -333,9 +423,21 @@ class App:
         finally:
             # Identity, not id: a session the watchdog already reclaimed is not this thread's to
             # count, and no thread can remove a session that is not its own.
-            if self.sessions.pop(channel, None) is not None:
+            if self._gone(session, "closed"):
                 self.stats["reclaimed"] += 1
                 self.dests.log.append(f"session {session.id} reclaimed")
+
+    def _gone(self, session: Session, reason: str) -> bool:
+        """Take a session out of the table once — and let the app hear that it is gone.
+
+        The one place that removes: `disconnect` cannot fire twice (both the reader thread and the
+        watchdog come here, and only the first wins) and cannot fail to fire (a session leaving the
+        table is exactly the fact the event names).
+        """
+        if self.sessions.pop(session.channel, None) is None:
+            return False
+        self.dests.announce("disconnect", session, {"dest": "disconnect", "data": {"reason": reason}})
+        return True
 
     def _pump(self, session: Session) -> None:
         """Write one session's frames until it is no longer live.
@@ -352,14 +454,16 @@ class App:
         """Write what this session has waiting, then repair it if frames were shed.
 
         The repair only happens when the queue is *empty*: the client is reading again by then, so a
-        single fresh `create` for its current path goes out inline — a resync is one frame, not a
-        replay of everything the client missed.
+        single fresh frame for its current location goes out inline — a resync is one frame, not a
+        replay of everything the client missed. With a shell the resync re-creates it (the stale
+        client may have missed the frame that built it), so the flag is cleared first.
         """
         while session.outbox:
             if not self._write(session.channel, session.outbox.pop(0)):
                 return
         if session.stale:
             session.stale = False
+            session.shell_drawn = False
             self.draw_page(session)
             frames, session.outbox = session.outbox, []
             if all(self._write(session.channel, frame) for frame in frames):

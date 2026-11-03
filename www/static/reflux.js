@@ -44,6 +44,14 @@ function mirror() {
   if (title !== null && title !== document.title) document.title = title;
 }
 
+function where() {
+  // 地址栏的两件东西一起交给后端：路径按应用路径换算，查询串原样（它属于浏览器，解释权在后端）。
+  // 没有查询串时这个字段不写——帧里不写没有信息的东西，与 append 的 position 同一条规矩。
+  const path = toApp(location.pathname);
+  const query = location.search;
+  return query ? { path, query } : { path };
+}
+
 let scheduled = false;
 function schedule() {
   // 一帧里的多次改动合并成一次读，别对每一处 DOM 变更都跑一趟
@@ -60,10 +68,10 @@ export function start() {
     throw new Error("reflux runtime: window.fluxen.send is missing — is the renderer mounted?");
   }
   // 握手先走：连接那一刻生产者还不知道客户端站在哪条路径上（见「连接与握手」）
-  window.fluxen.send("reflux:hello", { path: toApp(location.pathname) });
+  window.fluxen.send("reflux:hello", where());
   addEventListener("popstate", () => {
     // 后退/前进：浏览器已经把地址栏换了，这里只负责把请求送上去
-    window.fluxen.send("reflux:nav", { path: toApp(location.pathname) });
+    window.fluxen.send("reflux:nav", where());
   });
   const root = document.getElementById("main") || document.body;
   new MutationObserver(schedule).observe(root, {

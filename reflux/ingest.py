@@ -31,7 +31,7 @@ from typing import Any, NoReturn
 
 from .sdk import closed
 from .sdk._parse import parse
-from .protocol import MAX_OPS_PER_FRAME
+from .protocol import HOST_EVENTS, MAX_OPS_PER_FRAME
 
 __all__ = ["Refused", "check_frame", "check_uplink", "DEST_KEYS", "OP_KEYS"]
 
@@ -211,7 +211,12 @@ def _one_line(exc: Exception) -> str:
 
 
 def check_uplink(frame: Any) -> None:
-    """Refuse a frame a client sent up, or return None. The event *name* is the registry's call."""
+    """Refuse a frame a client sent up, or return None. The event *name* is the registry's call.
+
+    One exception is the framework's own: `connect` / `location` / `disconnect` are raised by the
+    host, so no client gets to address them. Refusing them here (not in the registry) keeps the
+    rule at the boundary where every frame is seen, whether or not an app registered the name.
+    """
     if not isinstance(frame, dict):
         _refuse("frame is %s, not an object", type(frame).__name__)
     extra = set(frame) - DEST_KEYS
@@ -220,6 +225,8 @@ def check_uplink(frame: Any) -> None:
     landed = frame.get("dest")
     if not isinstance(landed, str) or not landed:
         _refuse("uplink: dest is %r, not a non-empty string", landed)
+    if landed in HOST_EVENTS:
+        _refuse("uplink: %r is a host event — the client does not send it", landed)
     if "id" in frame:
         row = frame["id"]
         if not isinstance(row, str) or not row:

@@ -5,7 +5,8 @@ producer-side server that serves the page tree. Other languages get their own SD
 the same schema (`schema/accrete.schema.json`), because the vocabulary is the renderer's, not ours.
 
 Layering, so imports never cycle:
-  protocol            the protocol's own numbers — the operation cap, the reserved prefix
+  protocol            the protocol's own constants — the operation cap, the reserved prefix, the
+                      routes slot, and the names of the events the host raises
   sdk.types|builders  the vocabulary: accrete's types as models, and one builder per type (generated)
   sdk._parse          the boundary: `parse` / `dump`, and the assembly of a `bind` entry
   sdk.closed          the closure walk — the one vocabulary list the boundary reads
@@ -28,7 +29,7 @@ Layering, so imports never cycle:
 from . import sdk, wire
 from .app import App, Session
 from .dests import Registry, RegistryError
-from .protocol import MAX_OPS_PER_FRAME, RESERVED_PREFIX
+from .protocol import HOST_EVENTS, MAX_OPS_PER_FRAME, RESERVED_PREFIX, ROUTES_SLOT
 from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
 from .sdk import builders
 from .sdk._parse import dump, parse
@@ -54,5 +55,7 @@ __all__ = [
     "dump",
     "MAX_OPS_PER_FRAME",
     "RESERVED_PREFIX",
+    "ROUTES_SLOT",
+    "HOST_EVENTS",
     *builders.__all__,
 ]

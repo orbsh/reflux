@@ -169,6 +169,66 @@ class Streaming(unittest.TestCase):
         self.assertEqual(self.conversation.turns, [])
 
 
+class OneExchange(unittest.TestCase):
+    """The shape `fluxen/docs/interaction-patterns.md` names, as the example actually sends it.
+
+    A cross-repo contract is only worth its prose if something fails when it breaks, so these are
+    the three that matter: the fact lands before the picture, the batch carries the row the bubble
+    and the region, and every later frame addresses only what the batch built.
+    """
+
+    def setUp(self) -> None:
+        self.session = FakeSession()
+        self.conversation = chat.Chat(model=chat.Scripted(window=12), delay=0.0)
+
+    def sent(self) -> None:
+        """Send one message with the reply held back — `send` is the subject in the first two cases."""
+        original = chat.spawn
+        chat.spawn = lambda target, args: None
+        try:
+            chat.send(self.session, self.conversation, "你好")
+        finally:
+            chat.spawn = original
+
+    def test_the_fact_lands_before_the_first_frame_leaves(self):
+        conversation, session = self.conversation, self.session
+        recorded: list[int] = []
+        draw = session.draw
+
+        def capture(*ops):
+            recorded.append(len(conversation.turns))  # what the fact count was when this frame left
+            draw(*ops)
+
+        session.draw = capture
+        self.sent()
+        self.assertEqual(recorded[0], 1)  # the turn was a fact already when the picture went out
+        self.assertEqual([t.role for t in conversation.turns], ["user"])
+
+    def test_one_batch_carries_the_row_the_bubble_and_the_region(self):
+        self.sent()
+        self.assertEqual(len(self.session.frames), 1)  # one turn is one frame
+        frame = self.session.frames[0]
+        self.assertEqual([op["action"] for op in frame], ["append", "append", "set", "set"])
+        self.assertEqual(frame[0]["data"]["id"], "row-user-1")
+        self.assertEqual(frame[1]["data"]["id"], "row-bot-1")
+        self.assertEqual(frame[1]["data"]["children"][0]["bind"]["value"]["source"], "reply.1")
+        self.assertEqual(frame[2]["slot"], "reply.1")  # the region the bubble reads, made in the same batch
+
+    def test_every_later_frame_only_addresses_that_region(self):
+        original = chat.spawn
+        chat.spawn = lambda target, args: target(*args)  # the whole reply, inline
+        try:
+            chat.send(self.session, self.conversation, "你好")
+        finally:
+            chat.spawn = original
+        later = self.session.frames[1:]
+        self.assertGreater(len(later), 3)
+        for frame in later[:-1]:
+            self.assertEqual([op["action"] for op in frame], ["patch"])
+            self.assertEqual([op["slot"] for op in frame], ["reply.1"])  # nothing re-paints the stage
+        self.assertEqual([op["slot"] for op in later[-1]], [chat.STATUS])  # the end is said
+
+
 class Frames(unittest.TestCase):
     def test_the_page_seeds_its_slots_once(self):
         session = FakeSession()

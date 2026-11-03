@@ -41,6 +41,7 @@ import time
 from examples.chat.app import MAX_CHARS, WINDOW, make_app
 from examples.chat.client import Socket
 from examples.chat.model import Model, OpenAI, Scripted
+from examples.pacing import Step, read_for
 
 
 def nodes(node: object) -> int:
@@ -73,23 +74,6 @@ def describe(frame: dict) -> str:
     return f"{len(content)} op · " + " · ".join(parts)
 
 
-def read_for(ws: Socket, seconds: float) -> list[dict]:
-    """Every frame that lands within `seconds` (reading stops early once the wire goes quiet)."""
-    frames: list[dict] = []
-    deadline = time.monotonic() + seconds
-    while True:
-        left = deadline - time.monotonic()
-        if left <= 0:
-            return frames
-        try:
-            frame = ws.recv(timeout=left)
-        except TimeoutError:
-            return frames
-        if frame is None:
-            return frames
-        frames.append(frame)
-
-
 def read_until(ws: Socket, marker: str, *, limit: float = 30.0) -> list[dict]:
     """Frames until one's status text contains `marker` (or the limit runs out)."""
     frames: list[dict] = []
@@ -105,27 +89,6 @@ def read_until(ws: Socket, marker: str, *, limit: float = 30.0) -> list[dict]:
         if marker in describe(frame) or marker in status_of([frame]):
             break
     return frames
-
-
-class Step:
-    """The Enter gate, borrowed whole from fluxen's walkthrough: it is the pacing, not the subject."""
-
-    def __init__(self, auto: bool, pause: float = 0.4) -> None:
-        self.auto = auto
-        self.pause = pause
-        self.n = 0
-
-    def wait(self, title: str) -> None:
-        self.n += 1
-        print(f"\n[{self.n}] {title}")
-        if self.auto:
-            time.sleep(self.pause)
-        else:
-            try:
-                input("    ↵ 回车继续 … ")
-            except EOFError:
-                print("    (stdin closed — switching to --auto)")
-                self.auto = True
 
 
 def show(frames: list[dict], *, limit: int = 6) -> None:

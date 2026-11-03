@@ -1,4 +1,4 @@
-"""`reflux uplinks` — the registry a real app registers, plus the one check that earns its keep.
+"""`reflux dests` — the registry a real app registers, plus the one check that earns its keep.
 
 Offline by design: no browser, no socket, no cargo. Two jobs:
 

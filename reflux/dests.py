@@ -1,6 +1,6 @@
-"""The producer's event registry — the only authority on which event names exist.
+"""The producer's uplink registry — the only authority on which landing points exist.
 
-An event name is an address, not a label (§事件名就是寻址契约): an unregistered name is
+An uplink's dest is an address, not a label (§上行落点就是寻址契约): an unregistered name is
 refused, counted and logged, and never dispatched dynamically (``getattr(module, name)`` is an
 arbitrary-attribute surface, and it cannot be checked before the run either). The reserved
 prefix belongs to the framework, so an application registering on it is a startup error; the
@@ -112,13 +112,26 @@ class Registry:
             self.refused += 1
             self.log.append(f"unregistered event {name!r} from {session.id} on {session.path}")
             return False
+        return self._call(name, session, frame)
+
+    def announce(self, name: str, session, frame: dict) -> bool:
+        """Raise one of the host's own events (`connect` / `location` / `disconnect`).
+
+        Nobody listening is the ordinary case — most apps hear none of them — so absent is not an
+        error and does not count as a refusal. A handler that raises is counted and logged exactly
+        like a dispatched one: the session outlives its app's defect.
+        """
+        if name not in self._handlers:
+            return False
+        return self._call(name, session, frame)
+
+    def _call(self, name: str, session, frame: dict) -> bool:
+        """One handler, one accounting — the only place a handler's exception is caught."""
         self.calls += 1
         try:
-            handler(session, frame)
+            self._handlers[name](session, frame)
         except Exception:  # a handler's defect stays a log line; the session survives
             self.refused += 1
-            self.log.append(
-                f"handler for {name!r} raised:\n{traceback.format_exc()}"
-            )
+            self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")
             return False
         return True
