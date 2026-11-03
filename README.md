@@ -78,7 +78,7 @@ Two tools tell you what a running app declared:
 
 ```
 python3 -m reflux.cli routes reflux.demo_app                  # path → source module → metadata
-python3 -m reflux.cli uplinks reflux.demo_app:make_app       # uplink slot → kind → handler source
+python3 -m reflux.cli dests reflux.demo_app:make_app         # dest → kind → handler source
 ```
 
 ## Your first app
@@ -97,7 +97,7 @@ def home(session, match):
         "/",
         "Hello",
         b.text("Hello", variant="heading-1"),
-        b.input(uplink="name.change", id="name"),
+        b.input(dest="name.change", id="name"),
         b.text(source="echo", id="echo"),
     )
 
@@ -105,7 +105,7 @@ def home(session, match):
 app = App()
 
 
-@app.uplinks.register("name.change")
+@app.dests.register("name.change")
 def on_name(session, frame):
     session.draw(wire.set("echo", b.text(str(frame["data"]))))
 
@@ -123,8 +123,8 @@ What the pieces are:
 - **`markers.page(path, title, *children)`** puts the two markers the page runtime mirrors into the
   address bar and the tab title, then your content. It is a convention, not a wire type.
 - **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
-  values. `b.text(source="echo")` reads a slot; `b.input(uplink="name.change")` sends one.
-- **`@app.uplinks.register("name.change")`** is the only way an uplink frame reaches your code. An
+  values. `b.text(source="echo")` reads a slot; `b.input(dest="name.change")` sends one.
+- **`@app.dests.register("name.change")`** is the only way an uplink frame reaches your code. An
   unregistered name is refused and counted — never dispatched dynamically.
 - **`session.draw(*ops)`** is exactly one frame, flushed in order.
 
@@ -133,9 +133,10 @@ Run it with `python3 myapp.py` and open <http://127.0.0.1:8000/>.
 ## The wire
 
 Eight actions. A frame **is** the list of them — a bare JSON array, with nothing wrapped around it. An
-address inside the tree is a `slot` (`""` = the layout root), and so is the uplink's landing point
-(`Outflow.slot`) — one word, and the frame's direction says which side it lands on. `event` stays with
-the DOM and with the host's own events; it never appears on this wire:
+address inside the tree is a `slot` (`""` = the layout root); an uplink's landing point is a `dest`
+(`Outflow.dest`, `bind: {kind: "dest", dest: …}`) — two words, because the directions are not
+symmetric: one writes into a place in the page, the other names a target on the host. `event` stays
+with the DOM and with the host's own events; it never appears on this wire:
 
 | action | payload | meaning |
 |---|---|---|
@@ -154,7 +155,9 @@ Rules the framework enforces rather than documents and forgets:
 - every node id is unique **within one tree** — a list renders by key, so a repeat is a half-drawn list
 - `position = 0` means "the tail" and is left off the wire
 - a frame is an array; an object is refused at both ends (the envelope belongs to the host, not the wire)
-- uplinks are `{slot, id?, data}`; the reserved `reflux:` prefix belongs to the framework
+- uplinks are `{dest, id?, data}`; the reserved `reflux:` prefix belongs to the framework
+- `connect` / `location` / `disconnect` are the host's events, not addresses: a client that sends
+  one is refused whole (it cannot claim a connect that never happened)
 
 ## Two SDKs, one specification
 
@@ -193,10 +196,59 @@ the demo needs no key; `OpenAI` speaks the OpenAI-compatible SSE form and is con
 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` (its reader is tested against a stub; it has
 not been run against a live provider from this repo).
 
+## A routed site: a shell and a `routes` slot
+
+`examples/site/` is the other half of the story: two pages, a header that never redraws, and an
+address bar that follows.
+
+```python
+from reflux import App, ROUTES_SLOT, Routes
+from reflux.sdk import builders as b, markers
+
+site = Routes()
+
+def where(session):
+    return b.text(f"{session.path} · {session.query}")   # the address the backend sees
+
+@site.add("/")
+def home(session, match):
+    return markers.page("/", "首页", where(session))
+
+@site.add("/about")
+def about(session, match):
+    return markers.page("/about", "关于", where(session))
+
+def shell(session):
+    return b.case(
+        b.form(b.button("首页"), dest="go.home"),
+        b.form(b.button("关于"), dest="go.about"),
+        b.placeholder(source=ROUTES_SLOT),      # the page is drawn here
+    )
+
+app = App(routes=site, shell=shell)
+```
+
+- The first frame is **one turn, two operations**: `create(shell)` and the page written into the
+  `routes` slot. Every page turn after that writes only that slot — the header is never sent twice.
+- Drop `shell=` and it is a single-page app: the page replaces the layout root (that is
+  `examples/chat`).
+- Add `query` for free: the runtime hands `reflux:hello` its `location.search`, and `session.query`
+  is `{"tag": ["a", "b"]}` for `?tag=a&tag=b`. A pasted `/about?from=link` opens that page, query
+  included, on its first frame.
+- Three names belong to the **host**, and you register them like any other:
+  `@app.dests.register("connect" | "location" | "disconnect")`. No client can send them — the frame
+  boundary refuses those names — so a connect that never happened cannot be faked.
+
+```
+python3 -m examples.site.app --port 8200        # the app, then http://127.0.0.1:8200/?from=paste
+python3 -m examples.site.walkthrough --auto     # six steps, no browser
+python3 tools/gate_site.py                      # 18 assertions: 10 over a socket, 8 in Chromium
+```
+
 ## Verify
 
 ```
-python3 -m unittest discover -s tests -t .     # 163 tests, no browser
+python3 -m unittest discover -s tests -t .     # 203 tests, no browser
 python3 tools/gate_ingest.py                   # the two boundaries, over a real socket
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
@@ -207,6 +259,7 @@ python3 tools/gate_t7.py                       # sessions: reload and death
 python3 tools/gate_t8.py                       # what a bad frame does (and does not) do
 python3 tools/gate_t9.py                       # the reference app, driven end to end
 python3 tools/gate_t10.py                      # Rust vs Python frames (needs cargo)
+python3 tools/gate_site.py                     # the shell, the routes slot and the address bar
 python3 tools/measure.py                       # bytes, DOM changes, first paint, CPU
 ```
 
@@ -218,13 +271,14 @@ The browser gates drive a real headless Chromium over CDP using only the standar
 ## Layout
 
 ```
-reflux/            the host: app, sessions, wire, ingest, routes, uplinks, cli
+reflux/            the host: app, sessions, wire, ingest, routes, dests, cli
 reflux/sdk/        the Python SDK — generated types/builders, hand-written parse/markers
 www/               the page: index.html, reflux.js runtime, css (the renderer bundle is
                    installed into www/static/vendor/fluxen/ by tools/vendor.py, not committed)
 schema/ profile/   the wire's snapshot and this framework's selection over it
 sdks/rust/         the second SDK, generated from the same two files
 tools/             generators, gates, the CDP fixture, the measurement script, vendor.py
+examples/          two apps — chat (one page, streaming) and site (a shell + the routes slot)
 vendor/pin.json    which renderer release to install
 tests/             everything that needs no browser
 docs/              design and decision record (in Chinese)

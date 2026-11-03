@@ -872,3 +872,15 @@ sha256 一致；182 例 OK；`gate_t0` 与浏览器门在装好的包上全绿�
 移走后 `python3 tools/vendor.py fetch` 装回 `ui_leptos-4fffe41885540d62{,_bg.wasm}`，四件 3 004 176 B，
 逐件 sha256 与清单一致，tarball 自身 sha256 与发布的 `SHA256SUMS` 一致；182 例 OK、`gate_t0/t2/t4/t6/t9/
 chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏览器门**。
+
+### 2026-11-03 — 地址带查询串、宿主事件、外框与 `routes` 槽
+
+**触发**：用户方案——连接时把路径**和** query 交给后端（粘贴地址就能打开那一页）、内置 `connect` / `disconnect`（UI 连上/离开时响）、后端可加的 location 事件（前端借它改地址栏；前端触发的路由操作改地址栏并发 location 上来、后端重新初始化）、以及一个叫 `routes` 的槽：连接时先发带它的外框，再发首页的内容，没有 routes 就是单页应用。
+
+- **地址**：`reflux:hello` / `reflux:nav` 的 `data` 多一个 `query`（`location.search` 原样；带不带 `?` 都收），落在 `session.query`（`?tag=a&tag=b` → `{"tag": ["a","b"]}`，`?q=` 与没有 `q` 不是一回事）。**没有查询串时字段不写**，所以「只打开 `/a`」的帧逐字与以前一样——T6/T9 里那两条逐字断言因此不用改。
+- **宿主事件**：`connect` / `location` / `disconnect` 三个名字，注册方式与普通落点相同（`@app.dests.register("connect")`），`frame.data` 带地址（disconnect 带 `reason`：`closed` / `dead`）。`dests.announce()` 无人在听不计数；入站校验整帧拒收这三个名字（客户端不能伪造「我连上了」）。`connect` 在首帧**入队之后** raise 一次；`location` 在那一页画完之后；`disconnect` 收敛到唯一出表处 `App._gone()`（读线程与心跳看门狗都走它，先到的赢）。
+- **外框**：`App(shell=…)`。首帧 `create(shell)` + `set("routes", 页面)`；之后每次页面切换只写槽，外框不再上线。页面的 `create` 由 `into_routes()` 改写成槽写入（其余操作原样跟随），页面没产出结构就抛错——否则槽里留着上一页而画面看起来正常。客户端陈旧触发的重同步清掉 `shell_drawn`，连外框一起重发。槽名进 `protocol.ROUTES_SLOT`；读取器由外框（应用的视图）声明，框架只写这个名字。
+- **示例**：`examples/site/`（外框 + 两条路由 + 三个宿主事件的日志）、`examples/site/walkthrough.py`（六步）；`examples/pacing.py` 抽出 `Step` / `read_for`，`examples/chat` 的 walkthrough 改为共用。
+- **门**：`tools/gate_site.py`——10 条 socket（首帧一帧两条、后续只有槽、深链带 query、内置 404 在槽里、宿主事件三方都响、零拒收）+ 8 条真 Chromium（外框是同一个 DOM 节点、地址栏跟随、后退、标题、深链 `?from=link`、两处零 console error）。
+
+**验证**：203 例 OK（新增 `tests/test_shell_and_events.py` 18 例，`FakeSession` 补了 `query` / `connected` / `shell_drawn`）；`gen_sdk --check` in sync；`gate_t4`、`gate_t6`、`gate_t9`、`gate_ingest`、`gate_chat`、`gate_site` 全绿；`gate_t10` 8/8（7 帧逐字节，SDK 未动）；`walkthrough --auto` 六步的输出与门里的断言一致。
