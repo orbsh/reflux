@@ -10,7 +10,7 @@ legitimate use of that prefix.
     intents = Registry()
 
     @events.register("chat.send")
-    def send(session, frame): ...
+    def send(device, frame): ...
 """
 
 from __future__ import annotations
@@ -100,37 +100,37 @@ class Registry:
             rows.append((name, f"{module}.{qualname}", "builtin" if name in self._builtin else "app"))
         return rows
 
-    def dispatch(self, session, frame: Any) -> bool:
+    def dispatch(self, device, frame: Any) -> bool:
         """Hand one uplink frame to its handler. False when it was refused."""
         if not isinstance(frame, dict) or not isinstance(frame.get("dest"), str):
             self.refused += 1
-            self.log.append(f"malformed frame from {session.id}: {frame!r}")
+            self.log.append(f"malformed frame from {device.id}: {frame!r}")
             return False
         name = frame["dest"]
         handler = self._handlers.get(name)
         if handler is None:
             self.refused += 1
-            self.log.append(f"unregistered event {name!r} from {session.id} on {session.path}")
+            self.log.append(f"unregistered event {name!r} from {device.id} on {device.path}")
             return False
-        return self._call(name, session, frame)
+        return self._call(name, device, frame)
 
-    def announce(self, name: str, session, frame: dict) -> bool:
+    def announce(self, name: str, device, frame: dict) -> bool:
         """Raise one of the host's own events (`connect` / `location` / `disconnect`).
 
         Nobody listening is the ordinary case — most apps hear none of them — so absent is not an
         error and does not count as a refusal. A handler that raises is counted and logged exactly
-        like a dispatched one: the session outlives its app's defect.
+        like a dispatched one: the device outlives its app's defect.
         """
         if name not in self._handlers:
             return False
-        return self._call(name, session, frame)
+        return self._call(name, device, frame)
 
-    def _call(self, name: str, session, frame: dict) -> bool:
+    def _call(self, name: str, device, frame: dict) -> bool:
         """One handler, one accounting — the only place a handler's exception is caught."""
         self.calls += 1
         try:
-            self._handlers[name](session, frame)
-        except Exception:  # a handler's defect stays a log line; the session survives
+            self._handlers[name](device, frame)
+        except Exception:  # a handler's defect stays a log line; the device survives
             self.refused += 1
             self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")
             return False

@@ -16,7 +16,7 @@ import unittest
 from typing import Any
 
 from reflux import ingest, wire
-from reflux.app import App, Session
+from reflux.app import App, Device
 from reflux.channel import Channel
 from reflux.ingest import Refused
 from reflux.sdk import builders as b
@@ -255,12 +255,12 @@ class ScriptedChannel(Channel):
 
 
 class TestTheOutboundDoor(unittest.TestCase):
-    """`Session.send` is the one door every outbound frame passes."""
+    """`Device.send` is the one door every outbound frame passes."""
 
-    def make(self) -> Session:
+    def make(self) -> Device:
         self.stats = {"refused": 0, "shed": 0}
         self.log: list[str] = []
-        return Session(
+        return Device(
             "s-1",
             channel=ScriptedChannel(),
             record=lambda *a: None,
@@ -268,33 +268,33 @@ class TestTheOutboundDoor(unittest.TestCase):
             note=self.log.append,
         )
 
-    def test_a_bad_frame_never_queues_and_is_counted_with_its_session(self) -> None:
-        session = self.make()
-        session.send(frame({"action": "move"}))
-        self.assertEqual(session.outbox, [])
-        self.assertEqual(session.sent, 0)
+    def test_a_bad_frame_never_queues_and_is_counted_with_its_device(self) -> None:
+        device = self.make()
+        device.send(frame({"action": "move"}))
+        self.assertEqual(device.outbox, [])
+        self.assertEqual(device.sent, 0)
         self.assertEqual(self.stats["refused"], 1)
         self.assertTrue(any("s-1" in line and "eight actions" in line for line in self.log), self.log)
 
     def test_a_good_frame_queues(self) -> None:
-        session = self.make()
+        device = self.make()
         good = frame(wire.create(b.text("x")))
-        session.send(good)
-        self.assertEqual(session.outbox, [good])
+        device.send(good)
+        self.assertEqual(device.outbox, [good])
         self.assertEqual(self.stats["refused"], 0)
 
 
 class TestTheInboundDoor(unittest.TestCase):
-    """`App.handle` refuses before the registry can see the frame, and the session lives on."""
+    """`App.handle` refuses before the registry can see the frame, and the device lives on."""
 
-    def test_a_hand_written_bad_uplink_is_refused_and_the_session_survives(self) -> None:
+    def test_a_hand_written_bad_uplink_is_refused_and_the_device_survives(self) -> None:
         app = App(heartbeat=0.05, dead_after=0.5)
         seen: list[dict] = []
 
         @app.dests.register("gate.ok")
-        def ok(session, received):
+        def ok(device, received):
             seen.append(received)
-            session.send(frame(wire.create(b.text("ok"))))
+            device.send(frame(wire.create(b.text("ok"))))
 
         channel = ScriptedChannel(
             {"dest": "gate.ok", "data": {"n": 1}, "extra": "hand written"},  # refused: unknown key

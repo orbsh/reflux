@@ -100,15 +100,15 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     for event in ("gate.name", "gate.anon", "gate.form"):
-        app.dests.register(event, lambda session, frame: SEEN.append(frame))
+        app.dests.register(event, lambda device, frame: SEEN.append(frame))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
-        session = next(iter(app.live()), None)
-        if session is None:
-            print("no session: the page never connected")
+        device = next(iter(app.live()), None)
+        if device is None:
+            print("no device: the page never connected")
             return 1
 
-        session.send(wire.draw(wire.create(tree())))
+        device.send(wire.draw(wire.create(tree())))
         drawn = wait_for(lambda: cdp.eval("document.querySelectorAll('input').length === 4"))
         cdp.drain()
         if not drawn:

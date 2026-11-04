@@ -5,12 +5,12 @@ The SDK refuses a bad node where it is built; this gate proves the *other* fence
 hand-writes the JSON (an app's handler, a script, a second language's SDK with a bug) is refused at
 the server's door instead of being dropped silently inside the renderer.
 
-Both directions, one session, one socket:
+Both directions, one device, one socket:
 
-- outbound — `Session.send` checks every frame: that it *is* an array of operations, each of the eight
+- outbound — `Device.send` checks every frame: that it *is* an array of operations, each of the eight
   actions' field sets, the operation cap, the node closure (types / attributes / bind kinds / domains),
   and one row id per list slot per frame. A refused frame never reaches the client, is counted, and the
-  session keeps going.
+  device keeps going.
 - inbound — `App.handle` checks an uplink frame before the registry can dispatch it: the key set,
   the event name's shape, the row `id`'s shape. A refused frame never reaches a handler.
 
@@ -40,7 +40,7 @@ from reflux.protocol import MAX_OPS_PER_FRAME  # noqa: E402
 
 APP = App()
 SEEN: list[dict] = []          # what reached a handler (a refused uplink must not show up here)
-SESSION: list[str] = []        # the one session id, read from the table
+SESSION: list[str] = []        # the one device id, read from the table
 
 
 def legacy_op() -> dict:
@@ -57,58 +57,58 @@ def send_all_events() -> None:
     """Every outbound check, as one batch of frames from one handler (order is the queue's)."""
 
     @APP.dests.register("gate.legal")
-    def legal(session, frame):
-        session.send(wire.draw(wire.create(b.case(b.text("landed", id="ok")))))
+    def legal(device, frame):
+        device.send(wire.draw(wire.create(b.case(b.text("landed", id="ok")))))
 
     @APP.dests.register("gate.unknown-type")
-    def unknown_type(session, frame):
-        session.send(hand({"type": "widget"}))
+    def unknown_type(device, frame):
+        device.send(hand({"type": "widget"}))
 
     @APP.dests.register("gate.unknown-attr")
-    def unknown_attr(session, frame):
+    def unknown_attr(device, frame):
         # `selector` is hidden for every type (unlike `class`, which is the token lane now).
-        session.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
+        device.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
 
     @APP.dests.register("gate.duplicate-row")
-    def duplicate_row(session, frame):
-        session.send(
+    def duplicate_row(device, frame):
+        device.send(
             wire.draw(
 wire.append("rows", b.text("a", id="r")),
                 wire.append("rows", b.text("b", id="r")))
         )
 
     @APP.dests.register("gate.over-cap")
-    def over_cap(session, frame):
+    def over_cap(device, frame):
         # Written out by hand on purpose: `wire.draw` refuses to *build* a frame over the cap (the
         # producer's half of the rule), so only a hand-written one can reach the server's door —
         # and that door is what this gate proves.
-        session.send([wire.empty()] * (MAX_OPS_PER_FRAME + 1))
+        device.send([wire.empty()] * (MAX_OPS_PER_FRAME + 1))
 
     @APP.dests.register("gate.unknown-key")
-    def unknown_key(session, frame):
+    def unknown_key(device, frame):
         # An op with a field its action does not have — serde would ignore it silently.
         bad = hand({"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}})
         bad[0]["root"] = {}
-        session.send(bad)
+        device.send(bad)
 
     @APP.dests.register("gate.legacy")
-    def legacy(session, frame):
+    def legacy(device, frame):
         # The retired envelope (`Message`) and, behind it, the shell's `ops` dialect: both are
         # objects, and a frame is the action list. Refused whole, and the reason names the shape.
-        session.send({"ev": "draw", "ops": [legacy_op()]})
+        device.send({"ev": "draw", "ops": [legacy_op()]})
 
     @APP.dests.register("gate.alive")
-    def alive(session, frame):
-        session.send(wire.draw(wire.set("echo", b.text("alive"))))
+    def alive(device, frame):
+        device.send(wire.draw(wire.set("echo", b.text("alive"))))
 
 
 def uplink_handlers() -> list[dict]:
     """One handler that answers, so a refused uplink is visible as a *missing* answer."""
 
     @APP.dests.register("gate.uplink")
-    def uplink(session, frame):
+    def uplink(device, frame):
         SEEN.append(frame)
-        session.send(wire.draw(wire.set("echo", b.text(repr(frame["data"])))))
+        device.send(wire.draw(wire.set("echo", b.text(repr(frame["data"])))))
 
     return SEEN
 
@@ -136,7 +136,7 @@ def main() -> int:
     while not APP.live() and time.monotonic() < deadline:
         time.sleep(0.01)
     if not APP.live():
-        print("no session: the socket never reached the app")
+        print("no device: the socket never reached the app")
         return 1
     SESSION.append(APP.live()[0].id)
 
@@ -155,7 +155,7 @@ def main() -> int:
         )
     )
 
-    # 2-6 — each refusal: nothing on the wire, counted, logged with the session and the defect.
+    # 2-6 — each refusal: nothing on the wire, counted, logged with the device and the defect.
     refusals = [
         ("an unknown node type", "gate.unknown-type", "not one of the wire's types"),
         ("an attribute outside the profile", "gate.unknown-attr", "is not an attribute"),
@@ -180,14 +180,14 @@ def main() -> int:
             )
         )
 
-    # 7 — the client's own dialect: the session survives, and a legal frame still lands.
+    # 7 — the client's own dialect: the device survives, and a legal frame still lands.
     ask(ws, "gate.alive")
     alive = recv(ws)
     checks.append(
         (
-            "the session survives every refusal",
+            "the device survives every refusal",
             alive == [wire.set("echo", b.text("alive"))],
-            json.dumps(alive, ensure_ascii=False)[:70] if alive else "the session stopped answering",
+            json.dumps(alive, ensure_ascii=False)[:70] if alive else "the device stopped answering",
         )
     )
 
@@ -203,7 +203,7 @@ def main() -> int:
         )
     )
 
-    # 9-11 — the inbound door: refused before dispatch, counted, and the session keeps working.
+    # 9-11 — the inbound door: refused before dispatch, counted, and the device keeps working.
     before = APP.stats["refused"]
     ask(ws, "gate.uplink", {"n": 1}, extra="hand written")
     silent = recv(ws, 0.4)

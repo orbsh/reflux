@@ -1,13 +1,13 @@
 """The server's ingest boundary — the second fence, at the one door each direction passes.
 
 - `check_frame(frame)` — a frame the server is about to put on a socket. Called from
-  `Session.send`, the single door every outbound frame passes, so a producer that hand-writes the
+  `Device.send`, the single door every outbound frame passes, so a producer that hand-writes the
   JSON (bypassing the SDK) is checked here just the same.
 - `check_uplink(frame)` — a frame a client sent up, checked before the registry dispatches it.
 
 Refusal is **whole-frame** and the first defect wins: nothing is applied half way, and neither door
-raises into a handler — a producer's defect is not the session's, so the session survives and the
-counter records the loss. Callers do the counting and the log line (they know the session).
+raises into a handler — a producer's defect is not the device's, so the device survives and the
+counter records the loss. Callers do the counting and the log line (they know the device).
 
 Where the closure comes from: `reflux/sdk/closed.py` (the generated models, themselves generated
 from `schema/accrete.schema.json`) plus value domains through `parse`. This file owns only the
@@ -16,7 +16,7 @@ accrete's node vocabulary (`test_wire` pins the same shapes from the other side)
 
 Two boundaries stated rather than hidden:
 
-- **A slot name cannot be checked here.** "Was this slot declared?" needs the tree the session sent
+- **A slot name cannot be checked here.** "Was this slot declared?" needs the tree the device sent
   — shadow state — so it stays where it can be judged: the SDK's construction time.
 - **There is one dialect.** An outbound frame *is* accrete's action list — a bare array — so an
   object arriving here is an envelope, and the envelope is the host's (fluxen ADR 0021 decision 6).

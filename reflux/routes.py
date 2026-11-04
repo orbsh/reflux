@@ -3,11 +3,11 @@
     from reflux import route
 
     @route("/blog/{slug}", title="文章")
-    def post(session, match): ...
+    def post(device, match): ...
 
     @route("/")                # an alias: the same handler on a second path
     @route("/posts")
-    def post_index(session, match): ...
+    def post_index(device, match): ...
 
 Two conventions, no more: `{name}` takes one segment (never an empty one) and `{name:path}` is the
 closing catch-all, taking the rest — empty included. The matcher knows only this table, so there is
@@ -167,7 +167,7 @@ class Route:
 class Match:
     """One match: which route, on which concrete path, with which parameters.
 
-    This is what a handler receives, and `resolve(session)` is how a page is built — the layout,
+    This is what a handler receives, and `resolve(device)` is how a page is built — the layout,
     when there is one, wraps the handler's structure around the page it is handed.
     """
 
@@ -180,12 +180,12 @@ class Match:
     def meta(self) -> dict[str, Any]:
         return self.route.meta
 
-    def resolve(self, session) -> Any:
+    def resolve(self, device) -> Any:
         """The structure of this page: the handler's, wrapped by the layout when it declared one."""
-        page = self.route.handler(session, self)
+        page = self.route.handler(device, self)
         if self.route.layout is None:
             return page
-        return self.route.layout(session, self, page)
+        return self.route.layout(device, self, page)
 
     def __repr__(self) -> str:
         return f"<Match {self.route.path!r} {self.params!r}>"
@@ -280,10 +280,10 @@ class Routes:
             return None
         return Match(best[1], path, best[2])
 
-    def resolve(self, session, path: str) -> Any:
+    def resolve(self, device, path: str) -> Any:
         """Match a path and build its page, or None when nothing matches."""
         match = self.match(path)
-        return None if match is None else match.resolve(session)
+        return None if match is None else match.resolve(device)
 
     def table(self) -> list[tuple[str, str, dict[str, Any]]]:
         """Rows for `reflux routes`: path, source module, metadata fields."""

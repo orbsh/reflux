@@ -1,7 +1,7 @@
 """The app's page resolution: the route table, the built-in 404, and one road for hello and nav.
 
 What a path turns into is the producer's half of navigation, and it is testable without a browser:
-a frame in, one frame out, with the session's path updated on the way. The browser's half (the
+a frame in, one frame out, with the device's path updated on the way. The browser's half (the
 path marker mirroring the address bar, popstate) is asserted in tools/gate_t6.py against a real
 browser.
 """
@@ -16,17 +16,17 @@ from reflux.routes import Routes
 from reflux.sdk import builders as b
 from reflux.sdk._parse import dump
 
-from tests.fakes import FakeSession
+from tests.fakes import FakeDevice
 
 
-def page_for(session, match):
+def page_for(device, match):
     """A handler that says which path it was given — enough to see which page came back."""
     return b.text(f"page:{match.path}")
 
 
-def drawn(session: FakeSession) -> list[dict]:
+def drawn(device: FakeDevice) -> list[dict]:
     """The operations of the last frame the app sent."""
-    return session.frames[-1]
+    return device.frames[-1]
 
 
 def shown(node: dict) -> str:
@@ -43,38 +43,38 @@ class TestPageResolution(unittest.TestCase):
 
     def test_hello_resolves_the_path_it_carries(self) -> None:
         app = self.app("/a")
-        session = FakeSession(path="/")
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/a"}})
-        self.assertEqual(session.path, "/a")
-        self.assertEqual(len(session.frames), 1)
-        self.assertTrue(isinstance(session.frames[0], list), "一帧就是动作列表")
-        root = drawn(session)[0]["data"]
+        device = FakeDevice(path="/")
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/a"}})
+        self.assertEqual(device.path, "/a")
+        self.assertEqual(len(device.frames), 1)
+        self.assertTrue(isinstance(device.frames[0], list), "一帧就是动作列表")
+        root = drawn(device)[0]["data"]
         self.assertEqual(root["type"], "text")
         self.assertEqual(shown(root), "page:/a")
 
     def test_a_nav_frame_takes_the_same_road(self) -> None:
         app = self.app("/a", "/b")
-        session = FakeSession(path="/a")
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/a"}})
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/b"}})
-        self.assertEqual(session.path, "/b")
-        self.assertEqual(len(session.frames), 2)
-        self.assertEqual(shown(drawn(session)[0]["data"]), "page:/b")
+        device = FakeDevice(path="/a")
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/a"}})
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/b"}})
+        self.assertEqual(device.path, "/b")
+        self.assertEqual(len(device.frames), 2)
+        self.assertEqual(shown(drawn(device)[0]["data"]), "page:/b")
 
     def test_an_unknown_path_without_a_fallback_draws_the_builtin_404(self) -> None:
         app = self.app("/a")
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/nope"}})
-        children = drawn(session)[0]["data"]["children"]
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/nope"}})
+        children = drawn(device)[0]["data"]["children"]
         self.assertEqual(shown(children[0]), "404")
         self.assertIn("/nope", shown(children[1]))
-        self.assertEqual(session.path, "/nope")  # where the client stands, not a redirect
+        self.assertEqual(device.path, "/nope")  # where the client stands, not a redirect
 
     def test_a_registered_tail_route_wins_over_the_404(self) -> None:
         app = self.app("/a", "/{rest:path}")
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/nope/deep"}})
-        self.assertEqual(shown(drawn(session)[0]["data"]), "page:/nope/deep")
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/nope/deep"}})
+        self.assertEqual(shown(drawn(device)[0]["data"]), "page:/nope/deep")
 
     def test_the_builtin_404_is_a_valid_structure(self) -> None:
         node = dump(not_found("/x"))
@@ -88,18 +88,18 @@ class TestPageResolution(unittest.TestCase):
         from reflux import wire
 
         app = self.app("/a")  # a table is there; the hook still wins
-        app.page = lambda session, path: [wire.patch("here", "/bind/value/default", path)]
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/whatever"}})
-        op = drawn(session)[0]
+        app.page = lambda device, path: [wire.patch("here", "/bind/value/default", path)]
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/whatever"}})
+        op = drawn(device)[0]
         self.assertEqual(op["action"], "patch")
         self.assertEqual(op["value"], "/whatever")
 
     def test_an_app_with_neither_page_nor_routes_draws_nothing(self) -> None:
         app = App(routes=Routes())
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        self.assertEqual(session.frames, [])
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        self.assertEqual(device.frames, [])
 
 
 class TestTheDemoApp(unittest.TestCase):
@@ -124,25 +124,25 @@ class TestTheDemoApp(unittest.TestCase):
 
     def test_the_demo_page_carries_its_slot_seed_in_the_same_frame(self) -> None:
         app = demo.make_app()
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        ops = drawn(session)
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        ops = drawn(device)
         self.assertEqual([op["action"] for op in ops], ["create", "append", "append"])
         self.assertEqual({op["slot"] for op in ops[1:]}, {demo.ROWS})
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
-        """A slot outlives a `create`, so the seed is once per session — not once per page turn."""
+        """A slot outlives a `create`, so the seed is once per device — not once per page turn."""
         app = demo.make_app()
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in drawn(session)], ["create"])
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})
+        self.assertEqual([op["action"] for op in drawn(device)], ["create"])
 
     def test_the_demo_page_carries_the_two_markers(self) -> None:
         app = demo.make_app()
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/about"}})
-        root = drawn(session)[0]["data"]
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/about"}})
+        root = drawn(device)[0]["data"]
         markers = {
             child["id"]: child["children"][0]["bind"]["value"]["default"]
             for child in root["children"]
@@ -152,19 +152,19 @@ class TestTheDemoApp(unittest.TestCase):
 
     def test_the_about_page_is_structure_only(self) -> None:
         app = demo.make_app()
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/about"}})
-        self.assertEqual([op["action"] for op in drawn(session)], ["create"])
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/about"}})
+        self.assertEqual([op["action"] for op in drawn(device)], ["create"])
 
     def test_a_navigation_submit_answers_with_the_new_page_and_path(self) -> None:
         app = demo.make_app()
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
         app.dests.dispatch(
-            session, {"dest": "go.about", "id": "nav-go.about", "data": {}}
+            device, {"dest": "go.about", "id": "nav-go.about", "data": {}}
         )
-        self.assertEqual(session.path, "/about")
-        root = drawn(session)[0]["data"]
+        self.assertEqual(device.path, "/about")
+        root = drawn(device)[0]["data"]
         path_marker = next(child for child in root["children"] if child.get("id") == "reflux:path")
         self.assertEqual(path_marker["children"][0]["bind"]["value"]["default"], "/about")
 

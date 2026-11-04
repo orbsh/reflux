@@ -34,7 +34,7 @@ RESERVED_PREFIX = "reflux:"
 ROUTES_SLOT = "routes"
 
 # Events the **host** raises: `connect` when the client's hello lands, `location` when it navigates
-# (back/forward), `disconnect` when its session ends. An application registers them like any other
+# (back/forward), `disconnect` when its device ends. An application registers them like any other
 # name — `@app.dests.register("connect")` — but they have no wire address, so an uplink frame
 # addressed to one of them is refused: a client cannot fake its own connect, and cannot navigate
 # without the browser having done it first.

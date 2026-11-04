@@ -13,21 +13,21 @@ from __future__ import annotations
 import unittest
 
 from reflux import HOST_EVENTS, ROUTES_SLOT, wire
-from reflux.app import App, Session, into_routes, location_of, query_of
+from reflux.app import App, Device, into_routes, location_of, query_of
 from reflux.ingest import Refused, check_uplink
 from reflux.protocol import HOST_EVENTS as PROTOCOL_HOST_EVENTS
 from reflux.routes import Routes
 from reflux.sdk import builders as b
 
-from tests.fakes import FakeSession
+from tests.fakes import FakeDevice
 
 
-def page_for(session, match):
+def page_for(device, match):
     """A page that says which path it is — enough to tell which one landed in the slot."""
     return b.text(f"page:{match.path}")
 
 
-def shell(session) -> object:
+def shell(device) -> object:
     """A frame with one nav line and the routes reader — the shape the slot is written into."""
     return b.case(b.text("shell"), b.placeholder(source=ROUTES_SLOT, id="routes"), id="shell")
 
@@ -39,8 +39,8 @@ def app_with_shell(*paths: str, page=None) -> App:
     return App(routes=table, shell=shell)
 
 
-def ops(session: FakeSession, index: int = -1) -> list[dict]:
-    return session.frames[index]
+def ops(device: FakeDevice, index: int = -1) -> list[dict]:
+    return device.frames[index]
 
 
 class TestLocation(unittest.TestCase):
@@ -69,9 +69,9 @@ class TestLocation(unittest.TestCase):
 class TestShell(unittest.TestCase):
     def test_the_first_frame_is_the_shell_and_the_page_in_its_slot(self):
         app = app_with_shell("/")
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        first = ops(session)
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        first = ops(device)
         self.assertEqual([op["action"] for op in first], ["create", "set"])
         self.assertEqual(first[0]["data"]["id"], "shell")
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
@@ -79,31 +79,31 @@ class TestShell(unittest.TestCase):
 
     def test_a_page_turn_after_that_writes_the_slot_and_nothing_else(self):
         app = app_with_shell("/", "/about")
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/about"}})
-        second = ops(session)
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/about"}})
+        second = ops(device)
         self.assertEqual([op["action"] for op in second], ["set"])
         self.assertEqual(second[0]["slot"], ROUTES_SLOT)
         self.assertEqual(second[0]["data"]["bind"]["value"]["default"], "page:/about")
 
     def test_a_missing_path_lands_as_the_builtin_404_inside_the_shell(self):
         app = app_with_shell("/")
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/nope"}})
-        first = ops(session)
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/nope"}})
+        first = ops(device)
         self.assertEqual([op["action"] for op in first], ["create", "set"])
         self.assertIn("404", str(first[1]["data"]))
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
 
     def test_slot_seeds_a_page_sends_ride_along_after_its_structure(self):
-        def seeding(session, match):
+        def seeding(device, match):
             return [wire.create(b.text("page")), wire.set("status", b.text("就绪"))]
 
         app = app_with_shell("/", page=seeding)
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        first = ops(session)
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        first = ops(device)
         self.assertEqual([op["action"] for op in first], ["create", "set", "set"])
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)  # the page, rewritten into the slot
         self.assertEqual(first[2]["slot"], "status")  # the seed, untouched and after it
@@ -116,75 +116,75 @@ class TestShell(unittest.TestCase):
         table = Routes()
         table.add("/", page_for)
         app = App(routes=table)
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in ops(session)], ["create"])
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in ops(session)], ["create"])  # a whole page, every turn
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        self.assertEqual([op["action"] for op in ops(device)], ["create"])
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})
+        self.assertEqual([op["action"] for op in ops(device)], ["create"])  # a whole page, every turn
 
     def test_a_resync_re_creates_the_shell_the_stale_client_may_have_missed(self):
         app = app_with_shell("/")
-        session = FakeSession()
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
-        app.dests.dispatch(session, {"dest": "reflux:nav", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in ops(session)], ["set"])
-        # What `flush_session` does when frames were shed: forget the shell, draw again.
-        session.stale = True
-        session.shell_drawn = False
-        app.draw_page(session)
-        self.assertEqual([op["action"] for op in ops(session)], ["create", "set"])
+        device = FakeDevice()
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
+        app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})
+        self.assertEqual([op["action"] for op in ops(device)], ["set"])
+        # What `flush_device` does when frames were shed: forget the shell, draw again.
+        device.stale = True
+        device.shell_drawn = False
+        app.draw_page(device)
+        self.assertEqual([op["action"] for op in ops(device)], ["create", "set"])
 
 
 class TestHostEvents(unittest.TestCase):
     def setUp(self):
         self.app = App()
-        self.session = FakeSession()
+        self.device = FakeDevice()
         self.heard: list[tuple[str, str]] = []
         for name in HOST_EVENTS:
             self.app.dests.register(name, self.recorder(name))
 
     def recorder(self, name: str):
-        def record(session, frame):
-            self.heard.append((name, session.path))
+        def record(device, frame):
+            self.heard.append((name, device.path))
 
         return record
 
-    def test_connect_is_raised_once_per_session_on_the_first_hello(self):
-        self.app.dests.dispatch(self.session, {"dest": "reflux:hello", "data": {"path": "/a"}})
-        self.app.dests.dispatch(self.session, {"dest": "reflux:hello", "data": {"path": "/b"}})
+    def test_connect_is_raised_once_per_device_on_the_first_hello(self):
+        self.app.dests.dispatch(self.device, {"dest": "reflux:hello", "data": {"path": "/a"}})
+        self.app.dests.dispatch(self.device, {"dest": "reflux:hello", "data": {"path": "/b"}})
         self.assertEqual(self.heard, [("connect", "/a")])  # the second hello only re-draws
-        self.assertEqual(self.session.path, "/b")
+        self.assertEqual(self.device.path, "/b")
 
     def test_a_nav_raises_location(self):
-        self.app.dests.dispatch(self.session, {"dest": "reflux:hello", "data": {"path": "/"}})
+        self.app.dests.dispatch(self.device, {"dest": "reflux:hello", "data": {"path": "/"}})
         self.heard.clear()
-        self.app.dests.dispatch(self.session, {"dest": "reflux:nav", "data": {"path": "/b"}})
+        self.app.dests.dispatch(self.device, {"dest": "reflux:nav", "data": {"path": "/b"}})
         self.assertEqual(self.heard, [("location", "/b")])
 
     def test_connect_is_raised_after_the_first_frame_is_queued(self):
-        app, session = App(), FakeSession()
-        app.page = lambda session, path: b.text("page")  # something to draw, so there is a frame
+        app, device = App(), FakeDevice()
+        app.page = lambda device, path: b.text("page")  # something to draw, so there is a frame
         seen: list[int] = []
 
-        def record(session, frame):
-            seen.append(len(session.frames))  # frames on the wire when the handler runs
+        def record(device, frame):
+            seen.append(len(device.frames))  # frames on the wire when the handler runs
 
         app.dests.register("connect", record)
-        app.dests.dispatch(session, {"dest": "reflux:hello", "data": {"path": "/"}})
+        app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
         self.assertEqual(seen, [1])  # the page is already out, so a handler's frames land on top
 
-    def test_disconnect_fires_once_and_only_for_a_session_in_the_table(self):
+    def test_disconnect_fires_once_and_only_for_a_device_in_the_table(self):
         channel = object()
-        session = Session("test0002", channel, lambda *a: None, {})
-        self.app.sessions[channel] = session
-        self.assertTrue(self.app._gone(session, "closed"))
-        self.assertFalse(self.app._gone(session, "dead"))  # the second caller is not its own
+        device = Device("test0002", channel, lambda *a: None, {})
+        self.app.devices[channel] = device
+        self.assertTrue(self.app._gone(device, "closed"))
+        self.assertFalse(self.app._gone(device, "dead"))  # the second caller is not its own
         self.assertEqual(self.heard, [("disconnect", "/")])
 
     def test_nobody_listening_is_not_a_refusal(self):
         app = App()
-        session = FakeSession()
-        self.assertFalse(app.dests.announce("connect", session, {"dest": "connect", "data": {}}))
+        device = FakeDevice()
+        self.assertFalse(app.dests.announce("connect", device, {"dest": "connect", "data": {}}))
         self.assertEqual(app.dests.refused, 0)
 
 

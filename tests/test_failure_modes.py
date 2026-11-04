@@ -65,7 +65,7 @@ def run_connections(app: App, *channels: Channel) -> list[threading.Thread]:
     for thread in threads:
         thread.start()
     deadline = time.monotonic() + 2.0
-    while len(app.sessions) < len(channels) and time.monotonic() < deadline:
+    while len(app.devices) < len(channels) and time.monotonic() < deadline:
         time.sleep(0.005)
     return threads
 
@@ -104,7 +104,7 @@ class TestDuplicateIds(unittest.TestCase):
 class TestSlowClient(unittest.TestCase):
     def setUp(self) -> None:
         self.app = App(heartbeat=10.0, dead_after=30.0, outbox=4)
-        self.app.page = lambda session, path: b.text("resync")
+        self.app.page = lambda device, path: b.text("resync")
 
     def tearDown(self) -> None:
         self.app.stop()
@@ -112,21 +112,21 @@ class TestSlowClient(unittest.TestCase):
     def test_a_slow_client_sheds_frames_and_resyncs_without_touching_others(self) -> None:
         slow, fast = BlockingChannel(), FastChannel()
         threads = run_connections(self.app, slow, fast)
-        slow_session = self.app.sessions[slow]
-        fast_session = self.app.sessions[fast]
+        slow_device = self.app.devices[slow]
+        fast_device = self.app.devices[fast]
         try:
-            slow_session.draw(wire.patch("x", "/bind/value/default", "first"))  # 让 flusher 进到 send 里
+            slow_device.emit(wire.patch("x", "/bind/value/default", "first"))  # 让 flusher 进到 send 里
             self.assertTrue(slow.inside.wait(2.0), "flusher 应当已经进到 send 里并被卡住")
 
             for i in range(12):  # 远超 outbox=4
-                slow_session.draw(wire.patch("x", "/bind/value/default", i))
+                slow_device.emit(wire.patch("x", "/bind/value/default", i))
 
             self.assertGreaterEqual(self.app.stats["shed"], 1, "溢出必须计数")
-            self.assertTrue(slow_session.stale, "丢过帧就要标记陈旧")
-            self.assertLessEqual(len(slow_session.outbox), 4, "出帧队列是有界的")
+            self.assertTrue(slow_device.stale, "丢过帧就要标记陈旧")
+            self.assertLessEqual(len(slow_device.outbox), 4, "出帧队列是有界的")
 
             # 别的会话照常：慢客户端不能按住别人
-            fast_session.draw(wire.patch("y", "/bind/value/default", "ok"))
+            fast_device.emit(wire.patch("y", "/bind/value/default", "ok"))
             deadline = time.monotonic() + 2.0
             while not fast.written and time.monotonic() < deadline:
                 time.sleep(0.01)
@@ -139,7 +139,7 @@ class TestSlowClient(unittest.TestCase):
             self.assertGreaterEqual(self.app.stats["resync"], 1, "排空后必须重同步一帧")
             last = json.loads(slow.written[-1])
             self.assertEqual(last[0]["action"], "create", "重同步就是用一帧 create 重画")
-            self.assertFalse(slow_session.stale, "重同步之后不再陈旧")
+            self.assertFalse(slow_device.stale, "重同步之后不再陈旧")
         finally:
             slow.gate.set()
             slow.hold.set()

@@ -6,7 +6,7 @@ the server refuses a bad frame and counts it. What this gate asserts on the real
 user's screen does when the producer or the page misbehaves:
 
 - an event name nobody registered is refused and counted, and the page keeps working;
-- a handler that raises leaves a traceback, the session alive, and the page answering;
+- a handler that raises leaves a traceback, the device alive, and the page answering;
 - a frame with one bad operation is refused **whole** — the page never shows half a turn — and the
   next frame still lands.
 
@@ -74,27 +74,27 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     @app.dests.register("gate.boom")
-    def boom(session, frame):
+    def boom(device, frame):
         raise RuntimeError("the producer's own defect")
 
     @app.dests.register("gate.half")
-    def half(session, frame):
+    def half(device, frame):
         # One legal operation and one that is not a wire type: the whole frame must be refused, so
         # "half-way" can never reach the page — and the frame after it still must.
-        session.send(
+        device.send(
             wire.draw(
 wire.set("echo", b.text("half-way")),
                 {"action": "create", "slot": "", "data": {"type": "widget"}})
         )
-        session.send(wire.draw(wire.set("echo", b.text("whole"))))
+        device.send(wire.draw(wire.set("echo", b.text("whole"))))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
-        session = next(iter(app.live()), None)
-        if session is None:
-            print("no session: the page never connected")
+        device = next(iter(app.live()), None)
+        if device is None:
+            print("no device: the page never connected")
             return 1
 
-        session.send(wire.draw(wire.create(tree())))
+        device.send(wire.draw(wire.create(tree())))
         drawn = wait_for(lambda: cdp.eval("document.querySelectorAll('input').length === 2"))
         cdp.drain()
         if not drawn:
@@ -115,7 +115,7 @@ wire.set("echo", b.text("half-way")),
             )
         )
 
-        # 2 — a handler that raises: a traceback in the log, the session alive, the page answering.
+        # 2 — a handler that raises: a traceback in the log, the device alive, the page answering.
         before = app.dests.refused
         uplink(cdp, 1, "boom")
         # The counter moves before the traceback is formatted, so wait for the line, not the number.
@@ -124,7 +124,7 @@ wire.set("echo", b.text("half-way")),
         )
         checks.append(
             (
-                "a raising handler is logged and the session survives",
+                "a raising handler is logged and the device survives",
                 app.dests.refused == before + 1 and traceback_logged and bool(app.live()),
                 f"registry +{app.dests.refused - before} traceback={traceback_logged} live={len(app.live())}",
             )
@@ -132,7 +132,7 @@ wire.set("echo", b.text("half-way")),
 
         # 3 — one bad operation refuses the frame whole: no half turn, and the next frame lands.
         before = app.stats["refused"]
-        half(session, {})  # the handler directly: a `local` inject would not call it
+        half(device, {})  # the handler directly: a `local` inject would not call it
         wait_for(lambda: "whole" in (cdp.eval("document.body.innerText") or ""))
         time.sleep(0.2)
         body = cdp.eval("document.body.innerText") or ""

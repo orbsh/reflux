@@ -12,24 +12,24 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from examples.chat import app as chat
-from examples.chat.model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
-from tests.fakes import FakeSession
+from examples.app import chat
+from examples.app.model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
+from tests.fakes import FakeDevice
 
 
-def status_text(session: FakeSession) -> str:
+def status_text(device: FakeDevice) -> str:
     """The last status line a run of frames wrote."""
-    for frame in reversed(session.frames):
+    for frame in reversed(device.frames):
         for op in frame:
             if op.get("action") == "set" and op.get("slot") == chat.STATUS:
                 return ((op.get("data") or {}).get("bind") or {}).get("value", {}).get("default", "")
     return ""
 
 
-def patched(session: FakeSession) -> str:
+def patched(device: FakeDevice) -> str:
     """Everything the run appended into slots, in order."""
     out = []
-    for frame in session.frames:
+    for frame in device.frames:
         for op in frame:
             if op.get("action") == "patch" and isinstance(op.get("value"), str):
                 out.append(op["value"])
@@ -78,36 +78,36 @@ class Window(unittest.TestCase):
 
 class Refusals(unittest.TestCase):
     def setUp(self):
-        self.session = FakeSession()
+        self.device = FakeDevice()
         self.conversation = chat.Chat(model=chat.Scripted(), delay=0.0)
 
     def test_an_empty_message_is_refused_with_a_reason(self):
-        chat.send(self.session, self.conversation, "   ")
-        self.assertEqual(status_text(self.session), "空消息没有发出去")
-        self.assertEqual(len(self.session.frames), 1)  # one status line, no rows
+        chat.send(self.device, self.conversation, "   ")
+        self.assertEqual(status_text(self.device), "空消息没有发出去")
+        self.assertEqual(len(self.device.frames), 1)  # one status line, no rows
         self.assertEqual(self.conversation.total, 0)
 
     def test_an_oversized_message_is_refused_at_the_apps_own_boundary(self):
-        chat.send(self.session, self.conversation, "字" * (chat.MAX_CHARS + 1))
-        self.assertIn("太长", status_text(self.session))
-        self.assertIn(str(chat.MAX_CHARS), status_text(self.session))
+        chat.send(self.device, self.conversation, "字" * (chat.MAX_CHARS + 1))
+        self.assertIn("太长", status_text(self.device))
+        self.assertIn(str(chat.MAX_CHARS), status_text(self.device))
         self.assertEqual(self.conversation.total, 0)
 
     def test_a_second_message_while_streaming_is_refused_not_dropped(self):
         self.conversation.busy = True
-        chat.send(self.session, self.conversation, "再说一句")
-        self.assertEqual(status_text(self.session), "上一条还在流：按「停止」或等它结束")
+        chat.send(self.device, self.conversation, "再说一句")
+        self.assertEqual(status_text(self.device), "上一条还在流：按「停止」或等它结束")
         self.assertEqual(self.conversation.total, 0)
 
     def test_accepted_message_puts_two_rows_on_screen(self):
-        session, conversation = self.session, self.conversation
+        device, conversation = self.device, self.conversation
         original = chat.spawn
         chat.spawn = lambda target, args: None  # do not start the reply: this case is the send
         try:
-            chat.send(session, conversation, "你好")
+            chat.send(device, conversation, "你好")
         finally:
             chat.spawn = original
-        ops = [op for frame in session.frames for op in frame]
+        ops = [op for frame in device.frames for op in frame]
         actions = [op.get("action") for op in ops]
         self.assertEqual(actions, ["append", "append", "set", "set"])
         self.assertEqual(ops[0]["slot"], chat.MESSAGES)
@@ -119,17 +119,17 @@ class Refusals(unittest.TestCase):
 
 class Streaming(unittest.TestCase):
     def setUp(self):
-        self.session = FakeSession()
+        self.device = FakeDevice()
         self.conversation = chat.Chat(model=chat.Scripted(window=12), delay=0.0)
 
     def test_a_reply_lands_chunk_by_chunk_and_becomes_a_turn(self):
-        chat.stream(self.session, self.conversation, "reply.1", [Turn("user", "你好")])
+        chat.stream(self.device, self.conversation, "reply.1", [Turn("user", "你好")])
         expected = "".join(scripted_reply([Turn("user", "你好")], 12))
-        self.assertEqual(patched(self.session), expected)
-        self.assertGreater(len(self.session.frames), 3)  # many small patches, not one write
+        self.assertEqual(patched(self.device), expected)
+        self.assertGreater(len(self.device.frames), 3)  # many small patches, not one write
         self.assertEqual([t.role for t in self.conversation.turns], ["assistant"])
         self.assertFalse(self.conversation.busy)
-        self.assertIn("就绪", status_text(self.session))
+        self.assertIn("就绪", status_text(self.device))
 
     def test_stop_keeps_the_half_sentence_out_of_the_context(self):
         conversation = self.conversation
@@ -144,13 +144,13 @@ class Streaming(unittest.TestCase):
                     yield piece
 
         conversation.model = Stoppable()
-        chat.stream(self.session, conversation, "reply.1", [Turn("user", "hi")])
-        landed = patched(self.session)
+        chat.stream(self.device, conversation, "reply.1", [Turn("user", "hi")])
+        landed = patched(self.device)
         self.assertTrue(landed.startswith("abc"), landed)  # stopped at a chunk boundary
         self.assertIn("⏹", landed)  # and says so in the bubble itself
         self.assertTrue(5 > len(landed.replace(" ⏹", "")))
         self.assertEqual(conversation.turns, [])  # nothing half-finished enters the context
-        self.assertIn("已停止", status_text(self.session))
+        self.assertIn("已停止", status_text(self.device))
         self.assertFalse(conversation.busy)
 
     def test_a_failing_model_becomes_a_bubble_not_a_raise(self):
@@ -162,9 +162,9 @@ class Streaming(unittest.TestCase):
                 yield  # pragma: no cover — the protocol needs a generator
 
         self.conversation.model = Broken()
-        chat.stream(self.session, self.conversation, "reply.1", [Turn("user", "hi")])
-        self.assertIn("模型出错：boom", patched(self.session))
-        self.assertTrue(status_text(self.session).startswith("出错：RuntimeError"))
+        chat.stream(self.device, self.conversation, "reply.1", [Turn("user", "hi")])
+        self.assertIn("模型出错：boom", patched(self.device))
+        self.assertTrue(status_text(self.device).startswith("出错：RuntimeError"))
         self.assertFalse(self.conversation.busy)
         self.assertEqual(self.conversation.turns, [])
 
@@ -178,7 +178,7 @@ class OneExchange(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        self.session = FakeSession()
+        self.device = FakeDevice()
         self.conversation = chat.Chat(model=chat.Scripted(window=12), delay=0.0)
 
     def sent(self) -> None:
@@ -186,28 +186,28 @@ class OneExchange(unittest.TestCase):
         original = chat.spawn
         chat.spawn = lambda target, args: None
         try:
-            chat.send(self.session, self.conversation, "你好")
+            chat.send(self.device, self.conversation, "你好")
         finally:
             chat.spawn = original
 
     def test_the_fact_lands_before_the_first_frame_leaves(self):
-        conversation, session = self.conversation, self.session
+        conversation, device = self.conversation, self.device
         recorded: list[int] = []
-        draw = session.draw
+        emit = device.emit
 
         def capture(*ops):
             recorded.append(len(conversation.turns))  # what the fact count was when this frame left
-            draw(*ops)
+            emit(*ops)
 
-        session.draw = capture
+        device.emit = capture
         self.sent()
         self.assertEqual(recorded[0], 1)  # the turn was a fact already when the picture went out
         self.assertEqual([t.role for t in conversation.turns], ["user"])
 
     def test_one_batch_carries_the_row_the_bubble_and_the_region(self):
         self.sent()
-        self.assertEqual(len(self.session.frames), 1)  # one turn is one frame
-        frame = self.session.frames[0]
+        self.assertEqual(len(self.device.frames), 1)  # one turn is one frame
+        frame = self.device.frames[0]
         self.assertEqual([op["action"] for op in frame], ["append", "append", "set", "set"])
         self.assertEqual(frame[0]["data"]["id"], "row-user-1")
         self.assertEqual(frame[1]["data"]["id"], "row-bot-1")
@@ -218,10 +218,10 @@ class OneExchange(unittest.TestCase):
         original = chat.spawn
         chat.spawn = lambda target, args: target(*args)  # the whole reply, inline
         try:
-            chat.send(self.session, self.conversation, "你好")
+            chat.send(self.device, self.conversation, "你好")
         finally:
             chat.spawn = original
-        later = self.session.frames[1:]
+        later = self.device.frames[1:]
         self.assertGreater(len(later), 3)
         for frame in later[:-1]:
             self.assertEqual([op["action"] for op in frame], ["patch"])
@@ -231,17 +231,18 @@ class OneExchange(unittest.TestCase):
 
 class Frames(unittest.TestCase):
     def test_the_page_seeds_its_slots_once(self):
-        session = FakeSession()
-        first = chat.page(session)
-        second = chat.page(session)
+        device = FakeDevice()
+        match = chat.app.routes.match("/chat")
+        first = chat.page(device, match)
+        second = chat.page(device, match)
         self.assertEqual(len(first), 2)  # create + the status seed
         self.assertEqual(first[1]["action"], "set")
         self.assertEqual(len(second), 1)  # a slot outlives a create: seeding again would duplicate
 
-    def test_a_second_path_says_so_instead_of_wearing_the_wrong_address(self):
-        ops = chat.page(FakeSession(), "/nope")
-        self.assertEqual(len(ops), 1)
-        self.assertIn("404", json.dumps(ops[0], ensure_ascii=False))
+    def test_the_page_is_one_route_of_the_application(self):
+        """A second address is the table's business now, not this page's: `/chat` or nothing."""
+        self.assertEqual([route.path for route in chat.app.routes], ["/", "/chat"])
+        self.assertIsNone(chat.app.routes.match("/nope"))
 
     def test_prompt_unwraps_the_renderers_field_shape(self):
         self.assertEqual(chat.prompt_of({"data": {"text": {"data": "你好"}}}), "你好")

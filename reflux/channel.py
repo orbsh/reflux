@@ -1,4 +1,4 @@
-"""The WebSocket channel: one per session, ops down and uplinks up, JSON text frames.
+"""The WebSocket channel: one per device, ops down and uplinks up, JSON text frames.
 
 stdlib only, like everything else on the producer side. The handshake is the HTTP upgrade the
 browser asks for on ``GET /ws``; after that it is frames, and the codec is deliberately the
@@ -7,7 +7,7 @@ close answered. A binary frame closes the connection — the protocol is JSON te
 encoding would mean a second schema to keep in step.
 
 Two things this layer owns because it is the layer that knows them: ``last_seen`` (every byte
-read from the peer counts as activity — the watchdog judges a session by it, so a peer that
+read from the peer counts as activity — the watchdog judges a device by it, so a peer that
 vanished without a FIN is caught) and a write lock (the app's own thread and the watchdog may
 write the same socket; without the lock their frames would interleave).
 
@@ -34,6 +34,7 @@ TEXT, BINARY, CLOSE, PING, PONG, CONTINUATION = 0x1, 0x2, 0x8, 0x9, 0xA, 0x0
 
 # Application close codes (RFC 6455 §7.4.2 reserves 4000-4999 for these).
 JUDGED_DEAD = 4001
+EVICTED = 4002
 
 
 class ChannelClosed(Exception):
@@ -72,7 +73,7 @@ class Channel:
             data = self.rfile.read(count)
         except OSError as exc:
             # A peer that vanished with an RST is gone just like one that closed: callers get a
-            # single exception to handle, and the session's accounting stays in one place.
+            # single exception to handle, and the device's accounting stays in one place.
             raise ChannelClosed(f"the peer reset the connection: {exc}") from exc
         if data is None or len(data) < count:
             raise ChannelClosed("the peer closed mid-frame")
@@ -155,7 +156,7 @@ class Channel:
         """Stop waiting on a peer that is not coming back: shut its socket down.
 
         Closing a descriptor does not wake another thread blocked in ``read``; ``shutdown`` does,
-        which is what lets a judged-dead session's reader thread end instead of hanging forever.
+        which is what lets a judged-dead device's reader thread end instead of hanging forever.
         """
         import socket  # only this method needs it, and only for SHUT_RDWR
 

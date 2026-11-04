@@ -8,16 +8,61 @@ Each mount serves its own modules and pinned assets, same-origin, with caching o
 must never need a hard refresh), upgrades ``GET /ws`` to the channel, and hands any *page path*
 (no file extension, no such file) to that mount's ``index.html`` — which is what makes a deep link
 or a reload work: the client boots and asks the producer what lives at that path. Without an app
-it is a plain static server and holds no session.
+it is a plain static server and holds no device.
 """
 
 from __future__ import annotations
 
 import functools
+from dataclasses import dataclass, field
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any, Mapping
+from urllib.parse import parse_qs
 
-from .channel import WS_PATH, is_upgrade, upgrade
+from .channel import is_upgrade, upgrade
+
+# A mount entry that is the websocket channel rather than a callable: the socket is one route in the
+# same table as the app's own paths, and nothing in the table knows it is special until it is served.
+CHANNEL = object()
+
+
+@dataclass(frozen=True)
+class Request:
+    """One HTTP request, as a mounted route sees it — the facts, and nothing of `http.server`."""
+
+    method: str
+    path: str
+    query: dict[str, list[str]] = field(default_factory=dict)
+    headers: Mapping[str, str] = field(default_factory=dict)
+    peer: str | None = None
+    body: bytes = b""
+
+
+@dataclass(frozen=True)
+class Response:
+    """What a mounted route answers with. Bytes or text; the type is the route's to state."""
+
+    status: int = 200
+    body: bytes | str = b""
+    content_type: str = "text/plain; charset=utf-8"
+
+
+def _body(value: Any) -> bytes | str:
+    """A route may hand back text or bytes; anything else is its repr, which is at least visible."""
+    return value if isinstance(value, (bytes, str)) else str(value)
+
+
+def as_response(answered: Any) -> Response:
+    """A route may return a `Response`, a `(status, body)` pair, or the body itself (200)."""
+    if isinstance(answered, Response):
+        return answered
+    if isinstance(answered, tuple) and len(answered) == 2:
+        status, body = answered
+        return Response(int(status), _body(body))
+    if answered is None:
+        return Response(404, "not found")
+    return Response(200, _body(answered))
 
 # Deterministic content types: don't leave module MIME to the host's /etc/mime.types,
 # because a wrong type makes the browser refuse the module.
@@ -40,13 +85,9 @@ class PageHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self) -> None:
-        app = getattr(self.server, "app", None)
-        page = self.path.split("?", 1)[0]
-        if app is not None and page == WS_PATH and is_upgrade(self.headers):
-            # The connection stops being HTTP here: the app reads frames until it closes.
-            channel = upgrade(self)
-            app.handle(channel)
+        if self._serve_route():
             return
+        page = self.path.split("?", 1)[0]
 
         prefix, root = self._mount(page)
         if prefix is None:
@@ -74,6 +115,57 @@ class PageHandler(SimpleHTTPRequestHandler):
             self.path = "/index.html"
         super().do_GET()
 
+    def do_POST(self) -> None:
+        if not self._serve_route():
+            self.send_error(405, "no route here takes a POST")
+
+    def _serve_route(self) -> bool:
+        """The app's own table answers first — the channel, or a path it mounted. True = answered.
+
+        The channel is one entry in that table (`CHANNEL`), which is what makes the socket a route
+        rather than a special case of the server: this method is the only place that knows the
+        difference, and it is one `is` test.
+        """
+        app = getattr(self.server, "app", None)
+        if app is None:
+            return False
+        page = self.path.split("?", 1)[0]
+        route = getattr(app, "mounts", {}).get(page)
+        if route is None:
+            return False
+        if route is CHANNEL:
+            if not is_upgrade(self.headers):
+                self.send_error(426, "this route is the websocket channel")
+                return True
+            # The connection stops being HTTP here: the app reads frames until it closes.
+            app.handle(upgrade(self))
+            return True
+        if isinstance(route, (str, Path)):
+            return False  # a directory mount: the static path below serves it, file by file
+        length = int(self.headers.get("Content-Length") or 0)
+        request = Request(
+            method=getattr(self, "command", "GET") or "GET",
+            path=page,
+            query=parse_qs(self.path.split("?", 1)[1], keep_blank_values=True) if "?" in self.path else {},
+            headers={key.lower(): value for key, value in self.headers.items()},
+            peer=self.client_address[0] if self.client_address else None,
+            body=self.rfile.read(length) if length else b"",
+        )
+        try:
+            answered = as_response(route(request))
+        except Exception as bad:  # a route's defect is the route's: answer it, keep serving
+            print(f"[http] route {page!r} raised: {bad!r}", flush=True)
+            self.send_error(500, "the route raised")
+            return True
+        payload = answered.body.encode("utf-8") if isinstance(answered.body, str) else answered.body
+        self.send_response(answered.status)
+        self.send_header("Content-Type", answered.content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        if payload:
+            self.wfile.write(payload)
+        return True
+
     def _mounts(self) -> dict:
         return getattr(self.server, "mounts", None) or {}
 
@@ -89,7 +181,7 @@ class PageHandler(SimpleHTTPRequestHandler):
         """Close the connection, tolerating a peer that vanished mid-write.
 
         A websocket client that hangs up leaves `super().finish()` flushing into a dead socket;
-        the session accounting has already run by then (`App.handle` caught the close), so the
+        the device accounting has already run by then (`App.handle` caught the close), so the
         stack trace would only be noise about the TCP half of an event we handled.
         """
         try:

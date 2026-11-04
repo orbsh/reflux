@@ -4,23 +4,23 @@ routing.
     app = App()
 
     @route("/blog/{slug}", title="文章")
-    def post(session, match): ...
+    def post(device, match): ...
 
     @app.dests.register("name.change")
-    def name_changed(session, frame):
-        session.draw(wire.set("echo", b.text(frame["data"])))
+    def name_changed(device, frame):
+        device.emit(wire.set("echo", b.text(frame["data"])))
 
     app.serve(port=8000)
 
 The page speaks first. Its ``reflux:hello`` carries the location it stands on — path and query
 string — and every later page request is ``reflux:nav`` (back and forward, the only navigation this
-wire has), carrying the same two. Both land on the session, one frame comes back, so the client
+wire has), carrying the same two. Both land on the device, one frame comes back, so the client
 never sees a wrong tree first and a correction second. Every other uplink goes to the handler
 registered for its name.
 
 Three names are the *host's* rather than the wire's, and an application registers them like any
 other: ``connect`` (the hello landed), ``location`` (the client navigated) and ``disconnect`` (the
-session ended). They have no uplink address — a client cannot fake its own connect — so the frame
+device ended). They have no uplink address — a client cannot fake its own connect — so the frame
 boundary refuses them and `dests.announce` is how they are raised.
 
 A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
@@ -31,17 +31,23 @@ carries `create(shell)` plus the page in that slot, and a later page turn replac
 No shell, no routes slot: the page replaces the layout root (the single-page-app case).
 
 Frames are built by `wire` — accrete's eight actions, the renderer's own vocabulary. There is no
-second dialect and no translation layer: everything that leaves here is checked at `Session.send`
+second dialect and no translation layer: everything that leaves here is checked at `Device.send`
 and reaches one renderer.
 
-A session is one connection — created when it opens, reclaimed when it closes or when it stops
-answering. Nothing crosses connections: the socket is the state, and a refresh is a new session
-holding nothing but the location its hello carried. Identity, when a deployment needs it, arrives
-as an ordinary event on the live socket (`login`), not as a credential checked before it. Sessions
-hold their location and where their frames go — not the interface's state, which lives in the page
-tree; a hundred sessions are a hundred small records.
+A device is one connection — created when it opens, reclaimed when it closes or when it stops
+answering. Nothing crosses connections: the socket is the state, and a refresh is a new device
+holding nothing but the location its hello carried. One user may hold several devices, and whether
+they share anything is the business's logic: the framework gives each connection a `data` bag and
+never reads it. Identity, when a deployment needs it, arrives as an ordinary event on the live
+socket (`login`), not as a credential checked before it. Devices hold their location, that bag, and
+where their frames go — not the interface's state, which lives in the page tree; a hundred devices
+are a hundred small records.
 
-Frames queue per session and one writer thread drains each queue, so a client that stopped reading
+The HTTP side is a mount table with the channel in it: `App.mounts` starts as `{"/ws": CHANNEL}`, so
+the socket is a route like any other. `app.mount("/health", handler)` adds the app's own paths (a
+`Request` in, a `Response` out) and `app.mount("/socket")` moves the channel.
+
+Frames queue per device and one writer thread drains each queue, so a client that stopped reading
 blocks its own writer and nobody else's.
 """
 
@@ -57,13 +63,13 @@ from typing import Any, Callable
 from urllib.parse import parse_qs
 
 from . import ingest, wire
-from .channel import JUDGED_DEAD, Channel, ChannelClosed
+from .channel import EVICTED, JUDGED_DEAD, WS_PATH, Channel, ChannelClosed
 from .dests import Registry
 from .protocol import RESERVED_PREFIX, ROUTES_SLOT
 from .routes import DEFAULT, Routes
 from .sdk import builders as b
 from .sdk.types import Accrete
-from .server import make_server
+from .server import CHANNEL, Request, make_server
 
 PAGE_ROOT = Path(__file__).resolve().parent.parent / "www"
 # The page's assets are addressed from the origin root, so a deep link cannot drag its own
@@ -129,13 +135,18 @@ def into_routes(operations: list[dict]) -> list[dict]:
     return out
 
 
-class Session:
-    """One connection: the location it stands on, and where its frames go.
+class Device:
+    """One connection: the location it stands on, what the business hung on it, and where its frames go.
+
+    A device is a connection, not a user: one user may hold several, and whether two of them share
+    anything is the business's logic, not the framework's. What the framework keeps here is only what
+    the connection itself needs — where it stands (`path`, `query`), how far the view got
+    (`shell_drawn`), and the outbox.
 
     Frames *queue* here instead of being written inline: a client that stopped reading must not be
     able to hold the thread that produced a frame (that may be the app's own handler, another
-    session's, or a gate). The queue is bounded at enqueue — the only point that sees every frame a
-    slow client misses — and the writer thread (one per session, in `App._pump`) is what blocks.
+    device's, or a gate). The queue is bounded at enqueue — the only point that sees every frame a
+    slow client misses — and the writer thread (one per device, in `App._pump`) is what blocks.
     """
 
     def __init__(
@@ -152,10 +163,14 @@ class Session:
         self.path = "/"
         # What the address bar carried after the path: `?q=1&tag=a&tag=b` is {"q": ["1"], "tag": ["a","b"]}.
         self.query: dict[str, list[str]] = {}
+        # What the business hangs on this connection: an identity, a name, a permission, anything.
+        # The framework never reads it, never validates it and never clears it — when the connection
+        # goes, it goes with it. Two devices sharing a user's state is the app's own bookkeeping.
+        self.data: dict[str, Any] = {}
         self.connected = False  # the hello landed: `connect` is raised once, not per hello frame
         self.shell_drawn = False  # the shell is on the client; a page turn now only writes `routes`
         self.sent = 0
-        self.draws = 0
+        self.emits = 0
         self.capacity = outbox
         self.outbox: list[list[dict]] = []  # waiting for the writer thread, oldest first
         self.stale = False  # frames were shed: the client has a hole (a resync repairs it)
@@ -168,8 +183,8 @@ class Session:
         """Queue one frame out. The writer writes it; nobody blocks on the socket here.
 
         Every outbound frame passes this one door, so this is where the ingest boundary stands:
-        a frame that contradicts the wire is refused **whole**, counted, logged with this session
-        and its path — and the session keeps going. A producer's defect is not the session's, and
+        a frame that contradicts the wire is refused **whole**, counted, logged with this device
+        and its path — and the device keeps going. A producer's defect is not the device's, and
         it must not become the client's (the renderer would drop the defect silently).
 
         Over capacity the *middle* goes: the first frame (whatever established the tree) and the
@@ -194,18 +209,22 @@ class Session:
         self._note(f"refused frame for {self.id} on {self.path}: {reason}")
 
     def await_frames(self, timeout: float = 0.5) -> None:
-        """Block until a frame is queued — or the timeout, so a live session stays checked."""
+        """Block until a frame is queued — or the timeout, so a live device stays checked."""
         self._wake.wait(timeout)
         self._wake.clear()
 
-    def draw(self, *operations: dict) -> None:
-        """Send a batch of operations as one turn — the frame is the list itself."""
-        self.draws += 1
+    def emit(self, *operations: dict) -> None:
+        """Send a batch of operations as one turn — the frame is the list itself.
+
+        `operations` are accrete's DSL (the same `wire.set` / `wire.patch` / … the page is built
+        from); `draw` is the name of the builder, `emit` is what a connection does with the result.
+        """
+        self.emits += 1
         self.send(wire.draw(*operations))
 
 
 class App:
-    """A reflux producer: the page tree, the ``/ws`` channel, the registry, and the pages."""
+    """A reflux producer: the page tree, the channel route, the registry, and the pages."""
 
     def __init__(
         self,
@@ -215,23 +234,26 @@ class App:
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
         outbox: int = 256,
-        shell: Callable[[Session], Any] | None = None,
+        shell: Callable[[Device], Any] | None = None,
     ) -> None:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
         self.root = Path(root) if root is not None else PAGE_ROOT
         self.dests = Registry()
         self.routes: Routes = routes if routes is not None else DEFAULT
-        # page(session, path) -> a node, or the ops of that turn; left None the route table answers
+        # page(device, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
-        self.page: Callable[[Session, str], Any] | None = None
-        # shell(session) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
+        self.page: Callable[[Device, str], Any] | None = None
+        # shell(device) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
         # Set it and a page turn replaces that one slot; leave it None and the page replaces the
         # layout root — the single-page-app shape.
-        self.shell: Callable[[Session], Any] | None = shell
-        # Live sessions, keyed by the channel itself: reclaiming one is a matter of identity, so
-        # nothing can remove a session that is not its own.
-        self.sessions: dict[Any, Session] = {}
+        self.shell: Callable[[Device], Any] | None = shell
+        # Live devices, keyed by the channel itself: reclaiming one is a matter of identity, so
+        # nothing can remove a device that is not its own.
+        self.devices: dict[Any, Device] = {}
+        # The HTTP side: a path -> route table, where the channel is one route among others. The
+        # default is the channel at `/ws`; `mount` moves it and adds the app's own paths.
+        self.mounts: dict[str, Any] = {WS_PATH: CHANNEL}
         self.stats = {
             "issued": 0,
             "reclaimed": 0,
@@ -242,7 +264,7 @@ class App:
         }
         self.heartbeat = heartbeat
         self.dead_after = dead_after
-        self.outbox = outbox  # frames a session may queue before the middle is shed
+        self.outbox = outbox  # frames a device may queue before the middle is shed
         self.log: list[tuple[str, Any]] = []  # every frame in and out, in order
         self._stop = threading.Event()
         self._watchdog: threading.Thread | None = None
@@ -251,30 +273,42 @@ class App:
 
     # --- the framework's own protocol -----------------------------------------------------
 
-    def _on_hello(self, session: Session, frame: dict) -> None:
+    def _on_hello(self, device: Device, frame: dict) -> None:
         """The client says where it stands; the first frame answers, then `connect` is raised."""
-        session.path, session.query = location_of(frame)
-        self.draw_page(session)
-        if not session.connected:
-            session.connected = True
+        device.path, device.query = location_of(frame)
+        self.draw_page(device)
+        if not device.connected:
+            device.connected = True
             # After the frame is queued: a handler that draws more lands on top of a page the
             # client already has, never under one it is about to lose.
-            self.dests.announce("connect", session, frame)
+            self.dests.announce("connect", device, frame)
 
-    def _on_nav(self, session: Session, frame: dict) -> None:
+    def _on_nav(self, device: Device, frame: dict) -> None:
         """The page asked for another path — back or forward: the only navigation this wire has.
 
         The browser already moved its address bar before this arrived, so the framework only
         re-draws and tells the app: `location` is the host's event, not a wire address.
         """
-        session.path, session.query = location_of(frame)
-        self.draw_page(session)
+        device.path, device.query = location_of(frame)
+        self.draw_page(device)
         self.dests.announce(
-            "location", session, {"dest": "location", "data": {"path": session.path, "query": session.query}}
+            "location", device, {"dest": "location", "data": {"path": device.path, "query": device.query}}
         )
 
-    def draw_page(self, session: Session) -> None:
-        """One frame for the session's current location: a create, or the ops the app gave for it.
+    def route(
+        self, path: str, *, layout: Callable | None = None, **meta: Any
+    ) -> Callable[[Callable], Callable]:
+        """Declare a page on this app: `@app.route("/", title="首页")` above its handler.
+
+        Sugar over `self.routes.add`. The point is where the declaration hangs: on the object the
+        pages belong to, so a file reads as one app and a list of decorators, instead of a table
+        built somewhere else and handed to a constructor.
+        """
+        declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
+        return declared
+
+    def draw_page(self, device: Device) -> None:
+        """One frame for the device's current location: a create, or the ops the app gave for it.
 
         With a shell the frame is `create(shell)` (once per connection) followed by the page written
         into the `routes` slot — so a page turn after that replaces one slot and leaves the frame
@@ -287,59 +321,104 @@ class App:
         if page is None and len(self.routes) == 0:
             return
         if page is not None:
-            drawn = page(session, session.path)
+            drawn = page(device, device.path)
         else:
-            match = self.routes.match(session.path)
-            drawn = not_found(session.path) if match is None else match.resolve(session)
+            match = self.routes.match(device.path)
+            drawn = not_found(device.path) if match is None else match.resolve(device)
         operations = drawn if isinstance(drawn, list) else [wire.create(drawn)]
         if self.shell is None:
-            session.draw(*operations)
+            device.emit(*operations)
             return
         frame: list[dict] = []
-        if not session.shell_drawn:
-            session.shell_drawn = True
-            frame.append(wire.create(self.shell(session)))
+        if not device.shell_drawn:
+            device.shell_drawn = True
+            frame.append(wire.create(self.shell(device)))
         frame.extend(into_routes(operations))
-        session.draw(*frame)
+        device.emit(*frame)
 
-    # --- the session table -----------------------------------------------------------------
+    # --- the device table -----------------------------------------------------------------
 
-    def live(self) -> list[Session]:
-        """The sessions in the table right now, as a snapshot list.
+    def live(self) -> list[Device]:
+        """The devices in the table right now, as a snapshot list.
 
-        The table itself is identity-keyed — a session leaves it by identity, never by name — so
+        The table itself is identity-keyed — a device leaves it by identity, never by name — so
         anything that only wants to *look* asks for this instead of reaching into the container's
         shape (a gate, a health endpoint, a shutdown that closes what is open).
         """
-        return list(self.sessions.values())
+        return list(self.devices.values())
+
+    def device(self, id: str) -> Device | None:
+        """The device with that id — the direction a handler does not have.
+
+        A handler is *given* its device; this looks one up by id (a `connect` handler that kept the
+        id, a timer, another device's handler writing to a specific peer). None when it is gone.
+        """
+        for device in self.devices.values():
+            if device.id == id:
+                return device
+        return None
+
+    def evict(
+        self,
+        id: str | None = None,
+        *,
+        where: Callable[[Device], bool] | None = None,
+        reason: str = "evicted",
+    ) -> int:
+        """Close the devices that match, through the door a disconnect already uses.
+
+        `id` names one, `where` takes a predicate (by whatever the app hung in `device.data`). The
+        socket is closed and shut down so its reader thread ends, the device leaves the table once,
+        and `disconnect` is announced with `reason` — there is no second way to remove one.
+        """
+        if id is None and where is None:
+            raise TypeError("evict needs id= or where=: naming nothing would close every device")
+        hit = [
+            device
+            for device in list(self.devices.values())
+            if (id is None or device.id == id) and (where is None or where(device))
+        ]
+        for device in hit:
+            if not self._gone(device, reason):
+                continue
+            device.channel.close(EVICTED)
+            device.channel.abort()
+            self.stats["reclaimed"] += 1
+        return len(hit)
 
     def watch(self) -> None:
-        """One pass over the table: ping the live sessions, reclaim the ones gone quiet.
+        """One pass over the table: ping the live devices, reclaim the ones gone quiet.
 
-        A session is judged by its channel's ``last_seen`` — every byte read from the peer counts,
+        A device is judged by its channel's ``last_seen`` — every byte read from the peer counts,
         so a client that vanished without a FIN (still connected, still deaf) falls to the same rule
         as one that closed: tell it, shut its socket down so its reader thread can end, drop it.
         Without that shutdown the connection thread would sit in ``read`` forever.
         """
         now = time.monotonic()
-        for channel, session in list(self.sessions.items()):
+        for channel, device in list(self.devices.items()):
             if now - channel.last_seen < self.dead_after:
                 channel.ping()
                 continue
             # Take it out before closing it: one removal, one accounting. Otherwise the reader
-            # thread (woken by the shutdown below) could get there first and the same session
+            # thread (woken by the shutdown below) could get there first and the same device
             # would be accounted twice — as reclaimed *and* as dead.
-            if not self._gone(session, "dead"):
+            if not self._gone(device, "dead"):
                 continue
             channel.close(JUDGED_DEAD)
             channel.abort()
             self.stats["dead"] += 1
-            self.dests.log.append(f"session {session.id} judged dead ({self.dead_after}s quiet)")
+            self.dests.log.append(f"device {device.id} judged dead ({self.dead_after}s quiet)")
 
     def start_watchdog(self) -> None:
-        """Start the thread that ticks ``watch()`` — one per server, so every server reclaims."""
+        """Start the thread that ticks ``watch()`` — one per server, so every server reclaims.
+
+        The stop flag is re-armed here: `stop()` ends a run, and serving the same app again (a gate
+        that runs two phases against one app) starts a fresh one — otherwise the new watchdog would
+        see the old stop flag already set and exit at its first tick.
+        """
         if self._watchdog is not None:
             return
+        self._stop = threading.Event()
 
         def tick() -> None:
             while not self._stop.wait(self.heartbeat):
@@ -355,11 +434,36 @@ class App:
 
     # --- serving --------------------------------------------------------------------------
 
+    def mount(
+        self, path: str, handler: Callable[[Request], Any] | str | Path | None = None
+    ) -> None:
+        """Put a route in the HTTP table: the channel (no handler), a callable, or a directory.
+
+        The table starts as `{"/ws": CHANNEL}`, so the socket is a route like any other rather than
+        a special case of the server. `app.mount("/health", lambda request: "ok")` adds the app's
+        own paths (a `Request` in, a `Response` / `(status, body)` / body out); `app.mount("/socket")`
+        puts another channel route somewhere else; and `app.mount("/assets/chart", path)` serves a
+        directory of files, which is how a page's modules and models reach the browser.
+        """
+        if path in self.mounts:
+            raise ValueError(f"{path!r} is already mounted; unmount it first")
+        self.mounts[path] = CHANNEL if handler is None else handler
+
+    def unmount(self, path: str) -> None:
+        """Take a route out of the table — moving the channel is unmount, then mount."""
+        if self.mounts.pop(path, None) is None:
+            raise KeyError(f"nothing mounted at {path!r}")
+
     def make_server(self, port: int = 0, host: str = "127.0.0.1") -> ThreadingHTTPServer:
         mounts: dict[str, str | Path] = {"/": self.root}
         static = self.root / "static"
         if static.is_dir():
             mounts[STATIC_PREFIX] = static
+        # A route may also be a directory (`app.mount("/assets/chart", path)`): those are the server's
+        # mounts, served file by file, not the app's callables.
+        for path, route in self.mounts.items():
+            if isinstance(route, (str, Path)):
+                mounts[path.rstrip("/") + "/"] = route  # a directory mount is a prefix, with the slash
         server = make_server(self.root, port, host, app=self, mounts=mounts)
         self.start_watchdog()
         return server
@@ -388,85 +492,85 @@ class App:
     # --- one connection -------------------------------------------------------------------
 
     def handle(self, channel: Channel) -> None:
-        """Read this connection's frames until it goes away: the session lives and dies with it."""
-        session = Session(
+        """Read this connection's frames until it goes away: the device lives and dies with it."""
+        device = Device(
             secrets.token_hex(4), channel, self._record, self.stats, self.outbox, self.dests.log.append
         )
-        self.sessions[channel] = session
+        self.devices[channel] = device
         self.stats["issued"] += 1
         # Writing is a thread of its own, so nothing that produces a frame can be held by a client
         # that stopped reading (this reader thread included: a slow client must not be able to stall
         # the very thread that would drain it).
-        threading.Thread(target=self._pump, args=(session,), name="reflux-writer", daemon=True).start()
+        threading.Thread(target=self._pump, args=(device,), name="reflux-writer", daemon=True).start()
         try:
             for raw in channel:
                 try:
                     frame = json.loads(raw)
                 except ValueError:
                     self.dests.refused += 1
-                    self.dests.log.append(f"not JSON from {session.id}: {raw[:200]!r}")
+                    self.dests.log.append(f"not JSON from {device.id}: {raw[:200]!r}")
                     continue
                 self._record("recv", frame)
                 try:
                     ingest.check_uplink(frame)
                 except ingest.Refused as bad:
                     # The registry never sees it: a frame that is not shaped like an uplink frame
-                    # is refused before anything can dispatch on it. The session survives.
+                    # is refused before anything can dispatch on it. The device survives.
                     self.stats["refused"] += 1
                     self.dests.log.append(
-                        f"refused uplink from {session.id} on {session.path}: {bad}"
+                        f"refused uplink from {device.id} on {device.path}: {bad}"
                     )
                     continue
-                self.dests.dispatch(session, frame)
+                self.dests.dispatch(device, frame)
         except ChannelClosed as exc:
-            self.dests.log.append(f"session {session.id} closed: {exc}")
+            self.dests.log.append(f"device {device.id} closed: {exc}")
         finally:
-            # Identity, not id: a session the watchdog already reclaimed is not this thread's to
-            # count, and no thread can remove a session that is not its own.
-            if self._gone(session, "closed"):
+            # Identity, not id: a device the watchdog already reclaimed is not this thread's to
+            # count, and no thread can remove a device that is not its own.
+            if self._gone(device, "closed"):
                 self.stats["reclaimed"] += 1
-                self.dests.log.append(f"session {session.id} reclaimed")
+                self.dests.log.append(f"device {device.id} reclaimed")
 
-    def _gone(self, session: Session, reason: str) -> bool:
-        """Take a session out of the table once — and let the app hear that it is gone.
+    def _gone(self, device: Device, reason: str) -> bool:
+        """Take a device out of the table once — and let the app hear that it is gone.
 
         The one place that removes: `disconnect` cannot fire twice (both the reader thread and the
-        watchdog come here, and only the first wins) and cannot fail to fire (a session leaving the
+        watchdog come here, and only the first wins) and cannot fail to fire (a device leaving the
         table is exactly the fact the event names).
         """
-        if self.sessions.pop(session.channel, None) is None:
+        if self.devices.pop(device.channel, None) is None:
             return False
-        self.dests.announce("disconnect", session, {"dest": "disconnect", "data": {"reason": reason}})
+        self.dests.announce("disconnect", device, {"dest": "disconnect", "data": {"reason": reason}})
         return True
 
-    def _pump(self, session: Session) -> None:
-        """Write one session's frames until it is no longer live.
+    def _pump(self, device: Device) -> None:
+        """Write one device's frames until it is no longer live.
 
-        One thread per session, on purpose: writing is the only step that can block on a client, so
-        a slow client blocks *its own* writer and nobody else's. The loop ends when the session
+        One thread per device, on purpose: writing is the only step that can block on a client, so
+        a slow client blocks *its own* writer and nobody else's. The loop ends when the device
         leaves the table — the reader thread removes it on close, the watchdog on a dead peer.
         """
-        while self.sessions.get(session.channel) is session:
-            session.await_frames()
-            self.flush_session(session)
+        while self.devices.get(device.channel) is device:
+            device.await_frames()
+            self.flush_device(device)
 
-    def flush_session(self, session: Session) -> None:
-        """Write what this session has waiting, then repair it if frames were shed.
+    def flush_device(self, device: Device) -> None:
+        """Write what this device has waiting, then repair it if frames were shed.
 
         The repair only happens when the queue is *empty*: the client is reading again by then, so a
         single fresh frame for its current location goes out inline — a resync is one frame, not a
         replay of everything the client missed. With a shell the resync re-creates it (the stale
         client may have missed the frame that built it), so the flag is cleared first.
         """
-        while session.outbox:
-            if not self._write(session.channel, session.outbox.pop(0)):
+        while device.outbox:
+            if not self._write(device.channel, device.outbox.pop(0)):
                 return
-        if session.stale:
-            session.stale = False
-            session.shell_drawn = False
-            self.draw_page(session)
-            frames, session.outbox = session.outbox, []
-            if all(self._write(session.channel, frame) for frame in frames):
+        if device.stale:
+            device.stale = False
+            device.shell_drawn = False
+            self.draw_page(device)
+            frames, device.outbox = device.outbox, []
+            if all(self._write(device.channel, frame) for frame in frames):
                 self.stats["resync"] += 1
 
     def _record(self, direction: str, frame: Any) -> None:

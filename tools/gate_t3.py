@@ -158,12 +158,12 @@ def main() -> int:
     )
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
-        session = next(iter(app.live()), None)
-        if session is None:
-            print("no session: the page never connected")
+        device = next(iter(app.live()), None)
+        if device is None:
+            print("no device: the page never connected")
             return 1
 
-        session.send(wire.draw(*seed_slots(), wire.create(tree())))
+        device.send(wire.draw(*seed_slots(), wire.create(tree())))
         wait_for(cdp, "!!document.querySelector('.rack')")
         cdp.drain()
         seen = json.loads(cdp.eval(f"JSON.stringify({probe})") or "{}")

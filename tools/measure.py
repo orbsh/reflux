@@ -14,7 +14,7 @@ Sections:
   it addresses, not on the whole tree.
 - **paint** — the pinned assets' size, DOMContentLoaded, and the time from document start to a
   drawn tree (three runs, median).
-- **cpu** — 100 sessions × 50 frames/s for 5 s. The clients run in a **child process**, so the CPU
+- **cpu** — 100 devices × 50 frames/s for 5 s. The clients run in a **child process**, so the CPU
   number is the server's own; frames are the denominator, not seconds.
 
 What this does not do: it does not tune anything. Numbers that look wrong are a design question for
@@ -42,7 +42,7 @@ from reflux.sdk import builders as b  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 VERSIONS = REPO / "www" / "static" / "vendor" / "fluxen" / "versions.json"
-SESSION = "measure1"  # a session id of the right shape; no session is involved in the byte counts
+SESSION = "measure1"  # a device id of the right shape; no device is involved in the byte counts
 
 
 def size(obj) -> int:
@@ -107,15 +107,15 @@ def section_mutations() -> None:
     app = demo.make_app()
     rows: list[list[str]] = []
     with open_page(path="/", app=app, settle=0.5) as (cdp, base):
-        session = next(iter(app.live()), None)
-        if session is None:
-            print("\n### one turn's DOM changes\n\nno session: the page never connected")
+        device = next(iter(app.live()), None)
+        if device is None:
+            print("\n### one turn's DOM changes\n\nno device: the page never connected")
             return
         cdp.eval(OBSERVE)
 
         def turn(label: str, frame: dict, marker: str) -> None:
             cdp.eval("window.__muts = 0")
-            session.send(frame)
+            device.send(frame)
             deadline = time.time() + 5
             while time.time() < deadline:
                 if marker in (cdp.eval("document.body.innerText") or ""):
@@ -266,7 +266,7 @@ def check_cost() -> list[list[str]]:
 
 def section_cpu() -> None:
     app = demo.make_app()
-    app.dests.register("measure.ping", lambda session, frame: session.draw(wire.set(demo.ECHO, b.text("pong"))))
+    app.dests.register("measure.ping", lambda device, frame: device.emit(wire.set(demo.ECHO, b.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -308,7 +308,7 @@ def section_cpu() -> None:
     expected = SESSIONS * PER_SECOND * SECONDS
     rows = [
         ["connections issued", f"{app.stats['issued']:,}", f"of {SESSIONS} clients"],
-        ["sessions live (peak)", f"{peak[0]:,}", "sampled every 50 ms during the burst"],
+        ["devices live (peak)", f"{peak[0]:,}", "sampled every 50 ms during the burst"],
         ["frames handled", f"{frames:,}", f"of ~{expected:,} attempted ({frames / expected * 100:.1f} %)"],
         ["refused", str(app.stats["refused"]), "a non-zero here means the numbers are not clean"],
         ["server CPU", f"{cpu:.2f} s", f"process_time over {wall:.1f} s of wall clock"],

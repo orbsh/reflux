@@ -48,9 +48,9 @@ def page(path: str, title: str, *, label: str | None = None, markers: bool = Tru
     return b.case(*children, id="page-root")
 
 
-def draw(session, node) -> None:
+def draw(device, node) -> None:
     """One accrete `draw` frame: `create` on the layout root (`event` is required but unread)."""
-    session.send([{"action": "create", "slot": "", "data": dump(node)}])
+    device.send([{"action": "create", "slot": "", "data": dump(node)}])
 
 
 def wait(predicate, timeout: float = 10.0):
@@ -80,14 +80,14 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     with open_page(path=PAGE, app=app, settle=0.4) as (cdp, base):
-        session = wait(lambda: next(iter(app.live()), None))
-        if session is None:
-            print("no session: the page never connected")
+        device = wait(lambda: next(iter(app.live()), None))
+        if device is None:
+            print("no device: the page never connected")
             return 1
 
         # 1: the first page's marker moves the bar exactly once
         before = cdp.eval("history.length")
-        draw(session, page("/a", "A"))
+        draw(device, page("/a", "A"))
         drawn = wait(lambda: seen(cdp, "page /a"))
         bar = cdp.eval("location.pathname")
         title = cdp.eval("document.title")
@@ -102,7 +102,7 @@ def main() -> int:
         checks.append(("the title marker writes document.title", title == "A", f"title={title!r}"))
 
         # 2: the same path again is not a new history entry
-        draw(session, page("/a", "A", label="again"))
+        draw(device, page("/a", "A", label="again"))
         wait(lambda: seen(cdp, "again"))
         same = cdp.eval("history.length")
         checks.append(
@@ -114,7 +114,7 @@ def main() -> int:
         )
 
         # 3: a real page turn pushes exactly one entry
-        draw(session, page("/b", "B"))
+        draw(device, page("/b", "B"))
         wait(lambda: seen(cdp, "page /b"))
         bar_b = cdp.eval("location.pathname")
         after_turn = cdp.eval("history.length")
@@ -132,7 +132,7 @@ def main() -> int:
         navs = wait(lambda: frames(app, "reflux:nav")[before_nav:])
         nav = navs[0] if navs else {}
         if nav:
-            draw(session, page("/a", "A"))
+            draw(device, page("/a", "A"))
             wait(lambda: cdp.eval("document.title") == "A")
         back_bar = cdp.eval("location.pathname")
         checks.append(
@@ -155,9 +155,9 @@ def main() -> int:
         )
         hellos = wait(lambda: frames(app, "reflux:hello")[before_hellos:])
         hello = hellos[0] if hellos else {}
-        deep_session = wait(lambda: next((s for s in app.live() if s.path == "/deep/link"), None))
-        if deep_session is not None:
-            draw(deep_session, page("/deep/link", "Deep"))
+        deep_device = wait(lambda: next((s for s in app.live() if s.path == "/deep/link"), None))
+        if deep_device is not None:
+            draw(deep_device, page("/deep/link", "Deep"))
             wait(lambda: seen(cdp, "page /deep/link"))
         deep_bar = cdp.eval("location.pathname")
         checks.append(
@@ -170,8 +170,8 @@ def main() -> int:
 
         # 6: a page without markers leaves the bar and the title alone (mirror, do not guess)
         title_before = cdp.eval("document.title")
-        if deep_session is not None:
-            draw(deep_session, page("/ignored", "Ignored", label="no markers", markers=False))
+        if deep_device is not None:
+            draw(deep_device, page("/ignored", "Ignored", label="no markers", markers=False))
             wait(lambda: seen(cdp, "no markers"))
         checks.append(
             (

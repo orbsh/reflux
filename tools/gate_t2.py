@@ -85,13 +85,13 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     with open_page(path=PAGE, app=app, settle=0.4) as (cdp, base):
-        session = wait(lambda: next(iter(app.live()), None))
-        if session is None:
-            print("no session: the page never connected")
+        device = wait(lambda: next(iter(app.live()), None))
+        if device is None:
+            print("no device: the page never connected")
             return 1
 
         def send(*ops) -> None:
-            session.send(wire.draw(*ops))
+            device.send(wire.draw(*ops))
 
         # tmpl first: a template node expands when the tree lands, so the body must be registered
         send(wire.tmpl("t1", TEMPLATE_BODY), wire.create(tree()))

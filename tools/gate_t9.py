@@ -3,7 +3,7 @@
 
 `reflux/demo_app.py` is the only application in this repo written the way an application is written
 (SDK builders + `wire` + the route table), and until this gate nothing drove it: it was `gate_t7`'s
-session fixture and nothing more. So the question T9 asks is not about a mechanism — every mechanism
+device fixture and nothing more. So the question T9 asks is not about a mechanism — every mechanism
 has its own gate — but about the whole: four advertised interactions, two declared routes, and the
 framework's built-in 404 on the same page.
 

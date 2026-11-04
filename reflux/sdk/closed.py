@@ -7,7 +7,7 @@ from the models at import time, and value domains stay pydantic's job (`parse`).
 Two callers, one rule:
 
 - `reflux/wire.py` — a hand-written node must fail **where it is built** (`ValueError`, loud).
-- `reflux/ingest.py` — a frame handed straight to a session must fail at the server's boundary.
+- `reflux/ingest.py` — a frame handed straight to a device must fail at the server's boundary.
 
 Why a shared module rather than two walks: a node's closure is a fact about the vocabulary, and a
 second copy of it is exactly the drift this stack keeps paying for. The two callers differ only in

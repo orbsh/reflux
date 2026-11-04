@@ -27,7 +27,7 @@ SESSION = object()
 
 
 def handler(name: str = "h"):
-    def run(session, match):
+    def run(device, match):
         return f"{name}:{match.path}"
 
     return run
@@ -106,7 +106,7 @@ class TestRegistration(unittest.TestCase):
 
         @table.add("/a")
         @table.add("/b")
-        def page(session, match):
+        def page(device, match):
             return "page"
 
         self.assertEqual([route.path for route in table.routes()], ["/a", "/b"])
@@ -241,8 +241,8 @@ class TestResolve(unittest.TestCase):
     def test_a_layout_wraps_the_page_the_handler_built(self) -> None:
         seen: dict = {}
 
-        def layout(session, match, page):
-            seen.update(session=session, path=match.path, page=page)
+        def layout(device, match, page):
+            seen.update(device=device, path=match.path, page=page)
             return f"layout({page})"
 
         table = Routes()
@@ -251,7 +251,7 @@ class TestResolve(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual(match.resolve(SESSION), "layout(admin:/admin)")
-        self.assertIs(seen["session"], SESSION)
+        self.assertIs(seen["device"], SESSION)
         self.assertEqual(seen["page"], "admin:/admin")
         self.assertEqual(match.meta, {"title": "后台"})
 

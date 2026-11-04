@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""T7 gate — a session is one connection: created on open, reclaimed on close or when it goes quiet.
+"""T7 gate — a device is one connection: created on open, reclaimed on close or when it goes quiet.
 
 Two phases, because they want different clocks.
 
 The browser phase drives the real page through a reload with the *default* heartbeat, so nothing
-races: the check is that the old connection's session is gone and exactly one remains. A refresh
-must not leave a string of sessions behind, and that is a claim about reclamation, not about
+races: the check is that the old connection's device is gone and exactly one remains. A refresh
+must not leave a string of devices behind, and that is a claim about reclamation, not about
 resuming anything — nothing crosses connections.
 
 The offline phase uses tiny intervals: a stdlib client upgrades, says hello, and then stops
 answering without closing (the half-open case — present in the socket, deaf to its pings, which no
 close event ever reports). The watchdog must judge it dead and empty the table, and that must count
-as *dead*, not as reclaimed: the two ends of a session are different facts.
+as *dead*, not as reclaimed: the two ends of a device are different facts.
 
     python3 tools/gate_t7.py
 
@@ -49,12 +49,12 @@ def browser_phase() -> list[tuple[str, bool, str]]:
     checks: list[tuple[str, bool, str]] = []
     with open_page(app=app) as (cdp, base):
         opened = wait_for(lambda: app.stats["issued"] == 1 and len(app.live()) == 1)
-        session = next(iter(app.live()), None)
+        device = next(iter(app.live()), None)
         checks.append(
             (
-                "a connection is one session, standing where its hello said",
-                opened and session is not None and session.path == "/",
-                f"issued={app.stats['issued']} live={len(app.live())} path={getattr(session, 'path', None)!r}",
+                "a connection is one device, standing where its hello said",
+                opened and device is not None and device.path == "/",
+                f"issued={app.stats['issued']} live={len(app.live())} path={getattr(device, 'path', None)!r}",
             )
         )
 
@@ -72,7 +72,7 @@ def browser_phase() -> list[tuple[str, bool, str]]:
         )
         checks.append(
             (
-                "a reload leaves exactly one session",
+                "a reload leaves exactly one device",
                 settled,
                 f"issued={app.stats['issued']} reclaimed={app.stats['reclaimed']} live={len(app.live())}",
             )
@@ -82,7 +82,7 @@ def browser_phase() -> list[tuple[str, bool, str]]:
 
 
 def half_open_phase() -> list[tuple[str, bool, str]]:
-    # No routes and no page: this phase is about the session table, and an app that draws nothing
+    # No routes and no page: this phase is about the device table, and an app that draws nothing
     # keeps it that way (an empty table of its own, so the demo's routes cannot leak in).
     app = App(routes=Routes(), heartbeat=0.1, dead_after=0.3)
     srv = app.make_server(0)
@@ -102,7 +102,7 @@ def half_open_phase() -> list[tuple[str, bool, str]]:
     )
     checks = [
         (
-            "a connection registers a session",
+            "a connection registers a device",
             registered,
             f"live={live_after_connect}",
         ),
