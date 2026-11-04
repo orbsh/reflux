@@ -47,22 +47,22 @@ def python_turns() -> list[tuple[str, dict]]:
     from reflux.sdk import markers
 
     return [
-        ("echo", wire.draw(wire.set(demo.ECHO, b.text("hello")))),
+        ("echo", wire.draw(wire.set("echo", b.text("hello")))),
         (
             "add row",
-            wire.draw(wire.append(demo.ROWS, demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
-        ("remove row", wire.draw(wire.remove(demo.ROWS, "row-1"))),
+        ("remove row", wire.draw(wire.remove("rows", "row-1"))),
         (
             "form submit",
             wire.draw(
-wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}'))),
+wire.set("submitted", b.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         (
             "page turn",
             wire.draw(
-wire.create(markers.page("/", "演示", *demo.demo.home())),
-                *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows]),
+wire.create(markers.page("/", "演示", *demo.demo.home(_slots()))),
+                *[wire.append("rows", demo.row_node(row)) for row in demo.demo.rows]),
         ),
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.
@@ -74,6 +74,13 @@ wire.create(markers.page("/", "演示", *demo.demo.home())),
 wire.create(b.case(b.text(local="chan", path="/data", id="local-echo"), id="root"))),
         ),
     ]
+
+
+def _slots():
+    """The demo's slot view, without a server: these frames are built and compared, never sent."""
+    import reflux.demo_app as demo
+
+    return demo.slots_of(demo.make_app().context(None))
 
 
 def rust_frames() -> list[bytes]:

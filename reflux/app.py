@@ -73,6 +73,7 @@ from .sdk import builders as b
 from .sdk import markers
 from .sdk.markers import PAGE_ID
 from .sdk.types import Accrete
+from .slots import Slots
 from .server import CHANNEL, make_server
 
 # "no handler was passed" — apart from `None`, which means the channel (a route that answers an
@@ -269,6 +270,24 @@ class Device:
         self.send(wire.draw(*operations))
 
 
+class _Turn:
+    """The `with ctx.turn():` block: collect what is said, send it as one frame on the way out."""
+
+    __slots__ = ("_ctx",)
+
+    def __init__(self, ctx: Context) -> None:
+        self._ctx = ctx
+
+    def __enter__(self) -> Context:
+        self._ctx._buffer = []
+        return self._ctx
+
+    def __exit__(self, *exc: object) -> None:
+        buffered, self._ctx._buffer = self._ctx._buffer or [], None
+        if buffered:
+            self._ctx.device.emit(*buffered)
+
+
 @dataclass
 class Context:
     """One delivery — and the room around it: this app, the device it was addressed to, its frame.
@@ -285,6 +304,7 @@ class Context:
     frame: dict | None = None
     match: "Match | None" = None
     _page: Any = field(default=None, repr=False)
+    _buffer: list[dict] | None = field(default=None, repr=False)
 
     # --- the connection this delivery came from ---
     @property
@@ -304,14 +324,36 @@ class Context:
         """The bag the business hangs on this connection. The framework still never reads it."""
         return self.device.data
 
-    # --- what it can say ---
+    # --- what it can say, and where ---
+    @property
+    def slot(self) -> Slots:
+        """The slots of this delivery: `ctx.slot("chat/status")`, `ctx.slot["status"]`, `ctx.slot.status`.
+
+        A slot is a name plus its verbs (`set`/`append`/`patch`/`remove`), each of them one frame —
+        so a handler never writes `wire.set("status", …)` and never keeps the name in a constant of
+        its own. Declaring a `Protocol` with the names gives the editor completion; see `slots.py`.
+        """
+        return Slots(self)
+
+    def turn(self) -> Any:
+        """One frame out of several writes: every send inside the block lands in the same frame.
+
+        A turn is what the client sees at once — rows, a bubble, a status line — and it is cheaper to
+        compose than to send. Not nestable: a block inside a block would have to decide which frame it
+        belongs to, and no page has needed two.
+        """
+        return _Turn(self)
+
     def emit(self, *operations: dict) -> None:
         """Say something to the device this delivery came from: these accrete operations, one frame.
 
         A later frame (a broadcast, a timer's nudge) says it to `ctx.devices()` instead — same verb,
         on those devices, because saying is a device's act and not a handler's return.
         """
-        self.device.emit(*operations)
+        if self._buffer is not None:
+            self._buffer.extend(operations)
+        else:
+            self.device.emit(*operations)
 
     def devices(self) -> list["Device"]:
         """Every live device, this one included — the room a broadcast picks from."""
@@ -378,6 +420,7 @@ class App:
         # `/static/` when that directory exists (a produced site may have none).
         self.root = Path(root) if root is not None else PAGE_ROOT
         self.dests = Registry(self.context)
+        self.slots: set[str] = set()  # every slot name the app has declared, for /status
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(device, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
@@ -448,6 +491,10 @@ class App:
         """
         declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
         return declared
+
+    def slot(self, name: str) -> None:
+        """Record a slot's name. Declaring is idempotent, and the set is what `/status` can list."""
+        self.slots.add(name)
 
     def context(self, device: Device, frame: dict | None = None, match: Any = None) -> Context:
         """One delivery, ready to hand a handler: this app, this device, and what came in."""

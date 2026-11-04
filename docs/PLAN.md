@@ -964,3 +964,14 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 **同日再追加（用户：「ctx.page 都是专用的了，把 markers.page 一起包装进去还省一层」）**：`ctx.page` 自己建页面——签名变成 `ctx.page(*children, title=…, path=…, id=PAGE_ID)`，里面调 `markers.page`，**地址与标题默认取自路由声明**（`match.path`、`match.route.meta["title"]`），处理器只交内容；`path=`／`title=` 是单页钩子（没有路由可问）与特例的出口。`Match.resolve` 顺手把 `ctx.match` 设好，所以页面里 `ctx.match.params` 仍然能用。示例与 `demo_app` 的 `home()`／`about()` 改回交内容（之前它们返回整页，包一层会撞 `page-root` 重名）。
 
 **验证**：235 例 OK；各 gate 见下一行。
+
+**同日再追加（用户：「chat.py:125 把 slot 也纳入 ctx 管理，不要声明一堆常量……wire 相关操作要基于 Slot 对象，比如 `ctx.slot['status'].set(...)`」）**：新增 `reflux/slots.py`。
+
+- `Slot`：一条具名数据槽，动词就是线上那四个——`set(node)`／`append(node, position=)`／`patch(path, value, op=)`／`remove(id)`，每个动词一帧；名字只写一次。它同时是构造器收的「源」：`b.text(source=slot)`，`bind_entry` 把对象读成它的 `name`。
+- `Slots`（`ctx.slot`）：三种写法同一个槽——`ctx.slot("chat/status")`（按路径声明）、`ctx.slot["status"]`、`ctx.slot.status`（`Protocol` 补全用的属性形）。路径里的 `/` 原样送上线，框架不解析（层级留着，今天不用）。声明过的名字记进 `App.slots`，`/status` 多一个 `slots` 键。
+- **静态补全走用户给的形状**：应用声明只含注解的 `Protocol`（`class ChatSlots(Protocol): status: Slot ...`），处理器里 `slots: ChatSlots = ctx.slot  # type: ignore[assignment]`——IDE 补全，拼错在第一次调用就 `AttributeError`。
+- `with ctx.turn():`（`Context.turn`）：块内的 `ctx.emit` 与槽动词进同一帧，出块一起送。`chat.send` 用它把「两行 + 空气泡 + 状态行」合成一帧（之前是四个槽动词四帧，测试 `test_one_batch_…` 抓到）；`stream` 的失败/停止两条尾巴同理。不嵌套。
+- 示例：`chat.py` 的 `STATUS`／`MESSAGES` 常量退场，换成 `ChatSlots` 协议 + `ctx.slot`；`reflux/demo_app.py` 的 `ECHO`／`ROWS`／`SUBMITTED` 同样退场，`slots_of(ctx)` 给视图、`home(slots)` 收视图；每个回复自己的槽是 `ctx.slot(f"reply.{seq}")`。测试与门里出现的槽名改成字面量（那是线上的名字，不是应用常量）。
+- 新增 `tests/test_slots.py`（11 例：三种写法同一条、路径原样、空名拒、四动词各一帧、构造器收对象、声明记在 app、turn 合成一帧、空 turn 不发、无 app 的组照常发句柄）。
+
+**验证**：**246 例 OK**；`gate_dashboard`（含新的 `slots` 键）、`gate_chat`、`gate_ingest`、`gate_t2..t10` 全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 里既有的 F841。

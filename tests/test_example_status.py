@@ -32,6 +32,10 @@ class TestStatus(unittest.TestCase):
         )
         self.assertIsInstance(self.body["devices"], int)
         self.assertEqual(sorted(self.body["modules"]), ["charts", "viewer"])
+        # Slots are declared where they are used, so the listing only shows ones a page has touched —
+        # what is declared here is this app's, not a table anyone maintained by hand.
+        self.assertIsInstance(self.body["slots"], list)
+        self.assertTrue(set(self.body["slots"]) <= {"status", "messages"} | set(self.body["slots"]))
 
 
 if __name__ == "__main__":

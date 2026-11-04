@@ -111,6 +111,7 @@ def status(request: Request) -> Response:
                 "routes": [route.path for route in app.routes],
                 "mounts": sorted(app.mounts),
                 "devices": len(app.live()),
+                "slots": sorted(app.slots),  # every name the app has declared, wherever it did
                 "stats": dict(app.stats),
                 "modules": {"charts": dashboard.CHARTS, "viewer": dashboard.VIEWER},
             },

@@ -19,7 +19,10 @@ import io
 import unittest
 
 import reflux.demo_app as demo
+from reflux import Context
 from reflux.sdk import markers
+
+_CTX = Context(app=None, device=None)  # type: ignore[arg-type]  # only the slot names are read
 from reflux import cli
 from reflux.app import App
 from reflux.sdk import dump
@@ -128,7 +131,7 @@ class EverySendableDestHasAHandler(unittest.TestCase):
         self.registered = set(self.app.dests.names())
 
     def test_the_reference_page_sends_only_registered_dests(self) -> None:
-        sent = sent_dests(markers.page('/', '演示', *demo.demo.home()))
+        sent = sent_dests(markers.page('/', '演示', *demo.demo.home(demo.slots_of(_CTX))))
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
         self.assertEqual(sent - self.registered, set(), "the page sends an event nobody handles")
 

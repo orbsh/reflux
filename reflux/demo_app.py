@@ -30,14 +30,25 @@ from __future__ import annotations
 
 import argparse
 import json
+from typing import Protocol
 
-from . import wire
-from .app import App
+from .app import App, Context
 from .routes import route
 from .sdk import builders as b
 from .sdk.types import Accrete, JsType
+from .slots import Slot
 
-ECHO, ROWS, SUBMITTED = "echo", "rows", "submitted"
+def slots_of(ctx: Context) -> "DemoSlots":
+    """The reference app's slots for this delivery. The names are the Protocol's; the wire sees names."""
+    return ctx.slot  # type: ignore[return-value]
+
+
+class DemoSlots(Protocol):
+    """The reference app's slots, for the editor — the runtime only ever sees the names."""
+
+    echo: Slot  # what the input last carried
+    rows: Slot  # the list the rack reads
+    submitted: Slot  # the last form's fields, as one line of JSON
 
 # Where a navigation form sends the client. The frame's `event` is the target's name.
 GO = {"go.home": "/", "go.about": "/about"}
@@ -72,20 +83,20 @@ class Demo:
         send like any other, so it is written as one: the page is `ctx.page(...)`, the seed is
         `ctx.emit(...)`, and neither of them is a return.
         """
-        ctx.page(*self.home())
+        ctx.page(*self.home(slots_of(ctx)))
         if not ctx.data.get("rows_seeded"):
             ctx.data["rows_seeded"] = True
             for row in self.rows:
-                ctx.emit(wire.append(ROWS, row_node(row)))
+                slots_of(ctx).rows.append(row_node(row))
 
-    def home(self) -> list[Accrete]:
+    def home(self, slots: "DemoSlots") -> list[Accrete]:
         """The home page's content — the markers are `ctx.page`'s business, not the app's."""
         return [
             b.text("演示", variant="heading-1"),
             b.input(dest="name.change", id="name-input"),
-            b.text(source=ECHO, id="echo"),
+            b.text(source=slots.echo, id="echo"),
             b.form(b.button("加一行"), dest="row.add", id="add-row"),
-            b.rack(source=ROWS, id="rows"),
+            b.rack(source=slots.rows, id="rows"),
             b.form(
                 b.input(field="user", id="f-user"),
                 b.input(field="pass", kind=JsType.password, id="f-pass"),
@@ -93,7 +104,7 @@ class Demo:
                 dest="login.submit",
                 id="login",
             ),
-            b.text(source=SUBMITTED, id="submitted"),
+            b.text(source=slots.submitted, id="submitted"),
             nav_form("关于", "go.about"),
             b.text(
                 "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构"
@@ -114,18 +125,18 @@ class Demo:
     def on_name(self, ctx, frame) -> None:
         # An `input` uplinks its value alone (no wrapper): the frame's `data` is the string.
         self.echo = frame["data"] if isinstance(frame["data"], str) else ""
-        ctx.emit(wire.set(ECHO, b.text(self.echo)))
+        slots_of(ctx).echo.set(b.text(self.echo))
 
     def on_add(self, ctx, frame) -> None:
         row = {"id": f"row-{self.next_row}", "text": f"第 {self.next_row} 行"}
         self.next_row += 1
         self.rows.append(row)
-        ctx.emit(wire.append(ROWS, row_node(row)))
+        slots_of(ctx).rows.append(row_node(row))
 
     def on_remove(self, ctx, frame) -> None:
         row_id = frame.get("id")  # the row's form carried its identity up
         self.rows = [row for row in self.rows if row["id"] != row_id]
-        ctx.emit(wire.remove(ROWS, row_id))
+        slots_of(ctx).rows.remove(row_id)
 
     def on_submit(self, ctx, frame) -> None:
         fields = frame["data"] if isinstance(frame["data"], dict) else {}
@@ -133,7 +144,7 @@ class Demo:
             name: entry.get("data") for name, entry in fields.items() if isinstance(entry, dict)
         }
         summary = json.dumps(self.submitted, ensure_ascii=False, sort_keys=True)
-        ctx.emit(wire.set(SUBMITTED, b.text(f"已提交 {summary}")))
+        slots_of(ctx).submitted.set(b.text(f"已提交 {summary}"))
 
     def on_go(self, ctx, frame) -> None:
         """A submit that moves the client: the new structure and the new path marker."""

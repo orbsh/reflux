@@ -106,7 +106,7 @@ def home(ctx, match):
 
 @app.dests.register("name.change")
 def on_name(ctx, frame):
-    ctx.emit(wire.set("echo", b.text(str(frame["data"]))))
+    ctx.slot["echo"].set(b.text(str(frame["data"])))   # one frame: set the `echo` slot
 
 
 if __name__ == "__main__":
@@ -117,16 +117,22 @@ What the pieces are:
 
 - **`@app.route("/")`** declares a page on that app's table, right above its handler. (`@route(…)`
   is the same declaration against the module-level table `App()` reads by default — use it when the
-  table is shared across modules, e.g. with `discover`.) The handler returns a **node** — the
-  framework wraps it in `create` for you — or a **list of operations** when you also need to seed the
-  data slots the page reads (that is what `demo_app` does, so its rows arrive with the structure).
-- **`markers.page(path, title, *children)`** puts the two markers the page runtime mirrors into the
-  address bar and the tab title, then your content. It is a convention, not a wire type.
+  table is shared across modules, e.g. with `discover`.) The handler draws with `ctx.page(*content)` — the
+  framework wraps it in the markers and `create` for you, and a page never returns. Data the page
+  reads is a slot, seeded with a send: `ctx.slot["rows"].append(row)` (what `demo_app` does, so its
+  rows arrive before the structure that reads them).
+- **`markers.page(path, title, *children)`** is what `ctx.page` builds: the two markers the page runtime
+  mirrors into the address bar and the tab title, then your content. It is a convention, not a wire type
+  — reach for it directly only when you are assembling a page by hand.
 - **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
   values. `b.text(source="echo")` reads a slot; `b.input(dest="name.change")` sends one.
 - **`@app.dests.register("name.change")`** is the only way an uplink frame reaches your code. An
   unregistered name is refused and counted — never dispatched dynamically.
 "- **`ctx.emit(*ops)`** is exactly one frame, flushed in order — a handler's only way to speak.
+- **A slot is an object.** `ctx.slot["status"]` / `ctx.slot("chat/status")` hand out a `Slot`; its verbs
+  are the wire's: `.set(node)`, `.append(node)`, `.patch(path, value, op=)`, `.remove(id)`. The name is
+  written once, and a `Protocol` with the names is what the editor completes — no `STATUS = "status"`
+  constants kept in step by eye. `with ctx.turn():` collects several writes into one frame.
 - **Nothing returns.** An uplink handler says `ctx.emit(...)`; a page handler says `ctx.page(*content)`
   and the app composes the frame (shell once, then the `routes` slot) — including the two markers, so
   the address and the title are written once, on the route where they were declared. Only an HTTP route

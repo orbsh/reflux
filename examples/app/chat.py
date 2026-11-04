@@ -8,7 +8,7 @@ Six pieces of backend behaviour, one per section — each asserted in `tests/tes
    transcript is also the page tree's (the rows), so the backend only keeps what the model needs:
    turns, and how many of them the window holds.
 2. **streaming** — a worker thread per reply appends chunks with
-   `wire.patch(slot, "/bind/value/default", chunk, op="append")`. The frame queue is the device's, so
+   `reply.patch("/bind/value/default", chunk, op="append")` — a `Slot`, not a name in a string. The frame queue is the device's, so
    one client's slow write never holds a model call or another device.
 3. **single flight** — a second message while one is streaming is refused *with a reason on the
    status line*, not silently dropped: the composer is not disabled, so the second send is a real
@@ -32,17 +32,27 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from reflux import Context, Match, wire
+from typing import Protocol
+
+from reflux import Context, Match
 from reflux.sdk import builders as b
+from reflux.slots import Slot
 from reflux.sdk.types import Accrete
 
 from .app import app
 from .model import Model, Scripted, Turn
 
-__all__ = ["Chat", "MAX_CHARS", "WINDOW", "page", "send", "settings", "spawn", "stream"]
+__all__ = ["Chat", "ChatSlots", "MAX_CHARS", "WINDOW", "page", "send", "settings", "spawn", "stream"]
 
-MESSAGES = "messages"  # the list slot the rack reads
-STATUS = "status"  # the one-line state of the backend
+class ChatSlots(Protocol):
+    """The slots this page owns, for the editor. The wire only ever sees the names.
+
+    `ctx.slot` answers any name at runtime; a Protocol is what tells the IDE which names exist, so
+    `slots.status.set(…)` completes and a typo is caught before the frame is built.
+    """
+
+    status: Slot  # one line: what the backend is doing
+    messages: Slot  # the rack's rows, one per turn
 TEXT_VALUE = "/bind/value/default"  # pointer into a text node stored in a slot
 MAX_CHARS = 4096  # an application limit, not a wire limit
 WINDOW = 12  # turns of context the model sees; older ones are dropped
@@ -115,14 +125,15 @@ def page(ctx: Context, match: Match) -> None:
     The address and the title come from the declaration above — `ctx.page` builds the markers — so the
     handler passes its content and nothing else.
     """
+    slots: ChatSlots = ctx.slot  # type: ignore[assignment]  # the names are the Protocol's
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
-        ctx.emit(wire.set(STATUS, b.text("就绪")))
+        slots.status.set(b.text("就绪"))
     ctx.page(
         b.case(
             b.text("对话", variant="heading-1"),
-            b.text(source=STATUS, variant="muted", id="status"),
-            b.rack(source=MESSAGES, scroll=True, id="messages"),
+            b.text(source=slots.status, variant="muted", id="status"),
+            b.rack(source=slots.messages, scroll=True, id="messages"),
             b.case(
                 b.form(b.input(field="text", id="composer"), b.button("发送"), dest="chat.send", id="send"),
                 b.form(b.button("停止"), dest="chat.stop", id="stop"),
@@ -155,15 +166,16 @@ def spawn(target, args: tuple) -> None:
 
 def send(ctx: Context, chat: Chat, text: str) -> None:
     """Take one message: refuse it with a reason, or put it on screen and start the reply."""
+    slots: ChatSlots = ctx.slot  # type: ignore[assignment]
     if not text.strip():
-        ctx.emit(wire.set(STATUS, b.text("空消息没有发出去")))
+        slots.status.set(b.text("空消息没有发出去"))
         return
     if len(text) > MAX_CHARS:
-        ctx.emit(wire.set(STATUS, b.text(f"太长：{len(text)} 字 > {MAX_CHARS} 字上限，没有发出去")))
+        slots.status.set(b.text(f"太长：{len(text)} 字 > {MAX_CHARS} 字上限，没有发出去"))
         return
     with chat.lock:
         if chat.busy:
-            ctx.emit(wire.set(STATUS, b.text("上一条还在流：按「停止」或等它结束")))
+            slots.status.set(b.text("上一条还在流：按「停止」或等它结束"))
             return
         chat.busy = True
         chat.stop.clear()
@@ -172,17 +184,16 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
 
     chat.record("user", text)
     context = list(chat.turns)  # a snapshot: the window may move while the model is answering
-    slot = f"reply.{seq}"
-    ctx.emit(
-        wire.append(MESSAGES, row(b.text(text), id=f"row-user-{seq}")),
-        wire.append(MESSAGES, row(b.text(source=slot), id=f"row-bot-{seq}")),
-        wire.set(slot, b.text("")),
-        wire.set(STATUS, b.text(f"正在回答…（{chat.model.name}）")),
-    )
-    spawn(stream, (ctx, chat, slot, context))
+    reply = ctx.slot(f"reply.{seq}")  # a path, because each answer gets its own plane
+    with ctx.turn():  # the client sees the two rows, the empty bubble and the status at once
+        slots.messages.append(row(b.text(text), id=f"row-user-{seq}"))
+        slots.messages.append(row(b.text(source=reply), id=f"row-bot-{seq}"))
+        reply.set(b.text(""))
+        slots.status.set(b.text(f"正在回答…（{chat.model.name}）"))
+    spawn(stream, (ctx, chat, reply, context))
 
 
-def stream(ctx: Context, chat: Chat, slot: str, context: list[Turn]) -> None:
+def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
     """One reply, chunk by chunk. Synchronous on purpose: the thread is the caller's choice, so a test
     can run a whole reply without one."""
     pieces: list[str] = []
@@ -192,7 +203,7 @@ def stream(ctx: Context, chat: Chat, slot: str, context: list[Turn]) -> None:
             if chat.stop.is_set():
                 break
             pieces.append(chunk)
-            ctx.emit(wire.patch(slot, TEXT_VALUE, chunk, op="append"))
+            reply.patch(TEXT_VALUE, chunk, op="append")
             if chat.delay:
                 time.sleep(chat.delay)
     except Exception as exc:  # a model is a remote system: its failure is data, not control flow
@@ -201,27 +212,27 @@ def stream(ctx: Context, chat: Chat, slot: str, context: list[Turn]) -> None:
         with chat.lock:
             chat.busy = False
 
+    slots: ChatSlots = ctx.slot  # type: ignore[assignment]
     if failure is not None:
-        ctx.emit(
-            wire.patch(slot, TEXT_VALUE, f"\n\n⚠️ 模型出错：{failure}", op="append"),
-            wire.set(STATUS, b.text(f"出错：{type(failure).__name__} · 可以再发一条")),
-        )
+        with ctx.turn():
+            reply.patch(TEXT_VALUE, f"\n\n⚠️ 模型出错：{failure}", op="append")
+            slots.status.set(b.text(f"出错：{type(failure).__name__} · 可以再发一条"))
         return
     if chat.stop.is_set():
-        ctx.emit(
-            wire.patch(slot, TEXT_VALUE, " ⏹", op="append"),
-            wire.set(STATUS, b.text(f"已停止（半句没有进上下文）· {chat.total} 轮")),
-        )
+        with ctx.turn():
+            reply.patch(TEXT_VALUE, " ⏹", op="append")
+            slots.status.set(b.text(f"已停止（半句没有进上下文）· {chat.total} 轮"))
         return
     chat.record("assistant", "".join(pieces))
-    ctx.emit(wire.set(STATUS, b.text(chat.status())))
+    slots.status.set(b.text(chat.status()))
 
 
 @app.dests.register("chat.send")
 def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        ctx.emit(wire.set(STATUS, b.text("这一帧里没有文本字段，什么都没发")))
+        slots = ctx.slot  # type: ignore[assignment]
+        slots.status.set(b.text("这一帧里没有文本字段，什么都没发"))
         return
     send(ctx, state(ctx), text)
 
@@ -230,7 +241,9 @@ def on_send(ctx: Context, frame: dict) -> None:
 def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     if not chat.busy:
-        ctx.emit(wire.set(STATUS, b.text("没有正在进行的回答")))
+        slots = ctx.slot  # type: ignore[assignment]
+        slots.status.set(b.text("没有正在进行的回答"))
         return
     chat.stop.set()
-    ctx.emit(wire.set(STATUS, b.text("正在停止…")))
+    slots = ctx.slot  # type: ignore[assignment]
+    slots.status.set(b.text("正在停止…"))

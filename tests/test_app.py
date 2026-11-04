@@ -136,7 +136,7 @@ class TestTheDemoApp(unittest.TestCase):
         self.assertEqual(device.frames[-1][0]["action"], "create")
         seeds = [frame for frame in frames[:-1]]
         self.assertEqual([op["action"] for frame in seeds for op in frame], ["append", "append"])
-        self.assertEqual({op["slot"] for frame in seeds for op in frame}, {demo.ROWS})
+        self.assertEqual({op["slot"] for frame in seeds for op in frame}, {"rows"})
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
         """A slot outlives a `create`, so the seed is once per device — not once per page turn."""

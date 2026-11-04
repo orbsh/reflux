@@ -65,20 +65,20 @@ def seed_frame() -> dict:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
 wire.create(demo.demo.home()),
-        *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows])
+        *[wire.append("rows", demo.row_node(row)) for row in demo.demo.rows])
 
 
 def section_bytes() -> None:
     turns: list[tuple[str, dict]] = [
-        ("echo (`set`)", wire.draw(wire.set(demo.ECHO, b.text("hello")))),
+        ("echo (`set`)", wire.draw(wire.set("echo", b.text("hello")))),
         (
             "add row (`append`)",
-            wire.draw(wire.append(demo.ROWS, demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
-        ("remove row (`remove`)", wire.draw(wire.remove(demo.ROWS, "row-1"))),
+        ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
         (
             "form submit (`set`)",
-            wire.draw(wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}'))),
+            wire.draw(wire.set("submitted", b.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         ("page turn (`create` + 2 seeded rows)", seed_frame()),
     ]
@@ -126,12 +126,12 @@ def section_mutations() -> None:
 
         turn(
             "narrow: `set` on a data slot",
-            wire.draw(wire.set(demo.ECHO, b.text("measured-echo"))),
+            wire.draw(wire.set("echo", b.text("measured-echo"))),
             "measured-echo",
         )
         turn(
             "list: `append` one row",
-            wire.draw(wire.append(demo.ROWS, demo.row_node({"id": "row-m", "text": "measured-row"}))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-m", "text": "measured-row"}))),
             "measured-row",
         )
         turn(
@@ -246,7 +246,7 @@ def _client(url: str, per_second: int, seconds: float, ready) -> None:
 
 def check_cost() -> list[list[str]]:
     """What the two fences cost per frame — the price M1.5 accepted without a number."""
-    op = wire.set(demo.ECHO, b.text("pong"))
+    op = wire.set("echo", b.text("pong"))
     frame = wire.draw(op)
     uplink = {"dest": "measure.ping", "id": "x", "data": "v"}
     rounds = 3000
@@ -258,7 +258,7 @@ def check_cost() -> list[list[str]]:
         return (time.perf_counter() - start) / rounds * 1e6
 
     return [
-        ["build one `set` op (`wire.set`)", f"{per_call(lambda: wire.set(demo.ECHO, b.text('pong'))):.1f} µs", "closed walk + parse + dump"],
+        ["build one `set` op (`wire.set`)", f"{per_call(lambda: wire.set("echo", b.text('pong'))):.1f} µs", "closed walk + parse + dump"],
         ["outbound fence (`ingest.check_frame`)", f"{per_call(lambda: ingest.check_frame(frame)):.1f} µs", "same walk again, at the socket"],
         ["inbound fence (`ingest.check_uplink`)", f"{per_call(lambda: ingest.check_uplink(uplink)):.1f} µs", "shape only, no node"],
     ]
@@ -266,7 +266,7 @@ def check_cost() -> list[list[str]]:
 
 def section_cpu() -> None:
     app = demo.make_app()
-    app.dests.register("measure.ping", lambda ctx, frame: ctx.emit(wire.set(demo.ECHO, b.text("pong"))))
+    app.dests.register("measure.ping", lambda ctx, frame: ctx.emit(wire.set("echo", b.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()

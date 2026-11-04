@@ -35,6 +35,7 @@ whatever else the app mounts.
 
 from . import sdk, wire
 from .app import App, Context, Device
+from .slots import Slot, Slots
 from .dests import Registry, RegistryError
 from .protocol import HOST_EVENTS, MAX_OPS_PER_FRAME, RESERVED_PREFIX, ROUTES_SLOT
 from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
@@ -50,6 +51,8 @@ __all__ = [
     "Device",
     "CHANNEL",
     "Context",
+    "Slot",
+    "Slots",
     "Request",
     "Response",
     "Registry",

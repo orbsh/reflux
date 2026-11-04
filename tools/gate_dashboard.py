@@ -250,7 +250,8 @@ def socket_phase() -> list[tuple[str, bool, str]]:
                     code == 200
                     and sorted(answered.get("routes") or []) == ["/", "/chat"]
                     and "/status" in (answered.get("mounts") or [])
-                    and "modules" in answered,
+                    and "modules" in answered
+                    and {"status", "messages"} <= set(answered.get("slots") or []),
                     f"{code} keys={sorted(answered)}",
                 )
             )

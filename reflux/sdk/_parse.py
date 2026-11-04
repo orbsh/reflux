@@ -124,6 +124,7 @@ def bind_entry(
             raise ValueError(f"bind[{key!r}]: payload / type / path need an entry to ride on")
         return None
     kind, value = chosen[0]
+    value = getattr(value, "name", value)  # a `Slot` stands for its own name
     entry: dict[str, Any] = {"kind": kind}
     if kind in ("default", "submit"):
         entry["default"] = value  # the variant is unit; its value is the entry's own `default`

@@ -127,7 +127,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             checks.append(
                 (
                     "hello seeds the status line, then draws the page, in two frames",
-                    ops[:2] == ["set", "create"] and hello[0][0].get("slot") == chat_page.STATUS,
+                    ops[:2] == ["set", "create"] and hello[0][0].get("slot") == "status",
                     f"ops={ops}",
                 )
             )

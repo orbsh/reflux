@@ -26,7 +26,7 @@ def status_text(device: FakeDevice) -> str:
     """The last status line a run of frames wrote."""
     for frame in reversed(device.frames):
         for op in frame:
-            if op.get("action") == "set" and op.get("slot") == chat.STATUS:
+            if op.get("action") == "set" and op.get("slot") == "status":
                 return ((op.get("data") or {}).get("bind") or {}).get("value", {}).get("default", "")
     return ""
 
@@ -115,7 +115,7 @@ class Refusals(unittest.TestCase):
         ops = [op for frame in device.frames for op in frame]
         actions = [op.get("action") for op in ops]
         self.assertEqual(actions, ["append", "append", "set", "set"])
-        self.assertEqual(ops[0]["slot"], chat.MESSAGES)
+        self.assertEqual(ops[0]["slot"], "messages")
         self.assertEqual(ops[1]["data"]["id"], "row-bot-1")
         self.assertEqual(ops[2]["slot"], "reply.1")
         self.assertTrue(conversation.busy)
@@ -128,7 +128,7 @@ class Streaming(unittest.TestCase):
         self.conversation = chat.Chat(model=chat.Scripted(window=12), delay=0.0)
 
     def test_a_reply_lands_chunk_by_chunk_and_becomes_a_turn(self):
-        chat.stream(context(self.device), self.conversation, "reply.1", [Turn("user", "你好")])
+        chat.stream(context(self.device), self.conversation, context(self.device).slot("reply.1"), [Turn("user", "你好")])
         expected = "".join(scripted_reply([Turn("user", "你好")], 12))
         self.assertEqual(patched(self.device), expected)
         self.assertGreater(len(self.device.frames), 3)  # many small patches, not one write
@@ -149,7 +149,7 @@ class Streaming(unittest.TestCase):
                     yield piece
 
         conversation.model = Stoppable()
-        chat.stream(context(self.device), conversation, "reply.1", [Turn("user", "hi")])
+        chat.stream(context(self.device), conversation, context(self.device).slot("reply.1"), [Turn("user", "hi")])
         landed = patched(self.device)
         self.assertTrue(landed.startswith("abc"), landed)  # stopped at a chunk boundary
         self.assertIn("⏹", landed)  # and says so in the bubble itself
@@ -167,7 +167,7 @@ class Streaming(unittest.TestCase):
                 yield  # pragma: no cover — the protocol needs a generator
 
         self.conversation.model = Broken()
-        chat.stream(context(self.device), self.conversation, "reply.1", [Turn("user", "hi")])
+        chat.stream(context(self.device), self.conversation, context(self.device).slot("reply.1"), [Turn("user", "hi")])
         self.assertIn("模型出错：boom", patched(self.device))
         self.assertTrue(status_text(self.device).startswith("出错：RuntimeError"))
         self.assertFalse(self.conversation.busy)
@@ -231,7 +231,7 @@ class OneExchange(unittest.TestCase):
         for frame in later[:-1]:
             self.assertEqual([op["action"] for op in frame], ["patch"])
             self.assertEqual([op["slot"] for op in frame], ["reply.1"])  # nothing re-paints the stage
-        self.assertEqual([op["slot"] for op in later[-1]], [chat.STATUS])  # the end is said
+        self.assertEqual([op["slot"] for op in later[-1]], ["status"])  # the end is said
 
 
 class Frames(unittest.TestCase):
@@ -244,7 +244,7 @@ class Frames(unittest.TestCase):
         self.assertEqual(page.type, "case")  # it drew a page instead
         self.assertEqual(len(device.frames), 1)  # the seed left as a send, once
         self.assertEqual(device.frames[0][0]["action"], "set")
-        self.assertEqual(device.frames[0][0]["slot"], chat.STATUS)
+        self.assertEqual(device.frames[0][0]["slot"], "status")
         chat.page(ctx, match)  # a second look seeds nothing new
         self.assertEqual(len(device.frames), 1)
 
