@@ -3,7 +3,7 @@
 
 Two phases, because they answer different questions.
 
-**A. The socket phase** drives `examples.chat` as a client: no browser, no DOM, just the
+**A. The socket phase** drives the application's chat page (`examples.app.chat`, `/chat`) as a client: no browser, no DOM, just the
 frames. That is where the backend's promises live — one conversation per connection, a reply that
 arrives in chunks, a stop that stops at a boundary, a second message refused with a reason, the app's
 own size limit (the protocol has none), and a window that trims while the status line keeps counting.
@@ -25,15 +25,17 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # the cdp fixture
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # the example (examples/chat)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # the example package
 
-from cdp import Cdp, console_errors, open_page, report  # noqa: E402
+from cdp import console_errors, open_page, report  # noqa: E402
 
-from examples.chat.app import MAX_CHARS, make_app  # noqa: E402
-from examples.chat.client import Socket  # noqa: E402
-from examples.chat.model import Scripted  # noqa: E402
+import examples.app as example  # noqa: E402
+from examples.app import chat as chat_page  # noqa: E402
+from examples.app.model import Scripted  # noqa: E402
+from tools.wire_probe import Socket  # noqa: E402
 
-PAGE = "/"
+MAX_CHARS = chat_page.MAX_CHARS
+PAGE = "/chat"  # the chat is one page of the application; `/` is the dashboard
 WINDOW = 4  # small on purpose: the trimming check must not need 30 messages
 
 
@@ -108,7 +110,10 @@ def stop(ws: Socket) -> None:
 
 
 def socket_phase() -> list[tuple[str, bool, str]]:
-    app = make_app(Scripted(window=WINDOW), delay=0.01, window=WINDOW)
+    chat_page.settings.model = Scripted(window=WINDOW)
+    chat_page.settings.delay = 0.01
+    chat_page.settings.window = WINDOW
+    app = example.app
     srv = app.serve(port=0)
     port = int(srv.server_address[1])
     checks: list[tuple[str, bool, str]] = []
@@ -160,8 +165,8 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             stop(ws)
             stopped = read_until(ws, "已停止", limit=10.0)
             partial = patched(early + stopped)
-            session = app.live()[0] if app.live() else None
-            chat = getattr(session, "chat", None)
+            device = app.live()[0] if app.live() else None
+            chat = device.data.get("chat") if device is not None else None
             checks.append(
                 (
                     "stop ends the stream at a boundary and says the half sentence is out",
@@ -212,7 +217,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             for i in range(WINDOW + 1):
                 send(ws, f"填充第 {i} 条")
                 read_until(ws, "就绪", limit=20.0)
-            chat = getattr(app.live()[0], "chat", None) if app.live() else None
+            chat = app.live()[0].data.get("chat") if app.live() else None
             trimmed = getattr(chat, "trimmed", 0)
             checks.append(
                 (
@@ -242,7 +247,10 @@ def socket_phase() -> list[tuple[str, bool, str]]:
 
 
 def browser_phase() -> list[tuple[str, bool, str]]:
-    app = make_app(Scripted(window=WINDOW), delay=0.01, window=WINDOW)
+    chat_page.settings.model = Scripted(window=WINDOW)
+    chat_page.settings.delay = 0.01
+    chat_page.settings.window = WINDOW
+    app = example.app
     checks: list[tuple[str, bool, str]] = []
     with open_page(app=app, path=PAGE, settle=0.6) as (cdp, base):
         body = cdp.eval("document.body.innerText") or ""

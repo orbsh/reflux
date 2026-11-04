@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 
-from examples.chat.client import Socket
+from tools.wire_probe import Socket
 
 __all__ = ["Step", "read_for"]
 
