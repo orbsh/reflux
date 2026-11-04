@@ -3,6 +3,7 @@ name = "reflux"
 version = "0.0.0"
 description = "A spec plus a static shell: write frontend UI in any language"
 requires-python = ">=3.11"
+readme = "README.md"
 dependencies = [
     # The generated SDK's type layer (reflux/sdk/types.py) is pydantic models: the type layer is an
     # off-the-shelf JSON-Schema consumer's output, not something we hand-write (see docs/DESIGN.md
@@ -10,6 +11,30 @@ dependencies = [
     "pydantic>=2",
 ]
 
-[tool.uv]
-# The producer side is code you run from the repo, not a wheel to install.
-package = false
+[project.scripts]
+reflux = "reflux.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+# The page tree stays at the repository root (`www/`) while the wheel carries it as `reflux/www/` —
+# `hatch_build.py` fetches the pinned renderer bundle and copies the tree in, so an installed reflux
+# serves pages without a network request and without the vendored wasm living in git.
+[tool.hatch.build.targets.wheel]
+packages = ["reflux"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+
+# An sdist without `www/`, `vendor/` and `tools/vendor.py` could not build a wheel: the page tree is
+# what the wheel serves and the pin + fetch script are what put the renderer bundle inside it.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/reflux",
+    "/www",
+    "/vendor",
+    "/tools/vendor.py",
+    "/hatch_build.py",
+    "/pyproject.toml",
+    "/README.md",
+]

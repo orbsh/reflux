@@ -22,13 +22,28 @@ The wire between them is one dialect: accrete's eight actions, and a frame **is*
 no envelope (the renderer decodes nothing else). `reflux/wire.py` is that layer, and it is the only
 place a frame is built.
 
+## Install
+
+    pip install reflux            # or: uv add reflux
+
+The wheel is self-contained: it carries the page (`reflux/www/`) with the pinned renderer bundle
+inside it, so a server started from an installed reflux serves pages without a network request and
+without any build step on your side.
+
+    python3 -c "from reflux.demo_app import make_app; make_app().serve_forever(8000)"
+
+The bundle is put in **while the wheel is built** (`hatch_build.py`): it downloads the release
+`vendor/pin.json` names, verifies that the manifest on disk is that revision, and copies `www/` in as
+`reflux/www/`. Building a wheel therefore needs network the first time; running one never does.
+
+From a checkout, the same thing is one command and no build: `python3 tools/vendor.py fetch` puts the
+bundle at `www/static/vendor/fluxen/`, and the server serves the repository's `www/` directly.
+
 ## Requirements
 
 - Python ≥ 3.11 and `pydantic` 2 — the generated type layer is pydantic models
 - `cargo` only if you want to build the Rust SDK
-- the renderer bundle, one command: `python3 tools/vendor.py fetch` (see below)
 
-There is nothing to install: the producer side runs from the repository (the package is not a wheel).
 Everything except the SDK's type layer is standard library.
 
 ## The renderer bundle

@@ -131,6 +131,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - **vals 平面**：`inject` 写的具名值槽，与上面两者分开——事件数据不是展示形态（所以它是裸 `Value`，不是节点）。
 - 渲染器侧的槽是**按路径的惰性订阅**：写某个槽只惊动读它的那些组件，不广播全表。这是「增量」从线上延伸到客户端内部的那一段。
 - **两个地址口径上一视同仁**：`source=`（这条槽）和 `dest=`（那个处理器）都只收 `Slot` 句柄，不收字符串——句柄从同一张表 `ctx.slot` 来，指向哪边是 bind 条目的事，不是调用方的事。名字只写一次，拼错在构造那一行就 `TypeError`，而不是在客户端变成一个永远空的槽或一个没人接的上行。
+- **打包：资产在构建时装进 wheel**（2026-11-05）。`pip install reflux` 得到的服务器必须能直接伺服页面，所以 wheel 里带 `reflux/www/`——`hatch_build.py` 在构建时按 `vendor/pin.json` 取那份 release，校验 `versions.json` 的 rev 与钉住的一致，再把仓库根的 `www/` 整个拷成包内路径。仓库布局不动（`www/` 仍在根），包内那份只存在于 wheel；`PAGE_ROOT` 先认 `reflux/www`，没有再退回仓库根（检出与 editable 安装走后者）。构建需要一次网络，运行永远不需要。`www/static/vendor/` 下除钉住的那份之外（示例的 `g2chart`）不进 wheel——那是示例的事，不是服务器的。
 - **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")`、`ctx.slot["status"]`、`ctx.slot.status` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`b.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。名字会嵌套：`slots.chat.send` 就是 `chat.send`，和 `slots.status` 是 `status` 一样——一份视图读完页面读的槽和它说话的上行，因为两个方向本来就是对偶的（一条槽是页面里的位置，一个 dest 是宿主的处理器，都是名字）。名字原样送上线，框架不解析分隔符，`reply.{seq}` 这种现拼的照样能写。
 - **四个动词在任何层级都优先**：`set`／`append`／`patch`／`remove` 永远是动词，所以名字末尾撞上它们的走上标——`slots.row["remove"]` 是那个 dest，`slots.row.remove` 是删一行。例外只有这一种，且它出现在页面上就说明那个名字该换一个。
 - **写完几处要一起到，就用 `with ctx.turn():`**：块里的每次发送（`ctx.emit`、`ctx.slot.*` 的动词）进同一帧，出块时一起送。一个回合是一个客户端的所见，客户端看到「行、空气泡、状态行」同时出现，比省几帧更值钱。不嵌套——块里的块得先回答它属于哪一帧，而还没有页面需要两帧。

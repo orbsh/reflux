@@ -80,7 +80,11 @@ from .server import CHANNEL, make_server
 # upgrade instead of a request). The difference is what lets `mount("/x")` be a decorator.
 _UNSET = object()
 
-PAGE_ROOT = Path(__file__).resolve().parent.parent / "www"
+# The page tree: `reflux/www` when reflux came from a wheel (the build copies it in, renderer bundle
+# and all), `www/` at the repository root in a checkout or an editable install. Same files either way.
+PAGE_ROOT = Path(__file__).resolve().parent / "www"
+if not PAGE_ROOT.is_dir():
+    PAGE_ROOT = Path(__file__).resolve().parent.parent / "www"
 # The page's assets are addressed from the origin root, so a deep link cannot drag its own
 # references into a subdirectory.
 STATIC_PREFIX = "/static/"

@@ -1006,3 +1006,14 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 实测（demo 首页 + 示例首页）：`declared` 只列叶子名——`chat.send, chat.stop, connect, dashboard.refresh, disconnect, go.chat, go.dashboard, location, routes`。
 
 **验证**：**255 例 OK**；11 个门全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 既有的 F841。
+
+**2026-11-05（用户：「构建时装」——pip 装，前端资源在构建时装进去）**：reflux 成为可安装的包。
+
+- `pyproject.toml`：`[build-system]` hatchling、`[project.scripts] reflux = reflux.cli:main`、`[tool.hatch.build.targets.wheel] packages = ["reflux"]` + custom hook；`[tool.uv] package = false` 删除。sdist 的 include 带 `/www`、`/vendor`、`/tools/vendor.py`、`/hatch_build.py`——少了任何一件，sdist 就是个死胡同（wheel 要 `www` 来伺服，pin 与 fetch 脚本把渲染器装进去）。
+- `hatch_build.py`：构建 wheel 时按 pin 取 release（`tools/vendor.py fetch`），校验 `versions.json` 的 rev；已就位则**不联网**（本地构建可复现）。把 `www/` 逐文件 `force_include` 成 `reflux/www/…`；`www/static/vendor/` 下除 `fluxen` 之外（示例的 `g2chart`）不装。
+- **构建环境的 CA 坑**：uv 托管的解释器把 openssl 默认路径编成机器上不存在的 store 路径（NixOS），第一次构建死在 `CERTIFICATE_VERIFY_FAILED`。`ensure_ca_bundle()` 在 `SSL_CERT_FILE` 缺失/不可用时指向系统 trust store——这是构建环境的事实，不是 release 的问题。
+- `reflux/app.py`：`PAGE_ROOT` 先 `Path(__file__).parent / "www"`（wheel），不存在再退回仓库根（检出/editable）。
+- 新增 `tests/test_packaging.py`（9 例：构建声明、入口点、hook 接线、sdist 能不能出 wheel、wheel 打哪个包、PAGE_ROOT 是目录且有页面、解析位置、框架资产齐、bundle rev 与 pin 一致——bundle 没装时 skip）。
+- **实测**：`uv build --wheel` 产出 `reflux-0.0.0-py3-none-any.whl`（3.0 MB，36 文件）；把本地 bundle 挪走再构建 → hook 联网拉取成功、wheel 里带全 9 个 www 文件；装进干净 venv（`uv venv` + `uv pip install`）后 `make_app().serve_forever(8123)`：`/` 200（`<base href="/">`）、`versions.json` 200、四件资产逐件 200 且 sha256 全对、`reflux.js`/`reflux.css` 200；`reflux --help` 可用。
+
+**验证**：**264 例 OK**；gate_dashboard / chat / ingest / t2 / t6 / t10 全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 既有的 F841。
