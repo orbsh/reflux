@@ -884,3 +884,40 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - **门**：`tools/gate_site.py`——10 条 socket（首帧一帧两条、后续只有槽、深链带 query、内置 404 在槽里、宿主事件三方都响、零拒收）+ 8 条真 Chromium（外框是同一个 DOM 节点、地址栏跟随、后退、标题、深链 `?from=link`、两处零 console error）。
 
 **验证**：203 例 OK（新增 `tests/test_shell_and_events.py` 18 例，`FakeSession` 补了 `query` / `connected` / `shell_drawn`）；`gen_sdk --check` in sync；`gate_t4`、`gate_t6`、`gate_t9`、`gate_ingest`、`gate_chat`、`gate_site` 全绿；`gate_t10` 8/8（7 帧逐字节，SDK 未动）；`walkthrough --auto` 六步的输出与门里的断言一致。
+
+### 2026-11-03 — 一个连接是一台设备，而通道是一条路由
+
+**触发**：用户裁决四条——不要 session（一台设备＝一条连接；一个用户可有多台，共享还是分离是业务的账；与 prism 的语义一致）；发送动词用 `emit`（`draw` 归 accrete 的 DSL，它是造帧的那个函数）；连接对象要能挂业务数据（登录状态、用户名）；WS 是**一条路由**，`main` 里挂到路径下，用户还能挂别的；示例里在 Python 侧写「客户端」是错的——这个框架里客户端就是页面，服务端只是一堆 `@app.dests.register`。
+
+- **重命名**：`Session` → `Device`，全仓 551 处标识符与散文一起改（`tests/test_session.py` → `test_device.py`）；文档里「会话」全部改「设备」，DESIGN 的「会话与身份」重写为「设备与身份」，写死三条推论：设备不是用户、身份是连接之后的一帧普通消息、恶意连接归网关。
+- **接口**：`device.emit(*ops)` 发一帧（`wire.draw` 保留为造帧）；`device.data` 挂业务数据（框架不读不校验不清）；`app.device(id)` 反查；`app.evict(id=… | where=…, reason=…)` 走 `_gone` 同一道门（close code 4002，`disconnect` 的 reason 多一个 `evicted`）。
+- **通道即路由**：`App.mounts` 默认 `{"/ws": CHANNEL}`，`App.mount(path, handler)` / `App.unmount(path)`；`Request`（method/path/query/headers 小写/peer/body）与 `Response`，路由答 `Response` / `(status, body)` / 正文，`None` 是 404，抛异常是 500；`server.py` 里唯一的特例是一处 `is CHANNEL`，`WS_PATH` 不再被 server 硬编码；非升级的 `GET /ws` 回 426，无处可去的 POST 回 405。
+- **示例**：`examples/chat/client.py` → `tools/wire_probe.py`（定位成探针，docstring 明写「这不是客户端」），五个导入点改指；chat 的会话状态从 `setattr(device, …)` 改挂 `device.data`。
+- **不做**：握手准入回调、cookie 认证、框架自带的 login/signup 宿主事件——WS 核心型里没有已认证的 HTTP 会话可借，登录是业务自己的一条下行表单加一个普通落点；`connect` / `location` / `disconnect` 三个宿主事件不动。
+
+**验证**：219 例 OK（`tests/test_devices_and_mounts.py` 新增 16 例，全部走真服务器与真 socket：路由四种返回、POST body、500 不塌、移动通道、426、`device(id)`、`data` 随连接消失、`emit` 计数、`evict` 两种目标、登录取形）；`gen_sdk --check` in sync；`gate_t4`、`gate_t6`、`gate_t9`、`gate_ingest`、`gate_chat`、`gate_site` 全绿；`gate_t10` 8/8（SDK 未动）。gate_chat 里两处读 `getattr(device, "chat")` 的断言随状态搬家改成 `device.data.get("chat")`——那是示例如实反映新接口，不是放宽门槛。
+
+### 2026-11-03 — 示例照框架文档的样子写：一个 app，一串装饰器
+
+**触发**：用户审 `examples/site/app.py` 指出结构错——页面声明在根级、处理器却藏在 `make_app()` 里，该放一起的分了两层，装饰器因此没有意义（注册对象是个工厂里的局部变量，声明与实现隔着一层缩进）；要求照一般 web 框架文档的写法来：一个 app，声明贴着实现，读下来是直的。
+
+- **`App.route(path, *, layout=…, **meta)`**：把路由声明挂到 app 上（`@app.route("/", title="首页")`），是 `self.routes.add` 的语法糖。模块级 `@route` 仍是「写进默认表」那条路（`discover` 与裸 `App()` 读它），两者是同一次注册的两种挂法，文档里写清什么时候用哪个。
+- **`examples/site/app.py` 重写**：`app = App(routes=Routes(), shell=shell)` 一处，之后每个页面 `@app.route` 直接压在处理器上方，两个导航落点与三个宿主事件同为 `@app.dests.register`；`make_app()` 删除（它没有参数，作用只是把同一批声明往下挪一层）。示例自己的事件日志改成模块级 `heard`，walkthrough 与门直接读。
+- **`gate_site` / `walkthrough`** 随之改导入；浏览器段与 socket 段共用一个 app（`start_watchdog` 重新装 stop 标志，`serve` 二次可用——这本身是个修正：`stop()` 之后同一个 app 再也起不来）。
+- **`examples/chat` 保留工厂**：模型是构造参数，门要在一个进程里跑两份不同的模型实例；那里 `make_app(model, …)` 有真实的输入，不是把声明挪层。
+
+**验证**：225 例 OK（新增 `tests/test_app_route.py` 6 例：落到 app 自己的表、默认表不动、叠装饰器成别名、撞键即报错、裸 `App()` 读默认表、`layout` 同行）；七道门全绿（t4 / t6 / t9 / ingest / chat / site 18/18 / t10 8/8）；`gen_sdk --check` in sync；README 里两段示例照原文各跑一遍（首帧 `create` + `set(routes)`，翻页只有 `set(routes)`）。
+
+### 2026-11-03 — 一个应用，一个页面一个文件：概览 + 对话
+
+**触发**：用户指出示例还是玩具——「页面内部没有结构，就是一个菜单栏，几条路由来回跳」——并要求把两个示例合成一个：首页是 dashboard（折线图、雷达图之类的图表，加一个 3D 播放器），另一条路由是聊天；随后定下「一个页面一个文件」。
+
+- **`examples/app/`**：`app.py`（app、外框、宿主事件、`main()`）、`dashboard.py`（`/`）、`chat.py`（`/chat`）、`model.py`、`walkthrough.py`；`examples/site/`、`examples/chat/` 删除。路由靠 import 声明：一个页面一个模块，声明压在处理器上方，没有工厂，也没有一张要维护的清单。
+- **概览页**：`b.chart(value=<G2 语法>)` 折线（`line`）与雷达（`area` + `polar` 坐标），`b.canvas(url="/assets/3dbrowser/index.js", value={"assets": …})` 是 3D 视口；「换一组数据」= 一次页面重画。**坑**：chart 节点没有高度字段，尺寸靠容器量出来——`b.group(style={"height": …})` 在渲染器里落成 `<g>`，量到 0×0（图空白）；要给容器确定高度只有 `b.case(..., grid={"grid-template-rows": "260px"})`。
+- **对话页**：原聊天示例整段搬进 `chat.py`，模型／延迟／窗口从工厂参数改成模块级 `settings`（`main()` 从命令行填），`make_app` 删除；测试与门改读 `settings` 与模块级 `app`。
+- **框架**：`App.mount(path, directory)` 支持目录挂载——表项是 `str`/`Path` 时服务器按文件逐个发（前缀按最长匹配，带尾斜杠），页面的模块与模型因此不必塞进 callable 自己解析；`App.route(path, …)` 把页面声明挂到 app 上（上一轮）。
+- **门**：`tools/gate_site.py` → `tools/gate_dashboard.py`（17 条：socket 12 + Chromium 5，看的是「页面里真有两个 chart + 一个 canvas」「模块真被挂载并 200」「翻页只写槽」）；`gate_chat.py` 改指 `/chat`。
+
+**验证**：229 例 OK（新增 4 例目录挂载：文件 200、缺文件 404、与通道并存、撞键报错）；`gate_dashboard` 17/17；`gate_chat` 12/12；`python3 -m examples.app.walkthrough --auto` 六步跑通；Chromium 截图确认两张图与 3D 都画出来（640×260 / 640×320 / 640×320）。3D 模块从 fluxen 的 `examples/renderer/assets` 挂载（28MB 不进仓，`REFLUX_ASSETS` 可覆盖），图表模块 1.1MB 随仓。
+
+**过程中三个「页面全白」的坑**（外面看都一样的空 `#main`、无 console error、`refused=0`）：页面钩子抛异常（`markers.page(path, title, *children)` 不吃 `grid=`）时框架一帧都不发；G2 spec 顶层写 `chart` 会被模块拒（`mount rejected: Unknown Component: composition.chart`，只在 console 里）——顶层只能是 mark（`line`/`area`）或 `view`，雷达是 `view` + polar + `[area, line]` 子节点，`axis.y: false` 去掉那圈数字轴（否则压住顶部维度标签），`scale.x` 的 `padding: 0.5 / align: 0` 就是 N 轴等分配方；模块文件不在盘上时 chart/canvas 只留空格——所以两张卡都改成「不在就写一句说明」而不是画空盒。外框现在自己占 `100vh`（`grid-template-rows: auto 1fr`），页面才能说「剩下的都给我」（聊天页的 rack 因此有得滚，输入框落到底部）。

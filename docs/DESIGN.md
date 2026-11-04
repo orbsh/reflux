@@ -2,10 +2,10 @@
 
 状态：方向已裁决 · 2026-10-16 · 仓库 `reflux`
 
-Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux 是它外面那一层——页面、路由、会话、线、伺服、SDK、门。分工是 Next 之于 React 的那种。
+Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux 是它外面那一层——页面、路由、设备、线、伺服、SDK、门。分工是 Next 之于 React 的那种。
 
 - **词表的单一来源是 accrete 的类型**：fluxen 的线就是 accrete 的线，`cargo run -q -p stage -- schema` 把它导成 draft 2020-12 的 JSON Schema，各语言 SDK 由它生成，不手写第二份词表。
-- **渲染器只有 fluxen 一个**：它的包由维护者构建一次、钉死版本伺服给消费方，消费方零工具链。页面路径、会话、线是 reflux 的事，不进那个包。
+- **渲染器只有 fluxen 一个**：它的包由维护者构建一次、钉死版本伺服给消费方，消费方零工具链。页面路径、设备、线是 reflux 的事，不进那个包。
 - **框架的客户端 runtime 很小**（握手、URL 与标题的镜像），作为独立文件挂在 fluxen 的包旁边——不自己渲染，也不进包。
 - **服务端只持有它业务上需要的值**，并在事件边界接收组件随事件送上来的那一份状态。
 
@@ -36,7 +36,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 
 ## 协议
 
-传输是每会话一条 WebSocket，帧定义用 fluxen 的那套（它的 `content` crate）：下行是 `Content` 的**数组**——一帧就是动作列表，没有信封；上行是 `Outflow { dest, id?, data }`。一个 socket 上两套帧定义就是永久的一致税，所以这里没有第二套。
+传输是每设备一条 WebSocket，帧定义用 fluxen 的那套（它的 `content` crate）：下行是 `Content` 的**数组**——一帧就是动作列表，没有信封；上行是 `Outflow { dest, id?, data }`。一个 socket 上两套帧定义就是永久的一致税，所以这里没有第二套。
 
 ```
 下行  [{"action": "create", "slot": "", "data": {...}}]
@@ -49,7 +49,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - **框架没有下行帧**：`reflux:hello` 与 `reflux:nav` 都是上行（`Outflow` 的 `data` 是自由的，正合它们的载荷），它们要的东西由下行的一次动作列表回答，存活走协议层 ping。要给框架一类自己的下行帧，那不是给帧加字段（连信封都不在了），而是给它另一条腿——今天不需要（见「Why Not」）。
 - 一回合一批而不是一操作一帧：一个处理器可能改动多处，成批才让一个回合在客户端看来是一个整体（`content` 本来就是 `OneOrMany`）。
 - 编解码两边都认 JSON 与 CBOR（`ActiveCodec`）：先只走 JSON，帧本来就小（操作是增量、结构低频），第二种编码意味着第二份要和第一份同步的 schema；什么时候切由实测定，不由预感定。
-- 下行帧不直接写 socket：每会话一条**有界出帧队列**，由它自己的写线程送出（写是唯一会被客户端拖住的一步，慢客户端只能拖住它自己那条线程）。队列满时丢中间帧并标记陈旧，排空后用一帧 `create` 重同步——细节见「失败模式」。
+- 下行帧不直接写 socket：每设备一条**有界出帧队列**，由它自己的写线程送出（写是唯一会被客户端拖住的一步，慢客户端只能拖住它自己那条线程）。队列满时丢中间帧并标记陈旧，排空后用一帧 `create` 重同步——细节见「失败模式」。
 
 ### 连接与握手
 
@@ -59,15 +59,15 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 {"dest": "reflux:hello", "data": {"path": "/settings", "query": "?tab=profile"}}
 ```
 
-连接那一刻生产者还不知道客户端站在哪条路径上，先发会先出一棵错的树、再改一次。hello 交上的那两件只有客户端知道的事就是地址栏：**路径**与**查询串**。查询串原样上交（`location.search`，带不带 `?` 都收），落在 `session.query` 上，同一个键出现几次就留几个值（`?tag=a&tag=b` → `{"tag": ["a", "b"]}`）；`?q=` 与没有 `q` 是两件事，空值不留也不猜。深链由此成立，粘贴一条带查询串的地址也一样——第一帧就是那一页。
+连接那一刻生产者还不知道客户端站在哪条路径上，先发会先出一棵错的树、再改一次。hello 交上的那两件只有客户端知道的事就是地址栏：**路径**与**查询串**。查询串原样上交（`location.search`，带不带 `?` 都收），落在 `device.query` 上，同一个键出现几次就留几个值（`?tag=a&tag=b` → `{"tag": ["a", "b"]}`）；`?q=` 与没有 `q` 是两件事，空值不留也不猜。深链由此成立，粘贴一条带查询串的地址也一样——第一帧就是那一页。
 
 **为什么不是握手 URL 上的查询参数。** socket 是渲染器打开的（地址按页面的 `data-path` 定），reflux 的 runtime 拿不到那条 URL；而 `reflux:hello` 就是这个协议的第一步，它已经在连接这一刻，早一帧没有意义。地址栏没有查询串时 `query` 这个字段**不写**（与 `append` 的 `position` 同一条规矩：字段没有信息时不上线），所以一个只是打开 `/a` 的客户端交上来的仍是 `{"path": "/a"}`。
 
 `reflux:nav` 带同一对字段（见「客户端 runtime」）：后退/前进时浏览器已经把地址栏换了，上行只是告诉生产者那一个是哪个。
 
-已落地（T4）：壳连上 `/ws` 即发 hello，生产者的应用在收到它时发出这个会话的首帧（一帧里既有 `create`，也可以顺手把视图要读的槽播下去）。hello 不带任何凭证：会话就是连接（见「会话与身份」）。首帧入队之后，框架对应用 raise 一次 `connect`（见「宿主事件」）。
+已落地（T4）：壳连上 `/ws` 即发 hello，生产者的应用在收到它时发出这个设备的首帧（一帧里既有 `create`，也可以顺手把视图要读的槽播下去）。hello 不带任何凭证：设备就是连接（见「设备与身份」）。首帧入队之后，框架对应用 raise 一次 `connect`（见「宿主事件」）。
 
-传输落地的形状：`reflux/channel.py`（HTTP 升级 + 文本帧编解码，stdlib）、`reflux/dests.py`（上行落点注册表）、`reflux/app.py`（伺服壳 + `/ws` + 注册表；一个连接一个 session）。
+传输落地的形状：`reflux/channel.py`（HTTP 升级 + 文本帧编解码，stdlib）、`reflux/dests.py`（上行落点注册表）、`reflux/app.py`（伺服壳 + `/ws` + 注册表；一个连接一个 device）。
 
 ### 组件形状
 
@@ -204,7 +204,7 @@ SDK 的职责只有三件：
 - **绑定**：把组件挂到上行落点与数据槽上。
 - **收事件、改数据、推回槽**：事件到达时跑处理器，把变化的数据 `patch` 进槽（必要时才动结构）。
 
-处理器收到的是一整帧：`handler(session, frame)`，`frame.data` 就是组件送上来的那份（`Outflow` 的 `data`），`frame.dest`／`frame.id` 是要送达的落点与行身份。会话用它这一回合的改动组一帧发出（`session.draw(*ops)`）——一个处理器改了几处，客户端看到的就是一个回合。
+处理器收到的是一整帧：`handler(device, frame)`，`frame.data` 就是组件送上来的那份（`Outflow` 的 `data`），`frame.dest`／`frame.id` 是要送达的落点与行身份。设备用它这一回合的改动组一帧发出（`device.emit(*ops)`）——一个处理器改了几处，客户端看到的就是一个回合。
 
 **SDK 的构造器与类型由 schema 与 profile 生成**，不由人手写——这是 I5 的落点，也是「换个语言就能用」的前提。落地的形状（Python 是第一个）：`schema/accrete.schema.json` 是 fluxen 导出物的快照（`tools/sync_schema.py` 在对拍；它要那个仓，所以不进默认门），`profile/profile.json` 是 reflux 的选择与默认；`tools/gen_sdk.py` 用它调 datamodel-codegen 出类型层、再对着实测修形，构造器面按 schema 的类型与 profile 的选择生成，落在 `reflux/sdk/`（`types.py`、`builders.py` 生成；`_parse.py`、`profile.py` 手写）。**为什么要修形**：那份原始输出把 30 个臂里 18 个的 `type` 判别式丢了（实测 `{"type":"float"}` 验成 `Case`），`bind` 压成了 `dict[str, Any]`，`PositionAttr` 的扁平键整批消失——修形是对着实测的，不是口味。生成器自己也有过一处：列表参数（`rack.item`）缺省 `None` 时被写成 `list(item)`，一建 rack 就 TypeError——现在是 `list(item) if item else None`（M1.4 的门第一次建 rack 时撞上的）。门：`python3 tools/gen_sdk.py --check` 与 `python3 -m unittest tests.test_sdk_generated`。
 
@@ -216,7 +216,7 @@ SDK 的职责只有三件：
 
 *可选的便利层*：SDK 可以额外提供「声明一个视图、由框架重渲染 + diff 算出操作」的写法，用于「结构本身依赖数据」的场合。但它是便利层，不是每事件的路径：默认路径是处理器直接推那几条数据操作，服务端不参与画界面。
 
-*为什么不让服务端持有界面状态*：那会把每会话的成本顶到「一棵树 × 每事件 O(树)」的量级（实测：750 节点树重建 + diff 0.37 ms/回合/会话，100 会话各 50 事件/秒吃满两核；2026-10-20 复测现在这个形状——服务端只发操作——**100 µs/帧**、同样的负载约 0.5 核，见 `docs/PERF.md`），并且造出影子状态——同一个值在服务端和壳各有一份，谁是真的一直要讨论。适用边界不装作不存在：复杂表单、多步流程、**服务端渲染下一步**这类场景确实需要服务端看到状态，那时的正形是**让组件把这份状态随事件带上去**（送什么由组件定，见「组件形状」），不是让服务端私自持有。
+*为什么不让服务端持有界面状态*：那会把每设备的成本顶到「一棵树 × 每事件 O(树)」的量级（实测：750 节点树重建 + diff 0.37 ms/回合/设备，100 设备各 50 事件/秒吃满两核；2026-10-20 复测现在这个形状——服务端只发操作——**100 µs/帧**、同样的负载约 0.5 核，见 `docs/PERF.md`），并且造出影子状态——同一个值在服务端和壳各有一份，谁是真的一直要讨论。适用边界不装作不存在：复杂表单、多步流程、**服务端渲染下一步**这类场景确实需要服务端看到状态，那时的正形是**让组件把这份状态随事件带上去**（送什么由组件定，见「组件形状」），不是让服务端私自持有。
 
 ## 客户端 runtime
 
@@ -312,13 +312,17 @@ apply(frame):                       // frame 就是动作数组（壳时代还�
 路由在生产者侧声明（由 SDK 提供形状），注册进一张按路径为键的表——匹配器只认那张表。
 
 ```python
-@route("/blog/{slug}", title="文章")
-def post(session, match): ...        # 返回结构（组件树）；match 是一次匹配：路径、参数、来自哪条声明
+app = App()                          # the table a page is declared on: this app's own
 
-@route("/")                          # 别名：同一个处理器挂第二个路径，叠一个装饰器
-@route("/posts")
-def post_index(session, match): ...
+@app.route("/blog/{slug}", title="文章")
+def post(device, match): ...         # 返回结构（组件树）；match 是一次匹配：路径、参数、来自哪条声明
+
+@app.route("/")                       # 别名：同一个处理器挂第二个路径，叠一个装饰器
+@app.route("/posts")
+def post_index(device, match): ...
 ```
+
+`@route(...)` 与 `@app.route(...)` 是同一次注册调用的两种挂法：前者写进模块级默认表（`App()` 不带参数时读它，`discover` 也是往那儿写），后者写进那个 app 自己的表。**一个文件只写一个 app 时用后者**——声明挂在页面所属的对象上，文件从头到尾就是「一个 app，一串装饰器」，不必先建一张表再交给构造函数（`examples/app/` 即此形态：`app.py` 建 app，`dashboard.py` 与 `chat.py` 各是一页，声明就压在处理器上方）。
 
 - 路径挂在处理器上，声明与实现同处一地——没有一张要和代码对齐的中心清单，也就没有那份清单可以漂移的地方。
 - 注册器就是按路径为键的字典：同一条路由登记两次不必靠查重规则去拦，撞键即报错。
@@ -328,7 +332,7 @@ def post_index(session, match): ...
 - **匹配按一条明确的择优键**（四个词，先到先判）：`静态段数` 多者胜 → `不含尾兜底` 者胜 → `段数` 多者胜 → `捕获段数` 少者胜。静态压过 `{name}`、`{name}` 压过 `{name:path}` 都是它的推论。注册顺序不参与判定——结果不能取决于 import 顺序。
 - 同一路径注册两次即报错，不做「后写覆盖」；两条**能匹配同一条具体路径**且**择优键相同**的形状（如 `/x/{a}` 与 `/{b}/y` 之于 `/x/y`），启动即报错——歧义不靠注册顺序解决，顺序是运气不是意图。键不同就让规则决定输赢（`/x/y` 与 `/x/{a}` 都匹配 `/x/y`，静态多的那条赢）。
 - 请求路径按**逐段**百分号解码（`%2F` 不许裂段），静态段与捕获段都按解码后的文本比较。
-- `layout` 是一个普通 callable：`layout(session, match, page)`，页面由它自己安排（没有 outlet、没有嵌套机制）。`Match.resolve(session)` 把两者组成这一页的结构——导航那一侧只需要调它。
+- `layout` 是一个普通 callable：`layout(device, match, page)`，页面由它自己安排（没有 outlet、没有嵌套机制）。`Match.resolve(device)` 把两者组成这一页的结构——导航那一侧只需要调它。
 - `python3 -m reflux.cli routes <package>` 打印注册表（路径、来源模块、元数据字段）；`python3 -m reflux.cli dests <module>:<attr>` 打印**上行落点注册表**（名字、`builtin`/`app`、来源 `module.qualname`），`attr` 是可调就用它的返回值、是 `App` 就直接用。两个动词的 source 列同一个规矩：写哪儿报哪儿。
   目标写法是显式的 `module:attr`，**不猜**（不试 `make_app`、再试 `app`）——猜出来的约定没人找得到，错误信息直接说形状并停下。表里只有注册表本身，`calls`／`refused`／`log` 不进来：那是运行中的数字，混进「存在什么」会让新进程看起来像有数据。这条动词**没有 Rust 对应物**：注册表属于宿主（`App` 实例），不属于生产者的词表。
 
@@ -337,7 +341,7 @@ def post_index(session, match): ...
 一个站点通常有**不随页面变的那一层**：标题、导航、页脚。把它交给框架重画一遍是浪费，也会让每换一页都闪一下。所以 `App(shell=…)`：
 
 ```python
-def shell(session):
+def shell(device):
     return b.case(
         b.text("示例站点", variant="heading-1"),
         b.form(b.button("首页"), dest="go.home"),
@@ -348,50 +352,70 @@ def shell(session):
 - 连接时的首帧是**一帧两条**：`create(shell)` 加 `set("routes", 页面)` —— 外框和首页一起到，客户端不会先看到空壳。
 - 之后的每一次页面切换只写 `routes` 槽（`set`），外框不再出现在帧里。**这是唯一被改写的操作**：页面自己的 `create` 落成 `set("routes", …)`，其余操作（顺手播种的槽）原样跟在后面。
 - 槽名 `routes` 是框架保留的（`protocol.ROUTES_SLOT`），但读取器是**应用写的**——外框是应用的视图，框架只往这个名字里写。所以「槽名归供应基础视图的一方」没有破例：声明在这里，写入在那里。
-- 外框没给就是单页应用：页面每帧替换 layout root（`examples/chat`），`routes` 这个槽名不出现。
+- 外框没给就是单页应用：页面每帧替换 layout root（`demo_app` 是这一形态），`routes` 这个槽名不出现。
 - 页面在外框模式下**必须产出结构**（一个节点，或自己的 `create`）：没有结构就抛错，否则槽里还留着上一页，客户端看起来一切正常，直到有人点一下。
 - 客户端陈旧触发的重同步会**连外框一起重发**（清掉「外框已画」的标记再画），丢帧的客户端可能正是没收到那条 `create` 的那一个。
 
 **路由切换就是客户端 runtime 请求一次新结构**（`reflux:nav` → 匹配 → `create`，回来的那帧里还带新的路径标记）：结构是低频的，这条不违背「服务端不画界面」。深链也一样靠 hello 带路径，代价说白：没有服务端渲染，深链要多等一次连接往返才出界面——是延迟，不是错误（**这一次往返的毫秒数未测量**，见 `docs/PERF.md` 末节；要和服务端渲染的形态并列才有结论）。
 
-落地的那一侧是应用的一个钩子：`app.page(session, path)` 给出一页——**一个节点，或这一帧的操作表**（后者是应用顺手播种它要读的槽的方式）。默认实现就是路由表解析；单页应用覆盖它，连路由都不必声明，`App.view` 这个中间名因此退休。匹配不到、又没有 `{rest:path}` 兜底时，框架回**内置 404 结构**（用写入层搭的一个 spec 合法节点）——想自己 404 就注册一条尾兜底路由，它是一次普通匹配，按规则赢。
+落地的那一侧是应用的一个钩子：`app.page(device, path)` 给出一页——**一个节点，或这一帧的操作表**（后者是应用顺手播种它要读的槽的方式）。默认实现就是路由表解析；单页应用覆盖它，连路由都不必声明，`App.view` 这个中间名因此退休。匹配不到、又没有 `{rest:path}` 兜底时，框架回**内置 404 结构**（用写入层搭的一个 spec 合法节点）——想自己 404 就注册一条尾兜底路由，它是一次普通匹配，按规则赢。
 
 深链与刷新还要求**伺服进程把页面路径交给客户端**：路径没有扩展名、也不是一个真实文件时，回 `index.html`（客户端起来之后再问生产者那条路径是什么页面）。没有这条，`/blog/x` 会 404 到客户端都起不来，整类深链直接不成立。
 
-## 会话与身份
+## 设备与身份
 
-一个连接一个会话：会话持有**路由、身份、它要推送数据的目标**——不持有界面状态，也不持有整棵组件树（那是壳的）。一百个会话就是一百份小记录。
+一个连接一个**设备**：设备持有它的地址（路径与查询串）、业务挂在它上面的数据、它要推送的目标——不持有界面状态，也不持有整棵组件树（那是壳的）。一百台设备就是一百份小记录。
 
-- **会话就是连接**：起于连接打开，止于断线或判死。没有跨连接的身份凭证——socket 本身就是持续连接，状态活在连接里；「让刷新接回同一个会话」是把无状态世界的道具搬进来，而这里没有那个问题（刷新回到初始是正常表现，见本节末）。所以 hello 只带地址（路径与查询串）。
-- **身份是连接上的一个事件**（对外提供服务的部署才需要）：连接无条件建立，随后由应用注册的 `login` 事件把身份挂到会话上。框架不预设鉴权，也没有任何连接前的前置条件——凭证不进 URL、不进 cookie、不进日志。
-- **心跳与判死**：WS 长连接会留半开连接——客户端不见了、TCP 没关，断线事件永远不会来。按固定间隔（默认 10s）发协议层 ping，超过阈值（默认 30s）没有入站活动就判死：告知、**关掉 socket**（只关描述符唤不醒阻塞在 `read` 上的线程，`shutdown` 才行）、从表里删。会话表只在断线与判死两处删，且按连接身份删——没有线程能删掉不属于它的会话；判死那条先出表、再记账，所以同一个会话不会被计两次（`dead` 与 `reclaimed` 是两种不同的收场）。
-- 会话表与计数在应用上（`issued` / `reclaimed` / `dead`），要看现在的会话用 `App.live()`（快照）；日志里每个生命周期带会话 id（短随机，只为可读，不是安全边界）。
+- **设备就是连接，不是用户**：一个用户可以同时握着几台（一个标签页一台，手机又一两台），它们之间共享什么、怎么合并，是业务自己的账，框架不参与。所以框架里没有「会话」这个更上层的概念——多出来的那一层只会替业务做它自己的决定。
+- **起于连接打开，止于断线、判死或驱逐**。没有跨连接的身份凭证——socket 本身就是持续连接，状态活在连接里；「让刷新接回同一台设备」是把无状态世界的道具搬进来，而这里没有那个问题（刷新回到初始是正常表现，见本节末）。所以 hello 只带地址（路径与查询串）。
+- **业务数据挂 `device.data`**。登录状态、用户名、权限位，挂什么都行；框架不读、不校验、不清，连接没了它跟着没。退出登录就是删一个键，撤销某人所有连接就是 `app.evict(where=...)` 按挂的东西挑。
+- **身份是连接之后的一次普通消息**（对外提供服务的部署才需要）：连接无条件建立、允许匿名；需要登录时，应用画一张登录表单（那就是一条下行消息），表单上行到一个普通落点，处理器验完（可以调外部服务，框架不管这一层）把结果挂到 `device.data` 上，再 `emit` 一帧换界面。框架不预设鉴权，也不拥有注册/登录事件——那件事没有需要它替业务决定的部分。凭证因此从不经过框架：表单字段直接进业务的处理函数，不进 URL、不进日志。
+- **恶意连接不是业务层的事**：TLS、限流、IP 信誉在网关与边缘；框架只管两件——这条连接还活着吗，这台设备上挂的是什么。它能提供的就是 `app.device(id)`（按 id 取一台）与 `app.evict(id=… | where=…)`（踢掉，走断开那条路）。
+- **心跳与判死**：WS 长连接会留半开连接——客户端不见了、TCP 没关，断线事件永远不会来。按固定间隔（默认 10s）发协议层 ping，超过阈值（默认 30s）没有入站活动就判死：告知、**关掉 socket**（只关描述符唤不醒阻塞在 `read` 上的线程，`shutdown` 才行）、从表里删。设备表只在断线、判死与驱逐三处删，且按连接身份删——没有线程能删掉不属于它的设备；判死那条先出表、再记账，所以同一台设备不会被计两次（`dead` 与 `reclaimed` 是两种不同的收场）。
+- 设备表与计数在应用上（`issued` / `reclaimed` / `dead`），要看现在的连接用 `App.live()`（快照）或 `App.device(id)`；日志里每个生命周期带设备 id（短随机，只为可读，不是安全边界）。
 
 界面工作态不在服务端，所以**刷新后界面回到初始**是这套设计的正常表现，不是 bug。要跨刷新保留，走显式机制（组件把关键值随事件带上、由生产者存进它的业务数据），不用 localStorage 偷偷兜。
 
+## HTTP 侧：一张挂载表
+
+页面之外的那一半（socket、健康检查、别人的回调）是**一张路由表**，socket 也在里面：
+
+```python
+app = App()
+app.unmount("/ws"); app.mount("/socket")        # 通道换个路径
+app.mount("/health", lambda request: "ok")      # Request 进，Response / (status, body) / 正文 出
+app.mount("/assets/chart", path)                # 一个目录：按文件逐个发，不经过任何 callable
+```
+
+- 默认表是 `{"/ws": CHANNEL}`——socket 是一条普通路由，不是服务器的特殊情况：`server.py` 里唯一的区别是一处 `is` 判断（表项是 `CHANNEL` 就升级，否则当 callable 调），`WS_PATH` 那个常量因此退休。
+- `App.mount(path, handler)` 撞键即报错（与路由表同一条规矩），`App.unmount(path)` 移走；换路径 = 先移后挂。
+- 用户路由拿到只读的 `Request`：`method`、`path`、`query`（重复键保留全部值）、`headers`（键已小写）、`peer`、`body`。答回去可以是 `Response`、`(status, body)` 或正文本身；`None` 是 404；处理器抛异常 = 500 且服务器继续服务——业务的缺陷是业务的。
+- **表项可以是目录**：`app.mount("/assets/chart", path)` 把那棵目录树挂上去，服务器按文件逐个发（前缀匹配长的那条优先）。页面的模块与模型是文件而不是路由——图表模块、3D 模块、`.glb` 都走这一条，页面因此不必把它们塞进一个 callable 里自己解析。
+- 这一层刻意薄：reflux 不是 HTTP 框架。要模板、中间件栈、静态站点，把请求交给真正的服务器；这里只留「同源的一个路径，几个函数」。
+
 ## 宿主事件
 
-三个名字是**宿主**的，不是线上的地址：`connect`（hello 落地）、`location`（客户端导航了）、`disconnect`（会话结束）。它们注册的方式和别的名字一样，形状也一样（`handler(session, frame)`，`frame.data` 带地址）：
+三个名字是**宿主**的，不是线上的地址：`connect`（hello 落地）、`location`（客户端导航了）、`disconnect`（设备结束）。它们注册的方式和别的名字一样，形状也一样（`handler(device, frame)`，`frame.data` 带地址）：
 
 ```python
 @app.dests.register("connect")
-def on_connect(session, frame):
-    session.draw(wire.set("hello", b.text(f"来自 {session.path}")))
+def on_connect(device, frame):
+    device.emit(wire.set("hello", b.text(f"来自 {device.path}")))
 
 @app.dests.register("location")
-def on_location(session, frame):
+def on_location(device, frame):
     print("客户端走到了", frame["data"]["path"])
 
 @app.dests.register("disconnect")
-def on_disconnect(session, frame):
-    print("走了", session.id, frame["data"]["reason"])   # reason: "closed" 或 "dead"
+def on_disconnect(device, frame):
+    print("走了", device.id, frame["data"]["reason"])   # reason: "closed" 或 "dead"
 ```
 
 纪律四条：
 
 - **客户端不能发它们**：入站校验整帧拒收（`ingest.check_uplink`），所以「我连上了」「我要去 /x」不能由帧伪造——`connect` 只在你真的连上时响，`location` 只由 runtime 的 `reflux:nav` 触发（浏览器已经把地址栏换了）。
-- **先画，再通知**：`connect` 在首帧入队之后 raise，`location` 在那一页画完之后 raise。处理器里再 `draw` 的帧落在一张已经存在的页上，不会压在它之前、也不会被它盖掉。
-- **`connect` 一个会话只响一次**（再来一帧 hello 只是重画），`disconnect` 也只有一个赢家：读线程与心跳看门狗都走同一处出表代码，先到的那次 raise。
+- **先画，再通知**：`connect` 在首帧入队之后 raise，`location` 在那一页画完之后 raise。处理器里再 `emit` 的帧落在一张已经存在的页上，不会压在它之前、也不会被它盖掉。
+- **`connect` 一个设备只响一次**（再来一帧 hello 只是重画），`disconnect` 也只有一个赢家：读线程与心跳看门狗都走同一处出表代码，先到的那次 raise。
 - **没人在听不算拒收**：这三个名字大多数应用一个都不注册，`announce` 找不到处理器就静默返回，不计数、不记日志。
 
 **为什么没有一条下行的 `location` 事件。** 一帧是动作列表，里面没有放事件的位置；生产者的「换个地址」用的是那个 `reflux:path` 标记（页面里写的，runtime 镜像进地址栏）。给它另造一条下行通道，等于在「一个 socket 一套帧定义」上开第二类帧——不值当，那件事已经有一个说一不二的地方了。
@@ -402,29 +426,29 @@ def on_disconnect(session, frame):
 |------|------|------|
 | 指针未命中／命中非容器／补丁后形状不合法 | 丢掉该操作、带路径记日志；同帧其余照常应用 | 渲染器（`warn`，不带计数） |
 | 帧早于 `create` 到达 | 新形态里没有「还没有树」这个状态：渲染器起手就有一棵空 layout，未命中的 patch 就是未命中（上一行） | 渲染器 |
-| 未知组件类型／属性／取值域不合法 | 构造期就拒（`parse` 与共享闭集抛），服务端入站校验再拦一道、计数、会话保留；**绕过 SDK 直连的生产者没有构造期那一道**——accrete 刻意不拒未知字段，那边是静默丢弃 | SDK ＋ 服务端（渲染器不管） |
+| 未知组件类型／属性／取值域不合法 | 构造期就拒（`parse` 与共享闭集抛），服务端入站校验再拦一道、计数、设备保留；**绕过 SDK 直连的生产者没有构造期那一道**——accrete 刻意不拒未知字段，那边是静默丢弃 | SDK ＋ 服务端（渲染器不管） |
 | 一帧的操作数超过 `max_ops_per_frame` | 整帧拒收、计数——上限来自我们这一侧（一处定义：SDK 的 `draw` 边界大声，服务端入站校验再拦一道）；渲染器没有这个上限 | SDK ＋ 服务端 |
 | 未注册的落点 | 拒收、计数、记日志；绝不动态派发 | 服务端（注册表在生产者侧） |
 | 上行帧发往 `connect` / `location` / `disconnect` | 整帧拒收、计数、记日志——宿主事件没有线上地址，客户端不能伪造「我连上了」或「我去过 /x」 | 服务端（入站校验） |
-| 上行帧的键集或 `id` 形状不合法（未知字段、`id` 不是非空字符串、缺 `data`） | 整帧拒收、计数、记日志（会话／路径／原因）；注册表根本看不到它，会话保留 | 服务端（入站校验） |
+| 上行帧的键集或 `id` 形状不合法（未知字段、`id` 不是非空字符串、缺 `data`） | 整帧拒收、计数、记日志（设备／路径／原因）；注册表根本看不到它，设备保留 | 服务端（入站校验） |
 | 事件载荷缺少声明的字段 | **随 `payload` 一起作废**：新形态里送什么由组件自己定（输入送它的值、表单送它收集到的字段），我们不声明也不校验 | — |
-| 处理器抛异常 | 带落点与 traceback 记日志；会话保留；客户端停在最后一次成功应用的状态 | 服务端 |
+| 处理器抛异常 | 带落点与 traceback 记日志；设备保留；客户端停在最后一次成功应用的状态 | 服务端 |
 | 生产者侧非法结构（属性不合法、一段数组里行 id 重复） | 发送之前就报错——在边界上大声，绝不把缺陷静默带到客户端；同一帧里给同一个列表槽追加同一个行 id 也在这里整帧拒收（渲染器只会丢掉第二条并 `warn`，那是半个回合）；同一个列表槽里 `append` 一个已有的行 id，渲染器也会拒（`warn`）；跨帧的行身份冲突只有应用认识那份列表，归应用 | SDK（大声）＋ 服务端（入站）＋ 渲染器（`warn`）＋ 应用 |
-| 慢客户端 | 出帧队列**在入队时**有界（`App(outbox=256)`）；溢出丢中间帧（留首帧与最新）、标记会话陈旧、计数；应用的 flusher 在队列排空且陈旧时用一帧 `create` 重同步 | 服务端 |
-| 半开连接（客户端消失但 TCP 没关） | 心跳超时判死并回收；会话表不涨成泄漏 | 服务端 |
+| 慢客户端 | 出帧队列**在入队时**有界（`App(outbox=256)`）；溢出丢中间帧（留首帧与最新）、标记设备陈旧、计数；应用的 flusher 在队列排空且陈旧时用一帧 `create` 重同步 | 服务端 |
+| 半开连接（客户端消失但 TCP 没关） | 心跳超时判死并回收；设备表不涨成泄漏 | 服务端 |
 | 树里没有路径标记／标记与地址栏不一致 | 地址栏与标题**只镜像，不猜**：没有标记就停在旧值；唯一写者是生产者，所以「标记 == 地址栏」是一条要断言的不变量 | 客户端 runtime（镜像）＋ 生产者（声明）；门对着它断言 |
-| 导航到不存在的路径 | 注册了 `{rest:path}` 兜底就用它，否则回内置 404 结构；不换会话、不改身份、不做重定向（地址栏仍是用户去的那条，`session.path` 跟着客户端走） | 服务端（路由）＋ 客户端 runtime（只负责发请求） |
+| 导航到不存在的路径 | 注册了 `{rest:path}` 兜底就用它，否则回内置 404 结构；不换设备、不改身份、不做重定向（地址栏仍是用户去的那条，`device.path` 跟着客户端走） | 服务端（路由）＋ 客户端 runtime（只负责发请求） |
 | 同一路径注册两次／并列形状歧义 | 注册时或启动时即报错 | 服务端，启动时 |
 | 发现根里的模块导入失败 | 启动即报错，不跳过——跳过等于让一部分路由静默消失 | 服务端，启动时 |
 
-计数只归我们这一侧：渲染器的失败是 `tracing::warn`（一行日志，不带计数），所以每一条要在我们这里留下数字的降级——入站校验、路由、会话、出帧队列——都得计数并带足身份记日志（会话、路径、操作、落点）。绕过 SDK 的生产者只剩渲染器的 `warn` 与我们的入站校验这两道，这条写明：静默降级不是选项，但有一道边界的可观测性在别人手里，这是选「帧定义只有一套」要认的账。
+计数只归我们这一侧：渲染器的失败是 `tracing::warn`（一行日志，不带计数），所以每一条要在我们这里留下数字的降级——入站校验、路由、设备、出帧队列——都得计数并带足身份记日志（设备、路径、操作、落点）。绕过 SDK 的生产者只剩渲染器的 `warn` 与我们的入站校验这两道，这条写明：静默降级不是选项，但有一道边界的可观测性在别人手里，这是选「帧定义只有一套」要认的账。
 
 ## 交互的形状
 
-一次交互怎么画，归 fluxen 的 `docs/interaction-patterns.md`（中英双语）——那一半讲渲染器的承诺，这一半讲应用欠下的账。reflux 的应用都按这五步来，`examples/chat` 是它的完整例子：
+一次交互怎么画，归 fluxen 的 `docs/interaction-patterns.md`（中英双语）——那一半讲渲染器的承诺，这一半讲应用欠下的账。reflux 的应用都按这五步来，`examples/app` 的聊天页是它的完整例子：
 
-1. **客户端发事件，客户端不画。** 载荷带人做了什么；要画进哪些槽由供应基础视图的那一方命名——在 reflux 里就是页面自己（`examples/chat` 的 `MESSAGES`／`STATUS`）。往里画的执行器从不猜名字：一个没写过的槽名是错误，不是新槽。
-2. **事实先落。** 处理器在发任何画面之前先把这件事写下来，这次写入顺带铸出这一轮的号（`Chat.record` + `seq`）。落多深由应用定：那份示例的 turn 列表住在会话上、随连接消失，是因为它不依赖任何存储；真有业务数据要留，就落在自己的存储里，不是在线上加一类帧。
+1. **客户端发事件，客户端不画。** 载荷带人做了什么；要画进哪些槽由供应基础视图的那一方命名——在 reflux 里就是页面自己（`examples/app/chat.py` 的 `MESSAGES`／`STATUS`）。往里画的执行器从不猜名字：一个没写过的槽名是错误，不是新槽。
+2. **事实先落。** 处理器在发任何画面之前先把这件事写下来，这次写入顺带铸出这一轮的号（`Chat.record` + `seq`）。落多深由应用定：那份示例的 turn 列表住在设备上、随连接消失，是因为它不依赖任何存储；真有业务数据要留，就落在自己的存储里，不是在线上加一类帧。
 3. **先说话，再干活。** 一批操作发出去——用户那一行、读回答区域的气泡、区域本身、状态行——然后才把活交给工作线程。慢调用不该表现为「发了没反应」，失败也不该表现为「像没发」。
 4. **之后的每一帧只改开场建好的东西。** 流式回答是每块一次 `patch(<区域>, "/bind/value/default", 块, op="append")`；不重画舞台、不重发结构。
 5. **结束要说出来，失败不撤销第 3 步。** 出错就往气泡里追加原因、把状态行写成事实；用户那句话留在屏上是事实，不因为后面失败就收回去。
@@ -435,17 +459,17 @@ def on_disconnect(session, frame):
 
 **证据**：`tests/test_chat_example.py` 的 `OneExchange` 三条断言钉住第 2、3、4 步（先落事实再发帧、一批里用户行与气泡与区域都在、之后的帧只寻址那个区域）；`tools/gate_chat.py` 在真 socket 上重跑同一批行为（两行落地、分块到达、状态回到就绪），步序与寻址由离线那三条钉。
 
-## 示例应用（`examples/chat`）
+## 示例应用（`examples/app`）
 
-框架此前只有一个使用者：`demo_app`（参考应用）。它证明「页面能怎么用」，不证明「页面后面那个后端在做什么」。`examples/chat` 补这一半——一页对话应用，六个后端行为各自有断言（`tests/test_chat_example.py` 19 例；`tools/gate_chat.py` 12 条，其中 3 条在真 Chromium 里）。
+框架此前只有一个使用者：`demo_app`（参考应用）。它证明「页面能怎么用」，不证明「页面后面那个后端在做什么」。`examples/app` 补这一半，并且长成了一个完整应用的样子：`dashboard.py` 是 `/`（折线图、雷达图、一个 3D 模块宿主），`chat.py` 是 `/chat`（六个后端行为各自有断言：`tests/test_chat_example.py` 19 例，`tools/gate_chat.py` 12 条）。两个页面一个文件一个，声明都挂在 `app.py` 建的那个 app 上；`tools/gate_dashboard.py` 17 条看的是「应用长什么样」（模块被挂载并真的画出来）。
 
-- **状态挂在会话上**：`Chat` 是 `Session` 的（`setattr`，与「socket 就是状态」一致），随连接回收；不持久化、不跨刷新。显示那份（行）在页面树里，模型那份（turn 窗口）在后端——两者只在「停止」时故意分叉。
+- **状态挂在设备上**：`Chat` 是 `Device` 的（`setattr`，与「socket 就是状态」一致），随连接回收；不持久化、不跨刷新。显示那份（行）在页面树里，模型那份（turn 窗口）在后端——两者只在「停止」时故意分叉。
 - **流式 = 往槽里 append**：回话不是一帧写完，是每块一次 `patch(slot, "/bind/value/default", chunk, op="append")`。实测一句 126 字的回话是 42 帧（`gate_chat` 第 3 条）。这条路 walkthrough 早就在用，没有为聊天新增机制。
 - **停止的半句不进上下文**：停止是事件 + 块边界检查；已经显示出去的部分留在页面上（带 `⏹`），但不写进 `Chat.turns`。判据是模型视角的质量：半句会污染下一轮对上一问的理解，而读者已经看见它被打断——两边各自诚实，分叉是选择不是疏漏。
 - **单飞与两道应用门**：流未结束时再来一条 → 状态行说「上一条还在流」，不静默丢；空消息与超 `MAX_CHARS` 在同一处拒。**长度是应用的事，不是协议的事**：`ingest` 只查帧形状，对提示词多长没有意见。
 - **模型失败变气泡**：异常在 worker 里被吞成回话槽里的文本 + 状态行（`出错：<类型>`），不往上抛——处理器抛了只会进日志，读者看到的是「话说一半停住」。
 - **模型是一条缝**：`Model.reply(context) -> Iterator[str]`。`Scripted` 离线确定性（默认；示例必须能裸跑），`OpenAI` 走 OpenAI 兼容的 SSE。**后者没有对着真端点跑过**（本机没有 key）：请求体与 SSE 读器用本地 stub 测，那部分能独立于厂商出错，其余是厂商的。
-- **仓里第一支通用 WS 客户端**（`examples/chat/client.py`）：`reflux.channel` 只接升级，`tools/cdp.py` 那支对着 DevTools 说。walkthrough 与门都用它——演示不必开浏览器。
+- **仓里第一支通用 WS 客户端**（`tools/wire_probe.py`）：`reflux.channel` 只接升级，`tools/cdp.py` 那支对着 DevTools 说。walkthrough 与门都用它——演示不必开浏览器。
 
 `walkthrough.py` 的形状借自 fluxen 的 `examples/walkthrough.py`：编号步骤、一次 Enter、边跑边打帧；`--auto` 无人值守、`--delay` 控块间隔、`--attach` 连已在跑的应用。六步各对应上面一条，输出是后端的自述（状态行原文）。
 
@@ -455,7 +479,7 @@ def on_disconnect(session, frame):
 - **让 reflux 自带一个 wasm 入口**（自己建 transport、自己发布上行把手，渲染器一行不改）：入口就变成两份，`#main`／codec／URL 的协商要同步两处，渲染器那边以后的改进（重连、编码）到不了 reflux；而页面级上行把手与 canvas 拿到的 `host.send` 是同一件事——渲染器本来就在给宿主的 JS 递上行函数。代价认下：fluxen 多一个宿主 API（`Message` 不动，这不是线）。
 - **给 fluxen 的 `Message` 加一个框架字段**（好让框架有下行帧，或让 `create` 直接带上标题）：帧定义只有一套是这套设计的地基，往里塞字段等于把 reflux 的需求搬进那个包——它得跟着维护，每个消费方都得认这个字段；而我们真正需要的那件事（标题）是浏览器的事实，runtime 读 DOM 就够了。判据同「词表不往外长」：不是把来源变宽，而是在它上面找现成的落点。
 - **把我们的四个操作留成线上的一层翻译**（`create/patch/insert/remove` 与 accrete 的八个并存，收发时来回转）：第二份近义词就是要消掉的税，而且它会慢慢和对面漂开——`append` 的 `position` 算术、`patch` 的平面路由、`inject` 的同值短路都会在翻译里被抹平成近似。代价认下：`insert` 的按 id 锚定与结构数组里插一格都要换写法（见「操作」）。
-- **服务端持有界面状态、每事件重渲染 + diff**：这是最初那版的形态，被两件事否掉——每事件 O(树) 的成本要乘上会话数（实测 0.37 ms/回合/会话；100 会话各 50 事件/秒 = 两核；2026-10-20 复测现在这个形状：**100 µs/帧**、同样的负载约 **0.5 核**，见 `docs/PERF.md`），以及影子状态（同一个值两边各一份，谁是真的一直要讨论）。**边界**：复杂表单、多步流程、服务端渲染下一步确实需要服务端看到状态——正形是让组件把这份状态随事件带上去，不是让服务端私自持有。这条是「深思熟虑的拒绝」，不是「做不到」。
+- **服务端持有界面状态、每事件重渲染 + diff**：这是最初那版的形态，被两件事否掉——每事件 O(树) 的成本要乘上设备数（实测 0.37 ms/回合/设备；100 设备各 50 事件/秒 = 两核；2026-10-20 复测现在这个形状：**100 µs/帧**、同样的负载约 **0.5 核**，见 `docs/PERF.md`），以及影子状态（同一个值两边各一份，谁是真的一直要讨论）。**边界**：复杂表单、多步流程、服务端渲染下一步确实需要服务端看到状态——正形是让组件把这份状态随事件带上去，不是让服务端私自持有。这条是「深思熟虑的拒绝」，不是「做不到」。
 - **生产者生成 HTML/JS（iframe 或 eval）**：线上是代码、没有 schema、按构造就是一个 XSS 引擎。它是让「壳永不动」字面成立的唯一办法，也正是那个字面读法是个陷阱的原因。
 - **每回合发整棵树，让浏览器 diff**：带宽 O(树)，且 diff 落在最慢的一侧。
 - **壳里放虚拟 DOM**：按构造冗余——操作已经是增量。
@@ -509,10 +533,10 @@ def on_disconnect(session, frame):
 - **T3——组件分派与本地态。**（已落地）规格里那 21 个组件全部有实现，每个只读自己要画的字段、带变体枚举与本地态。门槛：变更计数——改一处槽只重算读它的组件，兄弟节点不重渲染；本地态（输入缓冲）在一次无关的 store 写之后仍在；规格与实现两张表相等；未知组件与越域取值整帧拒收。（新页上的复测：`set`／`append` 各 **1** 条 DOM 变更、`create` **12** 条——见 `docs/PERF.md`。）
 - **T4——绑定与事件。**（已落地）`source`（叶取值、容器取子节点，含列表槽）、`event`／`payload` 与规格里的 `fire`（上行时机）、根节点的委托监听、`/ws` 通道与 hello、上行帧 `{event, id?, data}`、生产者侧的注册表与未注册落点拒收；顺带落了写入层（`ui`／`ops`）与示例应用 `reflux/demo_app.py`。门槛：真实浏览器里的端到端测试（输入回显、列表增删、表单一次提交多个字段），并断言上行帧的 `data` 与 `payload` 声明逐字一致。
 - **T5——路由。**（已落地）装饰器与注册器、发现（导入给定包并遍历子模块）、择优键与并列歧义检测（启动即报错）、`{name:path}` 尾兜底、逐段百分号解码、`layout` 与 `Match.resolve`、`python3 -m reflux.cli routes`。门槛：表驱动测试（重复路径、并列歧义、`{name:path}` 收尾、百分号转义）；`handler` 与 `layout` 都是 callable（写错是导入期错误，不是首次访问才炸）；换一种 import 顺序注册同一组路由，匹配结果逐例一致。
-- **T6——导航。**（已落地）壳侧链接拦截（带修饰键/中键/`external`/跨源四类放行）、`popstate`、history 写入、hello 带路径；生产者侧 `reflux:nav` → 匹配 → `create`，应用侧 `app.page(session, path)` 钩子，匹配不到回内置 404（有 `{rest:path}` 就用它）；伺服进程把无扩展名、无对应文件的页面路径交给壳（深链与刷新成立的前提）。门槛：点链接与前进后退各一次，地址栏／界面／服务端路由三者一致；未知路径走 404 结构；冷启动直接打开 `/blog/x` 落在该页。**目标形态里没有锚点**（见「客户端 runtime」）：M1 把这条门改写成「路径标记 → 地址栏镜像 + 后退前进 + 深链 + 404」，四类放行随锚点退场。
-- **T7——会话与心跳。**（已落地）会话即连接：连接打开即登记、断线即回收；心跳线程按默认 10s 发协议层 ping、30s 没有入站活动即判死并回收（关 socket 让阻塞的读线程退出）；计数 issued / reclaimed / dead，看现在的会话用 `App.live()`。门槛：一次刷新后表里只剩一个会话（旧连接被回收）；客户端不发 FIN 就消失时判死并回收、表归零，且那条算 `dead` 而不是 `reclaimed`。没有 token 这一层——「跨连接复用」随「会话即连接」一起作废，「伪造 token」那条门槛随之退休。
-- **T8——故障注入。** 坏帧（未知 action、未知路径、未知组件、未注册事件名、超大批次、重复行 id、慢客户端、地址栏与路径标记不一致）各自产生「失败模式」里规定的行为，且会话存活。
-- **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@route`；处理器签名 `handler(session, frame)`；出帧走每会话单队列（顺序由构造保证）。demo 应用（`reflux/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删（`rack` + `append`/`remove`，行身份随行表单的 id 上行）、表单一次提交（`login.submit` 带全部字段）、两条路由（`/` 与 `/about`）。
+- **T6——导航。**（已落地）壳侧链接拦截（带修饰键/中键/`external`/跨源四类放行）、`popstate`、history 写入、hello 带路径；生产者侧 `reflux:nav` → 匹配 → `create`，应用侧 `app.page(device, path)` 钩子，匹配不到回内置 404（有 `{rest:path}` 就用它）；伺服进程把无扩展名、无对应文件的页面路径交给壳（深链与刷新成立的前提）。门槛：点链接与前进后退各一次，地址栏／界面／服务端路由三者一致；未知路径走 404 结构；冷启动直接打开 `/blog/x` 落在该页。**目标形态里没有锚点**（见「客户端 runtime」）：M1 把这条门改写成「路径标记 → 地址栏镜像 + 后退前进 + 深链 + 404」，四类放行随锚点退场。
+- **T7——设备与心跳。**（已落地）设备即连接：连接打开即登记、断线即回收；心跳线程按默认 10s 发协议层 ping、30s 没有入站活动即判死并回收（关 socket 让阻塞的读线程退出）；计数 issued / reclaimed / dead，看现在的设备用 `App.live()`。门槛：一次刷新后表里只剩一个设备（旧连接被回收）；客户端不发 FIN 就消失时判死并回收、表归零，且那条算 `dead` 而不是 `reclaimed`。没有 token 这一层——「跨连接复用」随「设备即连接」一起作废，「伪造 token」那条门槛随之退休。
+- **T8——故障注入。** 坏帧（未知 action、未知路径、未知组件、未注册事件名、超大批次、重复行 id、慢客户端、地址栏与路径标记不一致）各自产生「失败模式」里规定的行为，且设备存活。
+- **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@route`；处理器签名 `handler(device, frame)`；出帧走每设备单队列（顺序由构造保证）。demo 应用（`reflux/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删（`rack` + `append`/`remove`，行身份随行表单的 id 上行）、表单一次提交（`login.submit` 带全部字段）、两条路由（`/` 与 `/about`）。
   门槛（`python3 tools/gate_t9.py`，10 条）：参考应用真画出来并种好列表 · 输入的回声 · 一次表单提交加一行 · 行自己的表单按身份删掉它 · 一次提交带上两个字段 · 导航是**一次提交 + 标记镜像**（点「关于」→ 结构与地址栏一起变 `/about`）· 反方向同一机制 · 浏览器后退是一帧 `reflux:nav`（`data` 只有 path）· 未注册路径画内置 404 且地址栏停在原地 · 零 console error。
   这一轮实测到的两件事（都不改框架）：**空字段的表单照样发帧**（「加一行」的 form 只有一个 button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 form，这里补上；**内置 404 第一次有门**（M1.7 之前它是壳的形状，画不出来，`gate_t6` 因此刻意没有这条）。
   标记糖在 T10 之后落了（第二个消费者到齐才落的，见 T10 段的最后一段）：`reflux/sdk/markers.py` 与 `sdks/rust/src/markers.rs` 手写同一件事——`path_marker()`／`title_marker()`／`page(path, title, *children)`，把两个保留 id 放在页面的最前面。三份手写副本（参考应用、`gate_t6`、Rust 的帧转储）收敛到它；`gate_t6` 只留它自己的两个旋钮（`label=`、`markers=False`）。
@@ -522,9 +546,9 @@ def on_disconnect(session, frame):
   形状：`tools/vocabulary.py` 是唯一的一份词表模型（schema + profile + 类型层的字段序），两个 emitter（`tools/gen_sdk.py` 出 Python，`tools/gen_rust.py` 出 Rust）只做格式化——**词表归一个模型，语言归各自的模板**。`sdks/rust/` 里生成的只有 `src/types.rs`（29 个构造器 + 变体与 `JsType` 两个闭集枚举），手写的是 `src/wire.rs`（八个 action，与 `reflux/wire.py` 一一对应）：**生成物承载「生产者能建什么」，帧的形状两语言都手写**，这条分工在两边一致。
   两件承重的事实：**键序是契约**——Python 侧的键序是类型层的声明序（pydantic 按声明序序列化），bind 条目的序来自 serde 扁平化出来的 `Bind1..6`（`default, type, kind, path, source`，**不是字母序**），所以 Rust 侧开 `serde_json` 的 `preserve_order` 并按同一份序插入，两边都不排序；**默认值照写**——`oneshot=False`、`display='render'` 这类 schema 默认在 Python 侧省略实参也照样落到线上，Rust 侧因此是 `unwrap_or(默认)` 而不是省略（唯一表达不了的调用是显式传 `None` 去抑制一个有默认的字段，线上读起来一样）。
   对拍口径是**紧凑 JSON**（两侧各自规范化成无空白再比）：空白不是契约（`App.send` 写 Python 默认分隔符，渲染器只解析 JSON），键序与取值才是。
-  明确没做的：Rust 侧没有 transport／会话／路由／入站校验（那是宿主的）；bind 的值收成 `&str`（要数字型 `default` 的生产者自己手写那一处）；schema 的枚举仍是 `&str`（闭集由服务端 ingest 对所有语言一视同仁地查，SDK 不重复查这道栅栏）。
+  明确没做的：Rust 侧没有 transport／设备／路由／入站校验（那是宿主的）；bind 的值收成 `&str`（要数字型 `default` 的生产者自己手写那一处）；schema 的枚举仍是 `&str`（闭集由服务端 ingest 对所有语言一视同仁地查，SDK 不重复查这道栅栏）。
   **位置参数是认下的代价**：Rust 没有关键字实参，所以 profile 每多一个关键字，所有调用点都要按位补——`text` 加 `local`/`path` 时 `frames.rs`／`markers.rs` 里 11 处调用、`form` 的 `path` 让另外 4 处各补一个 `None`。这在「最小 SDK」里是可接受的（调用点都在仓里，编译期就红）；等哪天真需要命名实参，再谈 builder 结构，而不是每加一个键就发明一种补位规则。
-- **T11——测量。**（已落地 2026-10-20）`tools/measure.py` 四段，数字记在 `docs/PERF.md`（带机器、日期与口径，可复跑）：**帧字节**（回声 121 B／加行 342 B／删行 53 B／表单提交 172 B／翻页 2 709 B；一个 op 21 B，没有信封——2026-10-29 第二次复测：先去信封、再把槽位字段改成 `slot`，之前那组每回合多带 70 B 信封）· **重渲染范围**（`set` **1** 条 DOM 变更、`append` **1** 条、`create` **12** 条，页内 `MutationObserver` 数的）· **首屏**（钉住的渲染器包 2 996 063 B、reflux 自己 4 717 B；文档开始 → 树画出来 **23 ms**、DCL 12 ms，三次中位数）· **服务端 CPU**（100 会话 × 50 帧/秒：24 299 帧、0 拒收、**100 µs/帧**、持续 3 374 帧/秒；客户端在子进程，分母是帧）。
+- **T11——测量。**（已落地 2026-10-20）`tools/measure.py` 四段，数字记在 `docs/PERF.md`（带机器、日期与口径，可复跑）：**帧字节**（回声 121 B／加行 342 B／删行 53 B／表单提交 172 B／翻页 2 709 B；一个 op 21 B，没有信封——2026-10-29 第二次复测：先去信封、再把槽位字段改成 `slot`，之前那组每回合多带 70 B 信封）· **重渲染范围**（`set` **1** 条 DOM 变更、`append` **1** 条、`create` **12** 条，页内 `MutationObserver` 数的）· **首屏**（钉住的渲染器包 2 996 063 B、reflux 自己 4 717 B；文档开始 → 树画出来 **23 ms**、DCL 12 ms，三次中位数）· **服务端 CPU**（100 设备 × 50 帧/秒：24 299 帧、0 拒收、**100 µs/帧**、持续 3 374 帧/秒；客户端在子进程，分母是帧）。
   两笔认下的代价也就此有了数：**双份走查 4 µs/帧，占 100 µs 的 3–4 %**——不是主要成本（成本在 JSON 编解码与 socket），所以不加缓存，这条从「认下但没数」变成「量过，不值得优化」。**仍未测量并写明**：深链多等一次连接往返的毫秒数（要和服务端渲染并列才有意义，而那个形态已被 Why Not 否掉）；资产体积按判据规则只记录、不评价。
 
 ### 迁移：M1 拆成七件
@@ -535,10 +559,10 @@ def on_disconnect(session, frame):
 - **M1.2——资产与伺服。**（已落地 2026-10-19）`www/` 是页面树、`www/static/` 是它的资产树，两个挂载：`/__next/` → `www/`、`/static/` → `www/static/`。页面是**静态文件**：`#main` 带 `data-codec="json"` / `data-path="/ws"`；资源一律从源站绝对路径取（`/static/…`——相对路径会被深链解析到深链目录底下，实测 `/__next/blog/a/post` 就是这么白屏的）；js/wasm 的名字从 `versions.json` 读，页面里不写死（trunk 的产物名带内容哈希）。`versions.json` 记渲染器构建的 rev 与逐文件 sha256／大小，升版＝`tools/vendor.py build --fluxen <path>`（或 CI 发 release 后 `fetch`）→ 门重跑；它既是资产清单，也是 `tests/test_page.py` 与门的对拍对象。reflux 的样式表现在只有一件：藏两个标记（用 `[id="reflux:path"]` 这类属性选择器，冒号让 `#id` 很别扭）；profile 的 class 令牌随词表接线（M1.6）。门槛：T0（`gate_t0.py`）——零 console error、零外部请求、请求清单恰好等于钉住的那几件、每件的 sha256 与 manifest 一致（**过 HTTP 取**，能抓到挂载错位）、深链回页面（M1.7 之后同一道门还多一条：缺模块是 404 而不是页面）。
 - **M1.3——客户端 runtime。**（已落地 2026-10-19）`www/static/reflux.js`（约 90 行）只碰浏览器的事实：读两个保留 id 的 textContent（`getElementById`——冒号让 `#id` 很难读）、与地址栏比、不同才 `pushState`、标题同规矩；启动先上行 `reflux:hello`（`data` 只有 `path`），`popstate` 上行 `reflux:nav`。触发是**只读**的 MutationObserver（childList／characterData／subtree，微任务合并；不看 attributes——输入框的 class 天天在变），不向 rust 要钩子：响应式渲染没有单一「画完了」点。它不认识树、不认识帧、不碰 socket。**挂载前缀走 `<base>`**：标记是应用路径（`/b`）、地址栏是挂载后的路径（`/__next/b`），换算只在 `toApp`／`toBrowser` 两处；M1.7 把 `<base>` 与挂载表一起改成 `/`，runtime 一行不改（`tests/test_page.py` 现在钉的是 `<base href="/">` 与 `App` 的默认根）。门槛：T6（`gate_t6.py`）——标记移动地址栏且同一条路径不堆历史、标题标记写 `document.title`、后退是一帧 `reflux:nav`（`data` 只有 path）、深链的 hello 带那条路径、没有标记的页面地址栏与标题停在旧值、零 console error。
 - **M1.4——出帧层。**（已落地 2026-10-19）`reflux/wire.py`：accrete 的八个 action 逐字——`create(slot: "", data)`／`set(slot, data)`／`append(slot, data, position 缺省不写)`／`remove(slot, id)`／`patch(slot, path, op: replace|append)`／`inject(slot, data)`／`tmpl(name, body)`／`empty()`——加出帧函数 `draw(*ops)`——当时它包的还是 `Message{ev, sender, content}`；2026-10-29 信封归宿主（fluxen ADR 0021 决策 6），`sender` 参数随之删掉，现在它返回的就是那份操作数组。边界校验：JSON Pointer；`position` 必须是整数，**但域外只有渲染器判得了**（它要知道列表多长），所以那条是渲染器的拒收加门的断言，不是构造器的；节点必须是 accrete 形状（裸 dict 先 `parse` 再 `dump`）。它与 `ops` 的分界曾是**方言**（同一个 socket 只有一套帧，不翻译）；M1.7 之后 `ops` 随壳退场，`wire` 是唯一的方言——并且接过了原先 `ops.draw` 的两条生产者侧规则：一帧的操作数上限、一棵树里 id 唯一。门槛：T2（`gate_t2.py`）——八个 action 各一条 DOM 断言（含 `+1` 落点、`patch append` 续写、vals 平面取值要带 `path: "/data"`），加「域外 position 拒收不夹取」「`empty` 解码后同帧其余照常应用」「零 console error」。
-- **M1.5——服务端入站校验。**（已落地 2026-10-20）`reflux/ingest.py` 两道门：出帧那道在 `Session.send`（每个下行帧唯一的门，所以绕过 SDK 手写的生产者也在射程内），入站那道在 `App.handle` 派发之前。拒收是**整帧**、首个缺陷胜出、会话存活：计数进 `App.stats["refused"]`，日志带会话 id、路径、第几条 op 与原因。校的九类：帧是数组（对象即信封，点名它看到的键）、八个 action 的字段集与必填键、JSON Pointer、`position` 是整数、`max_ops_per_frame`、节点闭集（类型／属性／bind 键，按 `kind` 分开）、取值域（`parse`）、同一帧里同一个列表槽的行 id 只出现一次、上行帧的键集与 `id` 形状。
-  闭集**不手写第二份**：`reflux/sdk/closed.py` 从生成的模型（`types.py` ← schema）算出允许的键（取 alias——线上叫 `class`，模型叫 `class_`），减去 profile 的 `hidden_attrs`；构造期（`wire`）与边界（`ingest`）读同一份。由此 `profile.expose` **不是**词表封闭度而是构造器面：`template` 节点线上合法（它是 `tmpl`/`inject` 展开的替换节点），只是没有建造器。（信封那几项 2026-10-29 随 `Message` 一起从两端退场：现在校的是「这一帧是不是一个操作数组」。）两条写明的边界：**槽名在入站判不了**（要会话持着它发出去的树——影子状态），留在 SDK 构造期；**退休壳的方言曾不在这一层**——没有 `content` 的帧归壳自己的 `validate.js`，M1.7 把这条缝一起关了（那种帧现在整帧拒收）。代价认下：每个带节点的帧多一次闭集走查与一次 `parse`（构造期已经做过一遍），量级归 T11 测——封闭性优先于这点成本，而渲染器那边**不会**替我们拒。门槛：`python3 tools/gate_m1_5.py`（12 条，真 socket、门自己当生产者、零 chromium）＋ `python3 -m unittest tests.test_ingest`（22 例表驱动）。
+- **M1.5——服务端入站校验。**（已落地 2026-10-20）`reflux/ingest.py` 两道门：出帧那道在 `Device.send`（每个下行帧唯一的门，所以绕过 SDK 手写的生产者也在射程内），入站那道在 `App.handle` 派发之前。拒收是**整帧**、首个缺陷胜出、设备存活：计数进 `App.stats["refused"]`，日志带设备 id、路径、第几条 op 与原因。校的九类：帧是数组（对象即信封，点名它看到的键）、八个 action 的字段集与必填键、JSON Pointer、`position` 是整数、`max_ops_per_frame`、节点闭集（类型／属性／bind 键，按 `kind` 分开）、取值域（`parse`）、同一帧里同一个列表槽的行 id 只出现一次、上行帧的键集与 `id` 形状。
+  闭集**不手写第二份**：`reflux/sdk/closed.py` 从生成的模型（`types.py` ← schema）算出允许的键（取 alias——线上叫 `class`，模型叫 `class_`），减去 profile 的 `hidden_attrs`；构造期（`wire`）与边界（`ingest`）读同一份。由此 `profile.expose` **不是**词表封闭度而是构造器面：`template` 节点线上合法（它是 `tmpl`/`inject` 展开的替换节点），只是没有建造器。（信封那几项 2026-10-29 随 `Message` 一起从两端退场：现在校的是「这一帧是不是一个操作数组」。）两条写明的边界：**槽名在入站判不了**（要设备持着它发出去的树——影子状态），留在 SDK 构造期；**退休壳的方言曾不在这一层**——没有 `content` 的帧归壳自己的 `validate.js`，M1.7 把这条缝一起关了（那种帧现在整帧拒收）。代价认下：每个带节点的帧多一次闭集走查与一次 `parse`（构造期已经做过一遍），量级归 T11 测——封闭性优先于这点成本，而渲染器那边**不会**替我们拒。门槛：`python3 tools/gate_m1_5.py`（12 条，真 socket、门自己当生产者、零 chromium）＋ `python3 -m unittest tests.test_ingest`（22 例表驱动）。
 - **M1.6——交互门重对。**（已落地 2026-10-20）T2 由 `gate_t2_next.py` 接住（八个 action 各一条 DOM 断言）；T3 的替代是「词表画得出来」——离线 `tests/test_types_drawable.py`（29 个暴露类型各一个最小合法节点，且这份表必须**等于** profile 的暴露集：加了类型不补节点即红）＋ `gate_t3_next.py`（21 个角色 class 逐个出现、`fold` 的头/体、`form` 里的 button、`portal` 的挂载、`select` 的选项与选中、`table` 一族、`rack` 按槽渲染、`pages` 的选中页，加四条令牌的 computed style）。T4′（`gate_t4_next.py`）按渲染器的**真实**时机断言，而不是旧壳的 `fire: change`：`input` 在 **Enter** 上行（全仓没有 blur 监听），空值不上行，`field` 绑定的回车只提交进 form，`form` 由 submit 按钮一次性发出全部字段，帧的 `id` = 发射节点自身、空 id 无键，字段条目带的是渲染器自己的 `payload: null`。T8′（`gate_t8_next.py`）只留页面侧三条（未注册的事件名、处理器抛异常、一帧被拒不留半回合）——帧级那两道门归 `gate_m1_5.py`，不重测。（旧 t2/t3/t4/t8 已在 M1.7 随壳退场。）门槛：`gate_t3_next.py`（18 条）＋ `gate_t4_next.py`（8 条）＋ `gate_t8_next.py`（5 条）＋ 全套（178 例、15 道门）。
-- **M1.7——退场。**（已落地 2026-10-20）删 `spec/`、`shell/`（vendored SolidJS、壳 CSS、壳侧生成物）、`tools/gen.py`、`reflux/{ops,ui,node,components_generated,tables_generated}.py`、对着规格与壳写的三个用例（`test_spec_sync`／`test_shell_assets`／`test_dsl`）、七道旧门（`gate_t0`／`t2`／`t3`／`t4`／`t6`／`t8`、`gate_m1_1`）。`/__next` 提到 `/`：`App.NEXT_PREFIX` 与 `next_root` 一起消失，`App` 只剩根挂载 + `/static/`（缺 `static/` 就不挂），`www/index.html` 的 `<base href="/">`。`App.draw_page`／`not_found` 切到 `wire`：`Session.draw(*ops)` 发一帧 `wire.draw(self.id, *ops)`（签名不变），内置 404 用刚接线的令牌（`text("404", variant="heading-1")` + `text(路径, variant="muted")`）。
+- **M1.7——退场。**（已落地 2026-10-20）删 `spec/`、`shell/`（vendored SolidJS、壳 CSS、壳侧生成物）、`tools/gen.py`、`reflux/{ops,ui,node,components_generated,tables_generated}.py`、对着规格与壳写的三个用例（`test_spec_sync`／`test_shell_assets`／`test_dsl`）、七道旧门（`gate_t0`／`t2`／`t3`／`t4`／`t6`／`t8`、`gate_m1_1`）。`/__next` 提到 `/`：`App.NEXT_PREFIX` 与 `next_root` 一起消失，`App` 只剩根挂载 + `/static/`（缺 `static/` 就不挂），`www/index.html` 的 `<base href="/">`。`App.draw_page`／`not_found` 切到 `wire`：`Device.draw(*ops)` 发一帧 `wire.draw(self.id, *ops)`（签名不变），内置 404 用刚接线的令牌（`text("404", variant="heading-1")` + `text(路径, variant="muted")`）。
   两件超出「删」的补正：**上限与保留前缀搬到 `reflux/protocol.py`**——它们是协议自己的规则（一帧多少个操作、哪个命名空间归框架），不跟词表一起死，也不为两个整数再造一个生成器；**`wire` 接过两条生产者侧规则**（一帧超过 `MAX_OPS_PER_FRAME` 大声拒、一棵树里同一个 id 出现两次大声拒），因为原来的 `ops.draw` 走了，失败表那两行不能没人管。入站那道门同时收口：没有 `content` 的帧不再放行——壳没了，没有第二个方言要迁就，一个会被渲染器静默跳过的帧不该被服务端放上 socket。
   门改名（`_next` 的语义随壳一起不成立）：`t0_next→t0`、`t2_next→t2`、`t3_next→t3`、`t4_next→t4`、`t6_next→t6`、`t8_next→t8`、`m1_5→ingest`；夹具的 `cdp.shell_page→open_page`。`reflux/demo_app.py` 重写成新页上的参考应用（回声输入／列表增删／表单一次提交／两条路由），`reflux/demo.py` 只伺服 `www/`。
   门槛修正：DESIGN 原来写的 `rg 'spec/components.json|shell/js|SolidJS'` 零命中与它自己的 Why Not 冲突（Why Not 必须留着被否决的形状，包括「把渲染器再写一份（JS 载体）」与「JS 门槛低」那几条），所以改成**只扫代码与非历史文档**——`rg -l 'spec/components.json|shell/js' --glob '!docs/**'` 为空、`rg 'NEXT_PREFIX|/__next' --glob '!docs/**'` 为空；`gen_sdk.py --check` 是唯一的词表门。实测：离线 148 例（原 178，减掉的 30 例全是壳与规格的用例）、八道门全绿（t0 7／t2 12／t3 18／t4 8／t6 8／t7 4／t8 5／ingest 12）。
@@ -546,4 +570,4 @@ def on_disconnect(session, frame):
 
 ## 词汇
 
-规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`bind`（accrete 的绑定表：读槽 / 上行落点 / 表单字段，见「组件形状」）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的八个操作：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`session`（路由＋身份＋推送目标）、`uplink`／上行 `dest`（控件往上送的那一帧的落点，处理器的注册键）、`handler`（处理器）、`frame`（上行帧 `{dest, id?, data}`）、`channel`（一条 WS 连接）、`app`（页面钩子＋通道＋上行落点注册表）、`wire`（出帧层：accrete 的八个操作，一帧就是这些操作的数组）、`SDK` 的构造器（`reflux/sdk/builders.py`）、`外框`／`shell`（`App(shell=…)` 给的那一层：标题、导航、和那个 `routes` 读槽；有它页面写进槽，没它页面替换 layout root）、`routes` 槽（`protocol.ROUTES_SLOT`，外框模式下页面的家；读取器由外框声明）、`宿主事件`（`connect`／`location`／`disconnect`——注册与别的名字一样，但没有线上地址，客户端发不进来）。`spec`、`fire`／`payload`、`ui`／`ops`、以及 `Message`（`ev`／`sender`／`created`——它现在是**宿主**的信封，不在线上）是退场形态的词——只在历史节与 Why Not 里出现。别处不再另造同义词。
+规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`bind`（accrete 的绑定表：读槽 / 上行落点 / 表单字段，见「组件形状」）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的八个操作：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`device`（一台设备＝一条连接；持地址、`data` 与推送目标，不是用户）、`data`（`device.data`，业务挂在连接上的东西，框架不读）、`emit`（`device.emit(*ops)` 把 accrete 的操作作为一帧送出；`draw` 是造帧的那个函数，不送）、`uplink`／上行 `dest`（控件往上送的那一帧的落点，处理器的注册键）、`handler`（处理器）、`frame`（上行帧 `{dest, id?, data}`）、`channel`（一条 WS 连接）、`挂载表`／`mounts`（`App.mounts`：路径 → 路由，socket 也是其中一条，`CHANNEL` 那一项）、`Request`／`Response`（挂载的路由拿到与答回的只读形状）、`app`（页面钩子＋挂载表＋上行落点注册表）、`wire`（出帧层：accrete 的八个操作，一帧就是这些操作的数组）、`SDK` 的构造器（`reflux/sdk/builders.py`）、`外框`／`shell`（`App(shell=…)` 给的那一层：标题、导航、和那个 `routes` 读槽；有它页面写进槽，没它页面替换 layout root）、`routes` 槽（`protocol.ROUTES_SLOT`，外框模式下页面的家；读取器由外框声明）、`宿主事件`（`connect`／`location`／`disconnect`——注册与别的名字一样，但没有线上地址，客户端发不进来）。`spec`、`fire`／`payload`、`ui`／`ops`、以及 `Message`（`ev`／`sender`／`created`——它现在是**宿主**的信封，不在线上）是退场形态的词——只在历史节与 Why Not 里出现。别处不再另造同义词。

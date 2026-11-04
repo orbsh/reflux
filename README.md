@@ -15,7 +15,7 @@ interface does.
 | part | lives in | does |
 |---|---|---|
 | producer | your code, Python or Rust | builds nodes + frames with a generated SDK |
-| host | `reflux/app.py` | serves the page, owns sessions, routes, the uplink registry |
+| host | `reflux/app.py` | serves the page, owns devices, routes, the uplink registry |
 | page | `www/` | static shell + `reflux.js` runtime + the pinned renderer bundle |
 
 The wire between them is one dialect: accrete's eight actions, and a frame **is** the array of them —
@@ -86,13 +86,15 @@ python3 -m reflux.cli dests reflux.demo_app:make_app         # dest → kind →
 Roughly twenty lines, and every one of them is used:
 
 ```python
-from reflux import App, route, wire
+from reflux import App, wire
 from reflux.sdk import builders as b
 from reflux.sdk import markers
 
+app = App()                       # one object; every declaration below hangs on it
 
-@route("/")
-def home(session, match):
+
+@app.route("/", title="Hello")
+def home(device, match):
     return markers.page(
         "/",
         "Hello",
@@ -102,12 +104,9 @@ def home(session, match):
     )
 
 
-app = App()
-
-
 @app.dests.register("name.change")
-def on_name(session, frame):
-    session.draw(wire.set("echo", b.text(str(frame["data"]))))
+def on_name(device, frame):
+    device.emit(wire.set("echo", b.text(str(frame["data"]))))
 
 
 if __name__ == "__main__":
@@ -116,19 +115,58 @@ if __name__ == "__main__":
 
 What the pieces are:
 
-- **`@route("/")`** registers into the module-level table; `App()` picks it up. The handler returns
-  a **node** — the framework wraps it in `create` for you — or a **list of operations** when you
-  also need to seed the data slots the page reads (that is what `demo_app` does, so its rows arrive
-  with the structure).
+- **`@app.route("/")`** declares a page on that app's table, right above its handler. (`@route(…)`
+  is the same declaration against the module-level table `App()` reads by default — use it when the
+  table is shared across modules, e.g. with `discover`.) The handler returns a **node** — the
+  framework wraps it in `create` for you — or a **list of operations** when you also need to seed the
+  data slots the page reads (that is what `demo_app` does, so its rows arrive with the structure).
 - **`markers.page(path, title, *children)`** puts the two markers the page runtime mirrors into the
   address bar and the tab title, then your content. It is a convention, not a wire type.
 - **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
   values. `b.text(source="echo")` reads a slot; `b.input(dest="name.change")` sends one.
 - **`@app.dests.register("name.change")`** is the only way an uplink frame reaches your code. An
   unregistered name is refused and counted — never dispatched dynamically.
-- **`session.draw(*ops)`** is exactly one frame, flushed in order.
+- **`device.emit(*ops)`** is exactly one frame, flushed in order.
+- **`device.data`** is yours. The framework hands you a device per connection and never reads that
+  bag: put the user on it after a login, and it dies with the socket.
 
 Run it with `python3 myapp.py` and open <http://127.0.0.1:8000/>.
+
+## Connections, and the HTTP side
+
+A **device** is one connection, not one user: a browser tab is a device, a phone is another, and
+whether two of them share anything is your bookkeeping. The framework keeps the table and nothing
+else — `app.live()` (a snapshot), `app.device(id)` (one, by the id a handler was handed),
+`app.evict(id=… | where=…, reason=…)` (close them, through the door a disconnect already uses),
+plus the heartbeat that judges a peer dead after `dead_after` seconds of silence.
+
+Signing in is therefore not a framework event. Connect anonymously, draw a login form when you need
+one (it is a downlink message like any other), register the destination it posts to, and after your
+own verification (`user = check_credentials(...)`, an external service, whatever) hang the result on
+the connection and redraw:
+
+```python
+@app.dests.register("login")
+def on_login(device, frame):
+    user = check_credentials(frame["data"])     # yours; may call an external service
+    if user is None:
+        device.emit(wire.set("form.error", b.text("wrong password")))
+        return
+    device.data["user"] = user
+    app.draw_page(device)                       # one frame, now with an identity
+```
+
+The socket itself is a **route in a table**, next to whatever else you mount:
+
+```python
+app = App()                                  # mounts == {"/ws": CHANNEL}
+app.mount("/health", lambda request: "ok")   # Request in; Response, (status, body) or a body out
+app.unmount("/ws"); app.mount("/socket")     # move the channel
+```
+
+`Request` carries `method`, `path`, `query`, `headers` (lower-cased), `peer` and `body`; a route that
+raises answers 500 and the server keeps serving. This layer is deliberately thin — reflux is not an
+HTTP framework, and anything bigger belongs behind a real server.
 
 ## The wire
 
@@ -178,88 +216,82 @@ the shape of a frame.
 
 `python3 tools/gate_t10.py` builds seven frames with each SDK and compares them **byte for byte**.
 
-## An example: an AI chat app
+## The example app: one page per file
 
-`examples/chat/` is a whole application whose subject is the backend: a conversation per
-connection, a reply streamed as `patch` frames, a stop that stops at a chunk boundary, a second
-message refused with a reason, the app's own size limits, and a model that fails into a bubble
-instead of a traceback.
+`examples/app/` is a whole application, not a toy: a dashboard with two charts and a 3D viewport, and
+a chat page with a backend behind it. The shape is the one a framework's docs should teach —
 
 ```
-python3 -m examples.chat.app --port 8100       # the app, then http://127.0.0.1:8100/
-python3 -m examples.chat.walkthrough --auto    # the same six behaviours, no browser
-python3 tools/gate_chat.py                            # 12 assertions: 9 over a socket, 3 in Chromium
+examples/app/
+  app.py         the app and its shell; the host events; main()
+  dashboard.py   "/"     — charts, a module host, a refresh
+  chat.py        "/chat" — a conversation per connection, streamed, stoppable
+  walkthrough.py six steps, no browser
 ```
 
-The model is one method (`Model.reply`). `Scripted` runs offline and deterministic — the default, so
-the demo needs no key; `OpenAI` speaks the OpenAI-compatible SSE form and is configured by
-`OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` (its reader is tested against a stub; it has
-not been run against a live provider from this repo).
-
-## A routed site: a shell and a `routes` slot
-
-`examples/site/` is the other half of the story: two pages, a header that never redraws, and an
-address bar that follows.
+— one page per file, each declaring its route on the shared app with `@app.route`, each keeping the
+handlers for its own events. Importing a page module is what puts it in the table:
 
 ```python
-from reflux import App, ROUTES_SLOT, Routes
-from reflux.sdk import builders as b, markers
+# app.py
+app = App(routes=Routes(), shell=shell)      # the shell stays; pages are written into `routes`
 
-site = Routes()
+# dashboard.py
+from .app import app
 
-def where(session):
-    return b.text(f"{session.path} · {session.query}")   # the address the backend sees
-
-@site.add("/")
-def home(session, match):
-    return markers.page("/", "首页", where(session))
-
-@site.add("/about")
-def about(session, match):
-    return markers.page("/about", "关于", where(session))
-
-def shell(session):
-    return b.case(
-        b.form(b.button("首页"), dest="go.home"),
-        b.form(b.button("关于"), dest="go.about"),
-        b.placeholder(source=ROUTES_SLOT),      # the page is drawn here
-    )
-
-app = App(routes=site, shell=shell)
+@app.route("/", title="概览")
+def dashboard(device, match):
+    return markers.page("/", "概览", b.text("概览", variant="heading-1"), ...)
 ```
 
-- The first frame is **one turn, two operations**: `create(shell)` and the page written into the
-  `routes` slot. Every page turn after that writes only that slot — the header is never sent twice.
-- Drop `shell=` and it is a single-page app: the page replaces the layout root (that is
-  `examples/chat`).
-- Add `query` for free: the runtime hands `reflux:hello` its `location.search`, and `session.query`
-  is `{"tag": ["a", "b"]}` for `?tag=a&tag=b`. A pasted `/about?from=link` opens that page, query
-  included, on its first frame.
-- Three names belong to the **host**, and you register them like any other:
-  `@app.dests.register("connect" | "location" | "disconnect")`. No client can send them — the frame
-  boundary refuses those names — so a connect that never happened cannot be faked.
+- **The shell is drawn once.** The first frame is `create(shell)` plus the page in the `routes` slot;
+  every page turn after that writes only that slot, so the header is never sent twice. Without a shell
+  the page replaces the layout root — `demo_app` is that single-page shape.
+- **A chart is a node with a spec.** `b.chart(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
+  the module that draws it is a file, and `app.mount("/assets/g2chart", path)` is how a page gets the
+  files its modules need. A 3D viewport is the same idea with `b.canvas(url=…, value=…)`.
+- **The address carries what the backend needs.** `hello` brings `path` and `query`, so `/chat` and
+  `/?filter=…` open the right thing on the first frame; the URL belongs to the browser.
+- **Three names belong to the host** — `connect` / `location` / `disconnect` — registered like any
+  other name, and refused if a client tries to send them.
 
 ```
-python3 -m examples.site.app --port 8200        # the app, then http://127.0.0.1:8200/?from=paste
-python3 -m examples.site.walkthrough --auto     # six steps, no browser
-python3 tools/gate_site.py                      # 18 assertions: 10 over a socket, 8 in Chromium
+python3 -m examples.app --port 8100            # 概览 + 对话
+python3 -m examples.app.walkthrough --auto     # the same six steps, no browser
+python3 tools/gate_dashboard.py                # 17 assertions: 12 over a socket, 5 in Chromium
+python3 tools/gate_chat.py                     # the chat page's own 12, over a socket and in Chromium
 ```
+
+The chat's model is one method (`Model.reply`). `Scripted` runs offline and deterministic — the
+default, so the demo needs no key; `OpenAI` speaks the OpenAI-compatible SSE form and is configured by
+`OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` (its reader is tested against a stub; it has not
+been run against a live provider from this repo). Neither module is in git — `www/static/vendor/` is ignored, and 30 MB of 3D viewer is not an
+example's business. Each is mounted from wherever it exists: a fluxen checkout's own assets
+(`REFLUX_ASSETS`, default `../fluxen/examples/renderer/assets`), or a local copy under
+`www/static/vendor/`:
+
+```
+cp -r ../fluxen/examples/renderer/assets/g2chart www/static/vendor/g2chart
+cp -r ../fluxen/examples/renderer/assets/3dbrowser www/static/vendor/3dbrowser   # optional, 30 MB
+```
+
+A module that is not on disk draws a line saying where the page looked, not an empty box.
 
 ## Verify
 
 ```
-python3 -m unittest discover -s tests -t .     # 203 tests, no browser
+python3 -m unittest discover -s tests -t .     # 229 tests, no browser
 python3 tools/gate_ingest.py                   # the two boundaries, over a real socket
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
 python3 tools/gate_t3.py                       # the whole vocabulary, drawn and styled
 python3 tools/gate_t4.py                       # typing, clicking, form submits
 python3 tools/gate_t6.py                       # address bar, history, deep links
-python3 tools/gate_t7.py                       # sessions: reload and death
+python3 tools/gate_t7.py                       # devices: reload and death
 python3 tools/gate_t8.py                       # what a bad frame does (and does not) do
 python3 tools/gate_t9.py                       # the reference app, driven end to end
 python3 tools/gate_t10.py                      # Rust vs Python frames (needs cargo)
-python3 tools/gate_site.py                     # the shell, the routes slot and the address bar
+python3 tools/gate_dashboard.py                # the dashboard, its modules, and the chat page
 python3 tools/measure.py                       # bytes, DOM changes, first paint, CPU
 ```
 
@@ -271,14 +303,14 @@ The browser gates drive a real headless Chromium over CDP using only the standar
 ## Layout
 
 ```
-reflux/            the host: app, sessions, wire, ingest, routes, dests, cli
+reflux/            the host: app, devices, wire, ingest, routes, dests, cli
 reflux/sdk/        the Python SDK — generated types/builders, hand-written parse/markers
 www/               the page: index.html, reflux.js runtime, css (the renderer bundle is
                    installed into www/static/vendor/fluxen/ by tools/vendor.py, not committed)
 schema/ profile/   the wire's snapshot and this framework's selection over it
 sdks/rust/         the second SDK, generated from the same two files
 tools/             generators, gates, the CDP fixture, the measurement script, vendor.py
-examples/          two apps — chat (one page, streaming) and site (a shell + the routes slot)
+examples/app/      the example application — one page per file: dashboard (/), chat (/chat)
 vendor/pin.json    which renderer release to install
 tests/             everything that needs no browser
 docs/              design and decision record (in Chinese)
