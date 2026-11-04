@@ -292,9 +292,9 @@ class TestTheInboundDoor(unittest.TestCase):
         seen: list[dict] = []
 
         @app.dests.register("gate.ok")
-        def ok(device, received):
+        def ok(ctx, received):
             seen.append(received)
-            device.send(frame(wire.create(b.text("ok"))))
+            ctx.send(frame(wire.create(b.text("ok"))))
 
         channel = ScriptedChannel(
             {"dest": "gate.ok", "data": {"n": 1}, "extra": "hand written"},  # refused: unknown key

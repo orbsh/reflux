@@ -119,14 +119,15 @@ def socket_phase() -> list[tuple[str, bool, str]]:
     checks: list[tuple[str, bool, str]] = []
     try:
         with Socket(port) as ws:
-            # 1 — the page, and the one seed it needs.
+            # 1 — the page, and the one seed it needs. The seed is a send in its own right (`device.emit`
+            # in the page hook), so it lands as one frame and the page as the next — never folded in.
             ws.send({"dest": "reflux:hello", "data": {"path": PAGE}})
-            hello = read_until(ws, "", limit=2.0) or [ws.recv(timeout=3)]
+            hello = [ws.recv(timeout=3), ws.recv(timeout=3)]
             ops = [op.get("action") for frame in hello for op in frame]
             checks.append(
                 (
-                    "hello draws the page and seeds the status line",
-                    ops[:1] == ["create"] and "set" in ops,
+                    "hello seeds the status line, then draws the page, in two frames",
+                    ops[:2] == ["set", "create"] and hello[0][0].get("slot") == chat_page.STATUS,
                     f"ops={ops}",
                 )
             )

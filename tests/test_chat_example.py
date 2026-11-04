@@ -17,6 +17,11 @@ from examples.app.model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
 from tests.fakes import FakeDevice
 
 
+def context(device: FakeDevice, frame: dict | None = None):
+    """A delivery built the way the app builds one — handlers take the context, not the device."""
+    return chat.app.context(device, frame)
+
+
 def status_text(device: FakeDevice) -> str:
     """The last status line a run of frames wrote."""
     for frame in reversed(device.frames):
@@ -82,20 +87,20 @@ class Refusals(unittest.TestCase):
         self.conversation = chat.Chat(model=chat.Scripted(), delay=0.0)
 
     def test_an_empty_message_is_refused_with_a_reason(self):
-        chat.send(self.device, self.conversation, "   ")
+        chat.send(context(self.device), self.conversation, "   ")
         self.assertEqual(status_text(self.device), "空消息没有发出去")
         self.assertEqual(len(self.device.frames), 1)  # one status line, no rows
         self.assertEqual(self.conversation.total, 0)
 
     def test_an_oversized_message_is_refused_at_the_apps_own_boundary(self):
-        chat.send(self.device, self.conversation, "字" * (chat.MAX_CHARS + 1))
+        chat.send(context(self.device), self.conversation, "字" * (chat.MAX_CHARS + 1))
         self.assertIn("太长", status_text(self.device))
         self.assertIn(str(chat.MAX_CHARS), status_text(self.device))
         self.assertEqual(self.conversation.total, 0)
 
     def test_a_second_message_while_streaming_is_refused_not_dropped(self):
         self.conversation.busy = True
-        chat.send(self.device, self.conversation, "再说一句")
+        chat.send(context(self.device), self.conversation, "再说一句")
         self.assertEqual(status_text(self.device), "上一条还在流：按「停止」或等它结束")
         self.assertEqual(self.conversation.total, 0)
 
@@ -104,7 +109,7 @@ class Refusals(unittest.TestCase):
         original = chat.spawn
         chat.spawn = lambda target, args: None  # do not start the reply: this case is the send
         try:
-            chat.send(device, conversation, "你好")
+            chat.send(context(device), conversation, "你好")
         finally:
             chat.spawn = original
         ops = [op for frame in device.frames for op in frame]
@@ -123,7 +128,7 @@ class Streaming(unittest.TestCase):
         self.conversation = chat.Chat(model=chat.Scripted(window=12), delay=0.0)
 
     def test_a_reply_lands_chunk_by_chunk_and_becomes_a_turn(self):
-        chat.stream(self.device, self.conversation, "reply.1", [Turn("user", "你好")])
+        chat.stream(context(self.device), self.conversation, "reply.1", [Turn("user", "你好")])
         expected = "".join(scripted_reply([Turn("user", "你好")], 12))
         self.assertEqual(patched(self.device), expected)
         self.assertGreater(len(self.device.frames), 3)  # many small patches, not one write
@@ -144,7 +149,7 @@ class Streaming(unittest.TestCase):
                     yield piece
 
         conversation.model = Stoppable()
-        chat.stream(self.device, conversation, "reply.1", [Turn("user", "hi")])
+        chat.stream(context(self.device), conversation, "reply.1", [Turn("user", "hi")])
         landed = patched(self.device)
         self.assertTrue(landed.startswith("abc"), landed)  # stopped at a chunk boundary
         self.assertIn("⏹", landed)  # and says so in the bubble itself
@@ -162,7 +167,7 @@ class Streaming(unittest.TestCase):
                 yield  # pragma: no cover — the protocol needs a generator
 
         self.conversation.model = Broken()
-        chat.stream(self.device, self.conversation, "reply.1", [Turn("user", "hi")])
+        chat.stream(context(self.device), self.conversation, "reply.1", [Turn("user", "hi")])
         self.assertIn("模型出错：boom", patched(self.device))
         self.assertTrue(status_text(self.device).startswith("出错：RuntimeError"))
         self.assertFalse(self.conversation.busy)
@@ -186,7 +191,7 @@ class OneExchange(unittest.TestCase):
         original = chat.spawn
         chat.spawn = lambda target, args: None
         try:
-            chat.send(self.device, self.conversation, "你好")
+            chat.send(context(self.device), self.conversation, "你好")
         finally:
             chat.spawn = original
 
@@ -218,7 +223,7 @@ class OneExchange(unittest.TestCase):
         original = chat.spawn
         chat.spawn = lambda target, args: target(*args)  # the whole reply, inline
         try:
-            chat.send(self.device, self.conversation, "你好")
+            chat.send(context(self.device), self.conversation, "你好")
         finally:
             chat.spawn = original
         later = self.device.frames[1:]
@@ -233,11 +238,14 @@ class Frames(unittest.TestCase):
     def test_the_page_seeds_its_slots_once(self):
         device = FakeDevice()
         match = chat.app.routes.match("/chat")
-        first = chat.page(device, match)
-        second = chat.page(device, match)
-        self.assertEqual(len(first), 2)  # create + the status seed
-        self.assertEqual(first[1]["action"], "set")
-        self.assertEqual(len(second), 1)  # a slot outlives a create: seeding again would duplicate
+        first = chat.page(context(device), match)
+        second = chat.page(context(device), match)
+        self.assertNotIsInstance(first, list)  # the hook returns a page, not frames
+        self.assertEqual(first.type, "case")
+        self.assertEqual(len(device.frames), 1)  # the seed left as a send, once
+        self.assertEqual(device.frames[0][0]["action"], "set")
+        self.assertEqual(device.frames[0][0]["slot"], chat.STATUS)
+        self.assertEqual(chat.page(context(device), match), second)  # a second look does not seed again
 
     def test_the_page_is_one_route_of_the_application(self):
         """A second address is the table's business now, not this page's: `/chat` or nothing."""

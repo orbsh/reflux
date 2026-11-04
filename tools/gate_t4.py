@@ -100,7 +100,7 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     for event in ("gate.name", "gate.anon", "gate.form"):
-        app.dests.register(event, lambda device, frame: SEEN.append(frame))
+        app.dests.register(event, lambda ctx, frame: SEEN.append(frame))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
         device = next(iter(app.live()), None)

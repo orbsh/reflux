@@ -34,6 +34,13 @@ class FakeDevice:
             raise RuntimeError("FakeDevice.draw: pass `app=` when the test needs a page drawn")
         self.app._draw(self)
 
+    def go(self, url: str) -> None:
+        """The real move, through the app's own splitter: the address changes, then the page is drawn."""
+        from reflux.app import split_location
+
+        self.path, self.query = split_location(url)
+        self.draw()
+
     def send(self, frame: dict) -> None:
         self.frames.append(frame)
 

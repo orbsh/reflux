@@ -22,12 +22,12 @@ from reflux.sdk import builders as b
 from tests.fakes import FakeDevice
 
 
-def page_for(device, match):
+def page_for(ctx, match):
     """A page that says which path it is — enough to tell which one landed in the slot."""
     return b.text(f"page:{match.path}")
 
 
-def shell(device) -> object:
+def shell(ctx) -> object:
     """A frame with one nav line and the routes reader — the shape the slot is written into."""
     return b.case(b.text("shell"), b.placeholder(source=ROUTES_SLOT, id="routes"), id="shell")
 
@@ -97,7 +97,7 @@ class TestShell(unittest.TestCase):
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
 
     def test_slot_seeds_a_page_sends_ride_along_after_its_structure(self):
-        def seeding(device, match):
+        def seeding(ctx, match):
             return [wire.create(b.text("page")), wire.set("status", b.text("就绪"))]
 
         app = app_with_shell("/", page=seeding)
@@ -144,8 +144,8 @@ class TestHostEvents(unittest.TestCase):
             self.app.dests.register(name, self.recorder(name))
 
     def recorder(self, name: str):
-        def record(device, frame):
-            self.heard.append((name, device.path))
+        def record(ctx, frame):
+            self.heard.append((name, ctx.path))
 
         return record
 
@@ -163,11 +163,11 @@ class TestHostEvents(unittest.TestCase):
 
     def test_connect_is_raised_after_the_first_frame_is_queued(self):
         app, device = App(), FakeDevice()
-        app.page = lambda device, path: b.text("page")  # something to draw, so there is a frame
+        app.page = lambda ctx, path: b.text("page")  # something to draw, so there is a frame
         seen: list[int] = []
 
-        def record(device, frame):
-            seen.append(len(device.frames))  # frames on the wire when the handler runs
+        def record(ctx, frame):
+            seen.append(len(ctx.device.frames))  # frames on the wire when the handler runs
 
         app.dests.register("connect", record)
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})

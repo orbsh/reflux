@@ -116,47 +116,46 @@ class Demo:
 
     # --- handlers: change the app's data, push exactly that change -------------------------
 
-    def on_name(self, device, frame) -> None:
+    def on_name(self, ctx, frame) -> None:
         # An `input` uplinks its value alone (no wrapper): the frame's `data` is the string.
         self.echo = frame["data"] if isinstance(frame["data"], str) else ""
-        device.emit(wire.set(ECHO, b.text(self.echo)))
+        ctx.emit(wire.set(ECHO, b.text(self.echo)))
 
-    def on_add(self, device, frame) -> None:
+    def on_add(self, ctx, frame) -> None:
         row = {"id": f"row-{self.next_row}", "text": f"第 {self.next_row} 行"}
         self.next_row += 1
         self.rows.append(row)
-        device.emit(wire.append(ROWS, row_node(row)))
+        ctx.emit(wire.append(ROWS, row_node(row)))
 
-    def on_remove(self, device, frame) -> None:
+    def on_remove(self, ctx, frame) -> None:
         row_id = frame.get("id")  # the row's form carried its identity up
         self.rows = [row for row in self.rows if row["id"] != row_id]
-        device.emit(wire.remove(ROWS, row_id))
+        ctx.emit(wire.remove(ROWS, row_id))
 
-    def on_submit(self, device, frame) -> None:
+    def on_submit(self, ctx, frame) -> None:
         fields = frame["data"] if isinstance(frame["data"], dict) else {}
         self.submitted = {
             name: entry.get("data") for name, entry in fields.items() if isinstance(entry, dict)
         }
         summary = json.dumps(self.submitted, ensure_ascii=False, sort_keys=True)
-        device.emit(wire.set(SUBMITTED, b.text(f"已提交 {summary}")))
+        ctx.emit(wire.set(SUBMITTED, b.text(f"已提交 {summary}")))
 
-    def on_go(self, device, frame) -> None:
+    def on_go(self, ctx, frame) -> None:
         """A submit that moves the client: new structure and the new path marker, one frame."""
-        device.path = GO[frame["dest"]]
-        device.emit(*self.frame_for(device, device.path))
+        ctx.go(GO[frame["dest"]])
 
 
 demo = Demo()  # the routes are module-level declarations, so they attach to one application
 
 
 @route("/", title="演示")
-def home_page(device, match):
-    return demo.frame_for(device, "/")
+def home_page(ctx, match):
+    return demo.frame_for(ctx.device, "/")
 
 
 @route("/about", title="关于")
-def about_page(device, match):
-    return demo.frame_for(device, "/about")
+def about_page(ctx, match):
+    return demo.frame_for(ctx.device, "/about")
 
 
 def make_app() -> App:

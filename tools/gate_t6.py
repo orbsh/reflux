@@ -48,9 +48,9 @@ def page(path: str, title: str, *, label: str | None = None, markers: bool = Tru
     return b.case(*children, id="page-root")
 
 
-def draw(device, node) -> None:
+def draw(ctx, node) -> None:
     """One accrete `draw` frame: `create` on the layout root (`event` is required but unread)."""
-    device.send([{"action": "create", "slot": "", "data": dump(node)}])
+    ctx.send([{"action": "create", "slot": "", "data": dump(node)}])
 
 
 def wait(predicate, timeout: float = 10.0):

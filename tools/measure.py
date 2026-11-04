@@ -266,7 +266,7 @@ def check_cost() -> list[list[str]]:
 
 def section_cpu() -> None:
     app = demo.make_app()
-    app.dests.register("measure.ping", lambda device, frame: device.emit(wire.set(demo.ECHO, b.text("pong"))))
+    app.dests.register("measure.ping", lambda ctx, frame: ctx.emit(wire.set(demo.ECHO, b.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()

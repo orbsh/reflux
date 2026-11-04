@@ -19,7 +19,7 @@ from reflux.sdk._parse import dump
 from tests.fakes import FakeDevice
 
 
-def page_for(device, match):
+def page_for(ctx, match):
     """A handler that says which path it was given — enough to see which page came back."""
     return b.text(f"page:{match.path}")
 
@@ -88,7 +88,7 @@ class TestPageResolution(unittest.TestCase):
         from reflux import wire
 
         app = self.app("/a")  # a table is there; the hook still wins
-        app.page = lambda device, path: [wire.patch("here", "/bind/value/default", path)]
+        app.page = lambda ctx, path: [wire.patch("here", "/bind/value/default", path)]
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/whatever"}})
         op = drawn(device)[0]

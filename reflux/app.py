@@ -44,8 +44,9 @@ where their frames go — not the interface's state, which lives in the page tre
 are a hundred small records.
 
 The HTTP side is a mount table with the channel in it: `App.mounts` starts as `{"/ws": CHANNEL}`, so
-the socket is a route like any other. `app.mount("/health", handler)` adds the app's own paths (a
-`Request` in, a `Response` out) and `app.mount("/socket")` moves the channel.
+the socket is a route like any other. `@app.mount("/health")` (or `app.mount("/health", handler)`) adds the
+app's own paths — a `Request` in, a `Response` out — and `app.mount("/socket", CHANNEL)` moves the
+channel.
 
 Frames queue per device and one writer thread drains each queue, so a client that stopped reading
 blocks its own writer and nobody else's.
@@ -57,6 +58,7 @@ import json
 import secrets
 import threading
 import time
+from dataclasses import dataclass
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
@@ -69,7 +71,12 @@ from .protocol import RESERVED_PREFIX, ROUTES_SLOT
 from .routes import DEFAULT, Routes
 from .sdk import builders as b
 from .sdk.types import Accrete
-from .server import CHANNEL, Request, make_server
+from .routes import Match
+from .server import CHANNEL, make_server
+
+# "no handler was passed" — apart from `None`, which means the channel (a route that answers an
+# upgrade instead of a request). The difference is what lets `mount("/x")` be a decorator.
+_UNSET = object()
 
 PAGE_ROOT = Path(__file__).resolve().parent.parent / "www"
 # The page's assets are addressed from the origin root, so a deep link cannot drag its own
@@ -261,6 +268,69 @@ class Device:
         self.send(wire.draw(*operations))
 
 
+@dataclass(frozen=True)
+class Context:
+    """One delivery — and the room around it: this app, the device it was addressed to, its frame.
+
+    Handlers get `(ctx, …)`. Everything that *says* something goes through `ctx.emit(*operations)`:
+    on this side of the socket there is no response to return, and a reply that is not a return is what
+    makes a second device (or a thousand) addressable at all — `ctx.devices` is the snapshot of the
+    room, `ctx.device_of(id)` is one of them. (`ctx.send(frame)` is the lower door: a frame already
+    built, for a gate that has to send a malformed one.) Only a page returns, and what it returns is a
+    page — the app's description of an address, not frames.
+    """
+
+    app: "App"
+    device: "Device"
+    frame: dict | None = None
+    match: "Match | None" = None
+
+    # --- the connection this delivery came from ---
+    @property
+    def id(self) -> str:
+        return self.device.id
+
+    @property
+    def path(self) -> str:
+        return self.device.path
+
+    @property
+    def query(self) -> dict[str, list[str]]:
+        return self.device.query
+
+    @property
+    def data(self) -> dict:
+        """The bag the business hangs on this connection. The framework still never reads it."""
+        return self.device.data
+
+    # --- what it can say ---
+    def emit(self, *operations: dict) -> None:
+        """Say something to the device this delivery came from: these accrete operations, one frame."""
+        self.device.emit(*operations)
+
+    def send(self, frame: list[dict]) -> None:
+        """The lower door: a frame already built (a gate that has to send a malformed one)."""
+        self.device.send(frame)
+
+    def devices(self) -> list["Device"]:
+        """Every live device, this one included — the room a broadcast picks from."""
+        return self.app.live()
+
+    def device_of(self, id: str) -> "Device | None":
+        """One device by id, for when the answer belongs to somebody else."""
+        return self.app.device(id)
+
+    # --- what it can ask of the page ---
+    def draw(self) -> None:
+        """Redraw the page this device stands on. The app draws it; the device is where it lands."""
+        self.app._draw(self.device)
+
+    def go(self, url: str) -> None:
+        """Move this device's address, then draw — the server's own page turn (`Device.go`)."""
+        self.device.path, self.device.query = split_location(url)
+        self.app._draw(self.device)
+
+
 class App:
     """A reflux producer: the page tree, the channel route, the registry, and the pages."""
 
@@ -277,7 +347,7 @@ class App:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
         self.root = Path(root) if root is not None else PAGE_ROOT
-        self.dests = Registry()
+        self.dests = Registry(self.context)
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(device, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
@@ -311,8 +381,9 @@ class App:
 
     # --- the framework's own protocol -----------------------------------------------------
 
-    def _on_hello(self, device: Device, frame: dict) -> None:
+    def _on_hello(self, ctx: Context, frame: dict) -> None:
         """The client says where it stands; the first frame answers, then `connect` is raised."""
+        device = ctx.device
         device.path, device.query = location_of(frame)
         self._draw(device)
         if not device.connected:
@@ -321,16 +392,19 @@ class App:
             # client already has, never under one it is about to lose.
             self.dests.announce("connect", device, frame)
 
-    def _on_nav(self, device: Device, frame: dict) -> None:
+    def _on_nav(self, ctx: Context, frame: dict) -> None:
         """The page asked for another path — back or forward: the only navigation this wire has.
 
         The browser already moved its address bar before this arrived, so the framework only
         re-draws and tells the app: `location` is the host's event, not a wire address.
         """
+        device = ctx.device
         device.path, device.query = location_of(frame)
         self._draw(device)
         self.dests.announce(
-            "location", device, {"dest": "location", "data": {"path": device.path, "query": device.query}}
+            "location",
+            device,
+            {"dest": "location", "data": {"path": device.path, "query": device.query}},
         )
 
     def route(
@@ -345,6 +419,10 @@ class App:
         declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
         return declared
 
+    def context(self, device: Device, frame: dict | None = None, match: Any = None) -> Context:
+        """One delivery, ready to hand a handler: this app, this device, and what came in."""
+        return Context(self, device, frame, match)
+
     def _draw(self, device: Device) -> None:
         """One frame for the device's current location: a create, or the ops the page gave for it.
 
@@ -353,11 +431,16 @@ class App:
         """
         if self.page is None and len(self.routes) == 0:
             return
+        ctx = self.context(device)
         if self.page is not None:
-            drawn = self.page(device, device.path)
+            drawn = self.page(ctx, device.path)
         else:
             match = self.routes.match(device.path)
-            drawn = not_found(device.path) if match is None else match.resolve(device)
+            if match is None:
+                drawn = not_found(device.path)
+            else:
+                ctx = self.context(device, match=match)
+                drawn = match.resolve(ctx)
         operations = drawn if isinstance(drawn, list) else [wire.create(drawn)]
         if self.shell is None:
             device.emit(*operations)
@@ -365,7 +448,7 @@ class App:
         frame: list[dict] = []
         if not device.shell_drawn:
             device.shell_drawn = True
-            frame.append(wire.create(self.shell(device)))
+            frame.append(wire.create(self.shell(ctx)))
         frame.extend(into_routes(operations))
         device.emit(*frame)
 
@@ -467,20 +550,37 @@ class App:
 
     # --- serving --------------------------------------------------------------------------
 
-    def mount(
-        self, path: str, handler: Callable[[Request], Any] | str | Path | None = None
-    ) -> None:
-        """Put a route in the HTTP table: the channel (no handler), a callable, or a directory.
+    def mount(self, path: str, handler: Any = _UNSET) -> Any:
+        """Put a route in the HTTP table — as a decorator, or with its handler in hand.
 
-        The table starts as `{"/ws": CHANNEL}`, so the socket is a route like any other rather than
-        a special case of the server. `app.mount("/health", lambda request: "ok")` adds the app's
-        own paths (a `Request` in, a `Response` / `(status, body)` / body out); `app.mount("/socket")`
-        puts another channel route somewhere else; and `app.mount("/assets/chart", path)` serves a
-        directory of files, which is how a page's modules and models reach the browser.
+        The table starts as `{"/ws": CHANNEL}`, so the socket is a route like any other rather than a
+        special case of the server. One method covers the four things the table holds:
+
+            @app.mount("/status")                       # a decorator over the handler it names
+            def status(request: Request) -> Response: ...
+
+            app.mount("/health", lambda request: "ok")  # the same declaration, written flat
+            app.mount("/assets/chart", path)            # a directory, served file by file
+            app.mount("/socket", CHANNEL)               # the channel, put somewhere else
+
+        A handler is a `Request` in and a `Response` / `(status, body)` / body out. A path may be
+        declared once: declaring it twice raises rather than giving the second one the first one's
+        address.
         """
+        if handler is _UNSET:
+            def declare(fn: Callable) -> Callable:
+                self._put(path, fn)
+                return fn
+
+            return declare
+        self._put(path, CHANNEL if handler is None else handler)
+        return handler
+
+    def _put(self, path: str, route: Any) -> None:
+        """One entry, once: the table has no notion of a later declaration overriding an earlier one."""
         if path in self.mounts:
             raise ValueError(f"{path!r} is already mounted; unmount it first")
-        self.mounts[path] = CHANNEL if handler is None else handler
+        self.mounts[path] = route
 
     def unmount(self, path: str) -> None:
         """Take a route out of the table — moving the channel is unmount, then mount."""
@@ -574,7 +674,9 @@ class App:
         """
         if self.devices.pop(device.channel, None) is None:
             return False
-        self.dests.announce("disconnect", device, {"dest": "disconnect", "data": {"reason": reason}})
+        self.dests.announce(
+            "disconnect", device, {"dest": "disconnect", "data": {"reason": reason}}
+        )
         return True
 
     def _pump(self, device: Device) -> None:

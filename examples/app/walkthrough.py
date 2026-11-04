@@ -2,9 +2,10 @@
 
     python3 -m examples.app.walkthrough --auto
 
-Six steps, in the order a person meets them: the dashboard arriving, the page turn into the chat, a
-reply streaming, a stop that keeps the half sentence out, an address nobody registered, and the
-disconnect the app hears on the way out. Each step prints the frames that crossed the wire.
+Seven steps, in the order a person meets them: the dashboard arriving, the page turn into the chat, a
+reply streaming, a stop that keeps the half sentence out, an address nobody registered, the `/status`
+route answering JSON over plain HTTP, and the disconnect the app hears on the way out. Each step
+prints the frames that crossed the wire.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ if __package__ in (None, ""):
 import argparse
 import json
 import time
+import urllib.request
 
 from examples.pacing import Step, read_for
 from tools.wire_probe import Socket
@@ -94,6 +96,12 @@ def main() -> int:
             show("nav /nowhere", missing)
             if missing:
                 print("    404 页：", json.dumps(missing[0][0].get("data"), ensure_ascii=False)[:120])
+
+            # A plain HTTP route in the same table: the socket is one entry, `/status` is another.
+            step.wait("/status——同一张表里的普通 HTTP 接口：页面用帧，运维要 JSON")
+            with urllib.request.urlopen(f"http://{args.host}:{port}/status", timeout=5) as answered:
+                print("    /status:", answered.status, answered.headers.get("content-type"))
+                print("   ", json.dumps(json.loads(answered.read().decode()), ensure_ascii=False))
 
         step.wait("客户端走开——app 听到 disconnect")
         time.sleep(0.4)

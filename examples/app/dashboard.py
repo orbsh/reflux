@@ -25,8 +25,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-from reflux import Match
-from reflux.app import Device
+from reflux import Context, Match
 from reflux.sdk import builders as b
 from reflux.sdk import markers
 from reflux.sdk.types import Accrete
@@ -131,7 +130,7 @@ def summary(series: list[int]) -> str:
 
 
 @app.route("/", title="概览")
-def dashboard(device: Device, match: Match) -> Accrete:
+def dashboard(ctx: Context, match: Match) -> Accrete:
     """The page: a heading, the week's numbers, the charts, the viewport, and a way to redraw it.
 
     Everything hangs off one `case` with a gap — the page owns its own spacing, because the shell
@@ -167,6 +166,6 @@ def dashboard(device: Device, match: Match) -> Accrete:
 
 
 @app.dests.register("dashboard.refresh")
-def on_refresh(device: Device, frame: dict) -> None:
+def on_refresh(ctx: Context, frame: dict) -> None:
     """New numbers, same page: a page turn is a redraw, so the whole structure comes again."""
-    device.draw()
+    ctx.draw()

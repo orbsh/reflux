@@ -26,13 +26,15 @@ whatever else the app mounts.
     def post(device, match):
         return b.case(b.text(match.params["slug"]))
 
-    app.mount("/health", lambda request: "ok")
+    @app.mount("/health")
+    def health(request):
+        return "ok"
     device.data["user"] = {"name": "Ada"}          # the business's, never the framework's
     device.emit(wire.set("greeting", b.text("你好")))
 """
 
 from . import sdk, wire
-from .app import App, Device
+from .app import App, Context, Device
 from .dests import Registry, RegistryError
 from .protocol import HOST_EVENTS, MAX_OPS_PER_FRAME, RESERVED_PREFIX, ROUTES_SLOT
 from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
@@ -47,6 +49,7 @@ __all__ = [
     "App",
     "Device",
     "CHANNEL",
+    "Context",
     "Request",
     "Response",
     "Registry",

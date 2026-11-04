@@ -94,7 +94,7 @@ app = App()                       # one object; every declaration below hangs on
 
 
 @app.route("/", title="Hello")
-def home(device, match):
+def home(ctx, match):
     return markers.page(
         "/",
         "Hello",
@@ -105,8 +105,8 @@ def home(device, match):
 
 
 @app.dests.register("name.change")
-def on_name(device, frame):
-    device.emit(wire.set("echo", b.text(str(frame["data"]))))
+def on_name(ctx, frame):
+    ctx.emit(wire.set("echo", b.text(str(frame["data"]))))
 
 
 if __name__ == "__main__":
@@ -126,7 +126,7 @@ What the pieces are:
   values. `b.text(source="echo")` reads a slot; `b.input(dest="name.change")` sends one.
 - **`@app.dests.register("name.change")`** is the only way an uplink frame reaches your code. An
   unregistered name is refused and counted — never dispatched dynamically.
-- **`device.emit(*ops)`** is exactly one frame, flushed in order.
+- **`ctx.emit(*ops)`** is exactly one frame, flushed in order — the handler's only way to speak.
 - **`device.data`** is yours. The framework hands you a device per connection and never reads that
   bag: put the user on it after a login, and it dies with the socket.
 
@@ -147,10 +147,10 @@ the connection and redraw:
 
 ```python
 @app.dests.register("login")
-def on_login(device, frame):
+def on_login(ctx, frame):
     user = check_credentials(frame["data"])     # yours; may call an external service
     if user is None:
-        device.emit(wire.set("form.error", b.text("wrong password")))
+        ctx.emit(wire.set("form.error", b.text("wrong password")))
         return
     device.data["user"] = user
     device.draw()                               # one frame, now with an identity
@@ -161,7 +161,7 @@ The socket itself is a **route in a table**, next to whatever else you mount:
 ```python
 app = App()                                  # mounts == {"/ws": CHANNEL}
 app.mount("/health", lambda request: "ok")   # Request in; Response, (status, body) or a body out
-app.unmount("/ws"); app.mount("/socket")     # move the channel
+app.unmount("/ws"); app.mount("/socket", CHANNEL)   # move the channel
 ```
 
 `Request` carries `method`, `path`, `query`, `headers` (lower-cased), `peer` and `body`; a route that
@@ -226,7 +226,7 @@ examples/app/
   app.py         the app and its shell; the host events; main()
   dashboard.py   "/"     — charts, a module host, a refresh
   chat.py        "/chat" — a conversation per connection, streamed, stoppable
-  walkthrough.py six steps, no browser
+  walkthrough.py seven steps, no browser
 ```
 
 — one page per file, each declaring its route on the shared app with `@app.route`, each keeping the
@@ -240,7 +240,7 @@ app = App(routes=Routes(), shell=shell)      # the shell stays; pages are writte
 from .app import app
 
 @app.route("/", title="概览")
-def dashboard(device, match):
+def dashboard(ctx, match):
     return markers.page("/", "概览", b.text("概览", variant="heading-1"), ...)
 ```
 
@@ -258,11 +258,20 @@ def dashboard(device, match):
   which address it is.
 - **Three names belong to the host** — `connect` / `location` / `disconnect` — registered like any
   other name, and refused if a client tries to send them.
+- **The socket is one entry in the HTTP table, and an operator's endpoint is another.** `@app.mount("/status")` puts a plain function next to `/ws` and the two asset directories; it takes a `Request` and answers JSON, because a monitor asks a question that is neither a page nor a frame:
+
+  ```python
+  @app.mount("/status")
+  def status(request):
+      return Response(200, json.dumps({"devices": len(app.live()), ...}), "application/json")
+  ```
+
+  `mount` returns the function, so the name stays bound and the declaration sits on the handler. A `str` or `Path` as the second argument means a directory served file by file instead; the channel is `mount("/socket", CHANNEL)`.
 
 ```
 python3 -m examples.app --port 8100            # 概览 + 对话
-python3 -m examples.app.walkthrough --auto     # the same six steps, no browser
-python3 tools/gate_dashboard.py                # 17 assertions: 12 over a socket, 5 in Chromium
+python3 -m examples.app.walkthrough --auto     # the same seven steps, no browser
+python3 tools/gate_dashboard.py                # 18 assertions: 13 over HTTP, 5 in Chromium
 python3 tools/gate_chat.py                     # the chat page's own 12, over a socket and in Chromium
 ```
 

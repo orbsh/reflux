@@ -19,25 +19,25 @@ class TestRegistration(unittest.TestCase):
     def test_reserved_prefix_is_a_startup_error(self) -> None:
         events = Registry()
         with self.assertRaises(RegistryError) as caught:
-            events.register("reflux:nav", lambda device, frame: None)
+            events.register("reflux:nav", lambda ctx, frame: None)
         self.assertIn("reserved prefix", str(caught.exception))
         self.assertEqual(events.names(), [])
 
     def test_the_framework_may_use_the_reserved_prefix(self) -> None:
         events = Registry()
-        events.builtin("reflux:hello", lambda device, frame: None)
+        events.builtin("reflux:hello", lambda ctx, frame: None)
         self.assertEqual(events.names(), ["reflux:hello"])
 
     def test_duplicate_registration_is_an_error_not_an_overwrite(self) -> None:
         events = Registry()
-        events.register("chat.send", lambda device, frame: None)
+        events.register("chat.send", lambda ctx, frame: None)
         with self.assertRaises(RegistryError):
-            events.register("chat.send", lambda device, frame: None)
+            events.register("chat.send", lambda ctx, frame: None)
 
     def test_names_must_be_non_empty_strings_and_handlers_callable(self) -> None:
         events = Registry()
         with self.assertRaises(RegistryError):
-            events.register("", lambda device, frame: None)
+            events.register("", lambda ctx, frame: None)
         with self.assertRaises(RegistryError):
             events.register("chat.send", "not callable")  # type: ignore[arg-type]
 
@@ -45,8 +45,8 @@ class TestRegistration(unittest.TestCase):
         events = Registry()
 
         @events.register("chat.send")
-        def handler(device, frame) -> None:
-            device.seen.append(frame)
+        def handler(ctx, frame) -> None:
+            ctx.seen.append(frame)  # a bare registry delivers the device itself
 
         self.assertEqual(events.names(), ["chat.send"])
         device = FakeDevice()
@@ -74,7 +74,7 @@ class TestDispatch(unittest.TestCase):
     def test_a_handler_that_raises_keeps_the_device(self) -> None:
         events = Registry()
 
-        def boom(device, frame) -> None:
+        def boom(ctx, frame) -> None:
             raise RuntimeError("bad handler")
 
         events.register("boom.now", boom)
@@ -82,7 +82,7 @@ class TestDispatch(unittest.TestCase):
         self.assertFalse(events.dispatch(device, {"dest": "boom.now", "data": {}}))
         self.assertIn("bad handler", events.log[-1])
         # and the next frame still gets through: a defect is a log line, not a dead device
-        events.register("fine.now", lambda device, frame: None)
+        events.register("fine.now", lambda ctx, frame: None)
         self.assertTrue(events.dispatch(device, {"dest": "fine.now", "data": {}}))
 
 

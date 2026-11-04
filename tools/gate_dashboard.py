@@ -157,9 +157,18 @@ def socket_phase() -> list[tuple[str, bool, str]]:
                 )
             )
 
-            # 4 — a page turn replaces the slot, never the shell.
+            # 4 — a page turn replaces the slot, never the shell. The chat page seeds its status line
+            # as a send of its own (the page hook emits), so the turn may arrive as two frames: keep
+            # reading until the frame that writes the slot shows up.
             ws.send({"dest": "go.chat", "id": "nav-chat", "data": {}})
-            turn = ws.recv()
+            turn: list[dict] = []
+            for _ in range(4):
+                frame = ws.recv()
+                if not frame:
+                    continue
+                if any(op.get("slot") == "routes" for op in frame):
+                    turn = frame
+                    break
             actions = [op.get("action") for op in turn or []]
             checks.append(
                 (
@@ -227,6 +236,22 @@ def socket_phase() -> list[tuple[str, bool, str]]:
                     "nothing was refused",
                     example.app.stats["refused"] == 0,
                     f"refused={example.app.stats['refused']}",
+                )
+            )
+            # 9 — the same table carries a plain HTTP route: JSON for an operator, no device involved.
+            code, payload = get("/status")
+            try:
+                answered = json.loads(payload.decode())
+            except ValueError:
+                answered = {}
+            checks.append(
+                (
+                    "the app's own /status answers JSON, next to the socket",
+                    code == 200
+                    and sorted(answered.get("routes") or []) == ["/", "/chat"]
+                    and "/status" in (answered.get("mounts") or [])
+                    and "modules" in answered,
+                    f"{code} keys={sorted(answered)}",
                 )
             )
         time.sleep(0.3)

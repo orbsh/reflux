@@ -74,19 +74,19 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     @app.dests.register("gate.boom")
-    def boom(device, frame):
+    def boom(ctx, frame):
         raise RuntimeError("the producer's own defect")
 
     @app.dests.register("gate.half")
-    def half(device, frame):
+    def half(ctx, frame):
         # One legal operation and one that is not a wire type: the whole frame must be refused, so
         # "half-way" can never reach the page — and the frame after it still must.
-        device.send(
+        ctx.send(
             wire.draw(
 wire.set("echo", b.text("half-way")),
                 {"action": "create", "slot": "", "data": {"type": "widget"}})
         )
-        device.send(wire.draw(wire.set("echo", b.text("whole"))))
+        ctx.send(wire.draw(wire.set("echo", b.text("whole"))))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
         device = next(iter(app.live()), None)

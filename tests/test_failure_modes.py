@@ -104,7 +104,7 @@ class TestDuplicateIds(unittest.TestCase):
 class TestSlowClient(unittest.TestCase):
     def setUp(self) -> None:
         self.app = App(heartbeat=10.0, dead_after=30.0, outbox=4)
-        self.app.page = lambda device, path: b.text("resync")
+        self.app.page = lambda ctx, path: b.text("resync")
 
     def tearDown(self) -> None:
         self.app.stop()

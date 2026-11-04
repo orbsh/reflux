@@ -17,7 +17,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         app = App(routes=Routes())
 
         @app.route("/hello", title="问候")
-        def hello(device, match):
+        def hello(ctx, match):
             return b.text("hi")
 
         self.assertEqual([found.path for found in app.routes], ["/hello"])
@@ -31,7 +31,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         app = App(routes=Routes())
 
         @app.route("/only-here")
-        def only_here(device, match):
+        def only_here(ctx, match):
             return b.text("x")
 
         self.assertEqual(len(DEFAULT), before)
@@ -42,7 +42,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
         @app.route("/")
         @app.route("/home")
-        def home(device, match):
+        def home(ctx, match):
             return b.text("home")
 
         self.assertEqual(sorted(found.path for found in app.routes), ["/", "/home"])
@@ -52,13 +52,13 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
     def test_the_same_path_twice_is_loud(self):
         app = App(routes=Routes())
-        app.route("/taken")(lambda device, match: b.text("a"))
+        app.route("/taken")(lambda ctx, match: b.text("a"))
         with self.assertRaises(RoutesError):
-            app.route("/taken")(lambda device, match: b.text("b"))
+            app.route("/taken")(lambda ctx, match: b.text("b"))
 
     def test_a_bare_app_reads_the_module_table_and_app_route_does_not(self):
         @route("/module-level")
-        def module_level(device, match):
+        def module_level(ctx, match):
             return b.text("m")
 
         self.assertIs(App().routes, DEFAULT)
@@ -67,11 +67,11 @@ class TestDeclaringOnTheApp(unittest.TestCase):
     def test_layout_rides_along(self):
         app = App(routes=Routes())
 
-        def frame(device, match, page):
+        def frame(ctx, match, page):
             return b.case(page)
 
         @app.route("/framed", layout=frame)
-        def framed(device, match):
+        def framed(ctx, match):
             return b.text("in")
 
         match = app.routes.match("/framed")

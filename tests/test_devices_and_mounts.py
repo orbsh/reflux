@@ -3,7 +3,7 @@
 Two subjects that meet at the same object. A **device** is a connection the framework keeps —
 its id, where it stands, what the business hung on it, and when it goes. The **mount table** is the
 HTTP side, and the channel is one route in it (`{"/ws": CHANNEL}`), which is why moving the socket is
-`unmount("/ws")` + `mount("/socket")` rather than a server setting.
+`unmount("/ws")` + `mount("/socket", CHANNEL)` rather than a server setting.
 
 Every test here drives the real server and a real socket: a route table that only works in-process
 would not be a route table.
@@ -21,7 +21,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from reflux import CHANNEL, App, Device, Request, Response, Routes, wire
+from reflux import CHANNEL, App, Context, Device, Request, Response, Routes, wire
 from reflux.sdk import builders as b
 from tools.wire_probe import Socket
 
@@ -55,7 +55,7 @@ def bare_app(**kwargs: Any) -> App:
 def page_app(**kwargs) -> App:
     """An app with one page, so hello is answered with a frame."""
     app = App(**kwargs)
-    app.page = lambda device, path: b.text(f"page{path}")
+    app.page = lambda ctx, path: b.text(f"page{path}")
     return app
 
 
@@ -151,15 +151,28 @@ class TestTheTable(unittest.TestCase):
     def test_mounting_twice_is_an_error_and_unmounting_nothing_is_too(self):
         app = bare_app()
         with self.assertRaises(ValueError):
-            app.mount("/ws")
+            app.mount("/ws", CHANNEL)
         with self.assertRaises(KeyError):
             app.unmount("/never")
+
+    def test_mount_is_a_decorator_over_the_handler_it_names(self):
+        app = bare_app()
+
+        @app.mount("/status")
+        def status(request):
+            return json.dumps({"where": request.path, "queried": request.query})
+
+        self.assertIs(app.mounts["/status"], status, "the decorator hands the function back")
+        with Served(app) as served:
+            code, body = served.get("/status?x=1")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(body), {"where": "/status", "queried": {"x": ["1"]}})
 
     def test_the_channel_can_be_moved(self):
         app = bare_app()
         app.unmount("/ws")
-        app.mount("/socket")
-        app.page = lambda device, path: b.text("page")
+        app.mount("/socket", CHANNEL)
+        app.page = lambda ctx, path: b.text("page")
         with Served(app) as served:
             with Socket(served.port, path="/socket") as ws:
                 hello(app, ws)
@@ -182,7 +195,7 @@ class TestGo(unittest.TestCase):
         app = page_app()
 
         @app.dests.register("location")
-        def on_location(device, frame):
+        def on_location(ctx, frame):
             self.heard.append(frame)
 
         with Served(app) as served:
@@ -213,7 +226,7 @@ class TestGo(unittest.TestCase):
         app = page_app()
 
         @app.dests.register("location")
-        def on_location(device, frame):
+        def on_location(ctx, frame):
             self.heard.append(frame)
 
         with Served(app) as served:
@@ -303,7 +316,7 @@ class TestDevices(unittest.TestCase):
     def test_evict_closes_the_named_device_and_says_why(self):
         app = bare_app()
         heard: list[tuple[str, Any]] = []
-        app.dests.register("disconnect", lambda device, frame: heard.append((device.id, frame["data"]["reason"])))
+        app.dests.register("disconnect", lambda ctx, frame: heard.append((ctx.id, frame["data"]["reason"])))
         with Served(app) as served:
             with Socket(served.port) as ws:
                 device = hello(app, ws)
@@ -319,7 +332,7 @@ class TestDevices(unittest.TestCase):
             with Socket(served.port) as ws:
                 device = hello(app, ws)
                 device.data["user"] = "Ada"
-                self.assertEqual(app.evict(where=lambda device: device.data.get("user") == "Ada"), 1)
+                self.assertEqual(app.evict(where=lambda ctx: ctx.data.get("user") == "Ada"), 1)
                 self.assertEqual(app.live(), [])
 
     def test_evict_without_a_target_refuses_rather_than_closing_everything(self):
@@ -332,13 +345,13 @@ class TestTheShape(unittest.TestCase):
         app = bare_app()
 
         @app.dests.register("login")
-        def on_login(device: Device, frame: dict) -> None:
+        def on_login(ctx: Context, frame: dict) -> None:
             # In a real app this is where an external service gets asked; the framework owns none of it.
             if frame["data"].get("name") == "Ada":
-                device.data["user"] = {"name": "Ada"}
-                device.emit(wire.set("hello", b.text("欢迎回来")))
+                ctx.data["user"] = {"name": "Ada"}
+                ctx.emit(wire.set("hello", b.text("欢迎回来")))
             else:
-                device.emit(wire.set("hello", b.text("名字不认识")))
+                ctx.emit(wire.set("hello", b.text("名字不认识")))
 
         with Served(app) as served:
             with Socket(served.port) as ws:

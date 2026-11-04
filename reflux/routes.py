@@ -180,12 +180,16 @@ class Match:
     def meta(self) -> dict[str, Any]:
         return self.route.meta
 
-    def resolve(self, device) -> Any:
-        """The structure of this page: the handler's, wrapped by the layout when it declared one."""
-        page = self.route.handler(device, self)
+    def resolve(self, ctx) -> Any:
+        """The structure of this page: the handler's, wrapped by the layout when it declared one.
+
+        A page handler gets `(ctx, match)` and returns the page — a description, not frames. Saying
+        something to a client is `ctx.send(...)`, on the page and off it alike.
+        """
+        page = self.route.handler(ctx, self)
         if self.route.layout is None:
             return page
-        return self.route.layout(device, self, page)
+        return self.route.layout(ctx, self, page)
 
     def __repr__(self) -> str:
         return f"<Match {self.route.path!r} {self.params!r}>"
@@ -280,10 +284,10 @@ class Routes:
             return None
         return Match(best[1], path, best[2])
 
-    def resolve(self, device, path: str) -> Any:
+    def resolve(self, ctx, path: str) -> Any:
         """Match a path and build its page, or None when nothing matches."""
         match = self.match(path)
-        return None if match is None else match.resolve(device)
+        return None if match is None else match.resolve(ctx)
 
     def table(self) -> list[tuple[str, str, dict[str, Any]]]:
         """Rows for `reflux routes`: path, source module, metadata fields."""

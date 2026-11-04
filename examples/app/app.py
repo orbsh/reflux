@@ -11,6 +11,9 @@ put between a declaration and its handler.
 The shell is the frame the pages are drawn into: it carries the nav and the `routes` slot the
 framework writes to. It is drawn once per connection, so a page turn replaces one slot and leaves
 the header alone.
+
+One entry in the same HTTP table is not a page: `/status` answers JSON for whoever runs this — the
+socket is `/ws`, a page is `/` or `/chat`, and an operator's question is neither.
 """
 
 from __future__ import annotations
@@ -22,14 +25,16 @@ if __package__ in (None, ""):  # `python3 examples/app/app.py`, not just `-m exa
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import argparse
+import json
 from typing import Any
 
 from reflux import ROUTES_SLOT, Routes
-from reflux.app import App, Device
+from reflux.app import App, Context
+from reflux.server import Request, Response
 from reflux.sdk import builders as b
 from reflux.sdk.types import Accrete
 
-__all__ = ["app", "heard", "main", "shell"]
+__all__ = ["app", "heard", "main", "shell", "status"]
 
 SHELL_ID = "shell"
 
@@ -38,7 +43,7 @@ SHELL_ID = "shell"
 heard: list[tuple[str, str, Any]] = []
 
 
-def shell(device: Device) -> Accrete:
+def shell(ctx: Context) -> Accrete:
     """The frame around every page: drawn with the first page, then left alone.
 
     Two rows — the nav, then the page — and the shell owns the viewport height, so a page can say
@@ -65,28 +70,54 @@ app = App(routes=Routes(), shell=shell)
 
 
 @app.dests.register("go.dashboard")
-def on_dashboard(device: Device, frame: dict) -> None:
-    device.go("/")
+def on_dashboard(ctx: Context, frame: dict) -> None:
+    ctx.go("/")
 
 
 @app.dests.register("go.chat")
-def on_chat(device: Device, frame: dict) -> None:
-    device.go("/chat")
+def on_chat(ctx: Context, frame: dict) -> None:
+    ctx.go("/chat")
 
 
 @app.dests.register("connect")
-def on_connect(device: Device, frame: dict) -> None:
-    heard.append(("connect", device.path, dict(device.query)))
+def on_connect(ctx: Context, frame: dict) -> None:
+    heard.append(("connect", ctx.path, dict(ctx.query)))
 
 
 @app.dests.register("location")
-def on_location(device: Device, frame: dict) -> None:
-    heard.append(("location", device.path, dict(device.query)))
+def on_location(ctx: Context, frame: dict) -> None:
+    heard.append(("location", ctx.path, dict(ctx.query)))
 
 
 @app.dests.register("disconnect")
-def on_disconnect(device: Device, frame: dict) -> None:
-    heard.append(("disconnect", device.id, dict(device.query)))
+def on_disconnect(ctx: Context, frame: dict) -> None:
+    heard.append(("disconnect", ctx.id, dict(ctx.query)))
+
+
+@app.mount("/status")
+def status(request: Request) -> Response:
+    """A plain HTTP route in the same table as the socket — for whoever runs this, not for the page.
+
+    Frames are how a page is drawn; this is how a monitor, a shell script or a load balancer asks a
+    question. It is not a page, it has no device, and it answers JSON.
+    """
+    from . import dashboard  # lazily: the page module imports this one
+
+    return Response(
+        200,
+        json.dumps(
+            {
+                "ok": True,
+                "routes": [route.path for route in app.routes],
+                "mounts": sorted(app.mounts),
+                "devices": len(app.live()),
+                "stats": dict(app.stats),
+                "modules": {"charts": dashboard.CHARTS, "viewer": dashboard.VIEWER},
+            },
+            ensure_ascii=False,
+        ),
+        "application/json",
+    )
 
 
 def main() -> None:

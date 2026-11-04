@@ -10,7 +10,7 @@ legitimate use of that prefix.
     intents = Registry()
 
     @events.register("chat.send")
-    def send(device, frame): ...
+    def send(ctx, frame): ...        # `ctx.send(...)` answers; a return says nothing
 """
 
 from __future__ import annotations
@@ -28,7 +28,10 @@ class RegistryError(Exception):
 
 
 class Registry:
-    def __init__(self) -> None:
+    def __init__(self, context: Callable[..., Any] | None = None) -> None:
+        """`context` builds one delivery (`Context(app, device, frame)`) — the app supplies it, so the
+        registry never has to know what a context is, only that a handler is handed one."""
+        self._context = context or (lambda device, frame=None: device)
         self._handlers: dict[str, Handler] = {}
         self._builtin: set[str] = set()
         self.calls = 0
@@ -100,21 +103,22 @@ class Registry:
             rows.append((name, f"{module}.{qualname}", "builtin" if name in self._builtin else "app"))
         return rows
 
-    def dispatch(self, device, frame: Any) -> bool:
-        """Hand one uplink frame to its handler. False when it was refused."""
+    def dispatch(self, device: Any, frame: Any) -> bool:
+        """Hand one uplink frame to its handler, as a context. False when it was refused."""
+        ctx = self._context(device, frame)
         if not isinstance(frame, dict) or not isinstance(frame.get("dest"), str):
             self.refused += 1
-            self.log.append(f"malformed frame from {device.id}: {frame!r}")
+            self.log.append(f"malformed frame from {ctx.id}: {frame!r}")
             return False
         name = frame["dest"]
         handler = self._handlers.get(name)
         if handler is None:
             self.refused += 1
-            self.log.append(f"unregistered event {name!r} from {device.id} on {device.path}")
+            self.log.append(f"unregistered event {name!r} from {ctx.id} on {ctx.path}")
             return False
-        return self._call(name, device, frame)
+        return self._call(name, ctx, frame)
 
-    def announce(self, name: str, device, frame: dict) -> bool:
+    def announce(self, name: str, device: Any, frame: dict) -> bool:
         """Raise one of the host's own events (`connect` / `location` / `disconnect`).
 
         Nobody listening is the ordinary case — most apps hear none of them — so absent is not an
@@ -123,13 +127,13 @@ class Registry:
         """
         if name not in self._handlers:
             return False
-        return self._call(name, device, frame)
+        return self._call(name, self._context(device, frame), frame)
 
-    def _call(self, name: str, device, frame: dict) -> bool:
+    def _call(self, name: str, ctx: Any, frame: dict) -> bool:
         """One handler, one accounting — the only place a handler's exception is caught."""
         self.calls += 1
         try:
-            self._handlers[name](device, frame)
+            self._handlers[name](ctx, frame)
         except Exception:  # a handler's defect stays a log line; the device survives
             self.refused += 1
             self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")

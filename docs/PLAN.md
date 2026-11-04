@@ -931,3 +931,28 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - `Device` 增加 `app` 字段（`App.handle` 里挂上），`FakeDevice` 增加 `app=` 与 `draw()` 委托，`tests/test_devices_and_mounts.py` 新增 `TestGo` 三例（移动并重画、裸路径清掉上一个查询串、不抛 `location`）。
 
 **验证**：232 例 OK（新增 3 例）。
+
+### 2026-11-04 — 示例里挂一个自己的 HTTP 接口（`/status`）
+
+**触发**：用户问「想挂载自己的 HTTP 接口，比如 /status，该怎么写」「静态资源是怎么挂载的」，随后要求「在示例中添加上」。
+
+- `examples/app/app.py` 新增 `@app.mount("/status")` 装饰的 `status(request) -> Response`：同一张表里紧挨 `/ws` 与两个资源目录的一项，返回 JSON（`ok`／`routes`／`mounts`／`devices`／`stats`／`modules`）。函数里惰性 `from . import dashboard`（页面模块反过来 import 这个模块，模块级会成环）。
+- `walkthrough.py` 第六步改成七步：socket 还开着的时候取一次 `/status`，打印状态、类型与正文（`devices: 1` 证明这确实是一条与页面无关的路由）。
+- `tools/gate_dashboard.py` 加一条（18 条：socket／HTTP 13 + Chromium 5）：`GET /status` 200、`application/json`、`routes` 为 `["/", "/chat"]`、`mounts` 含 `/status`、有 `modules`。
+- 文档：README 的示例条目补「socket 是 HTTP 表里的一项，运维端点也是另一项」（含 `mount` 是普通调用而非装饰器、`str`/`Path` 表示目录）；17 条 → 18 条；DESIGN 示例节同步。
+- 快测另加 `tests/test_example_status.py` 两例（不起服务器，直接调那个函数）：状态与类型、`routes` 为 `["/", "/chat"]`、`mounts` 含 `/status` 与 `/ws`、`stats` 六个键、`modules` 两个键。
+
+**同日追加（用户要求「直接做为装饰器写到 status 函数上面，不要再拆一层」）**：`App.mount` 本身成为装饰器——`@app.mount(path)` 返回带 `declare` 的装饰器，挂上后把函数原样交回（名字照旧绑定）；`app.mount(path, handler)` 平铺写法照旧。单参数的 `mount(path)` 从此只能是装饰器，所以通道要写全 `app.mount("/socket", CHANNEL)`（此前「无 handler = 通道」的暗号取消，`CHANNEL` 从 `reflux` 导出）。示例里那句 `app.mount("/status", status)` 删掉，声明直接压在函数上方；`test_the_channel_can_be_moved`／`test_mounting_twice_is_an_error…` 改传 `CHANNEL`，另加一例（装饰器返回函数本身、请求真的打到它）。
+
+**验证**：235 例 OK（新增 3 例）；`APP GATE PASSED` 18/18（`[12/18] PASS the app's own /status answers JSON, next to the socket 200 keys=[...]`）；`CHAT GATE PASSED`；walkthrough 七步跑通（`devices: 1` 那一行证明它是一条与页面无关的路由）。
+
+### 2026-11-04 — 事件驱动这一侧不返回：处理器拿 `ctx`
+
+**触发**：用户读 `examples/app/chat.py` 的页面钩子后指出「这种通过 ws 发送的，要用 device.emit/send，而不是 return，因为可能会有群发」，随后给形：「http 的是请求回应模式，才有 return，ws 的是事件驱动」「device 改为 ctx.send 或者 ctx.emit，然后 ctx 中可以查询到其它的 device」。
+
+- 新增 `Context`（`reflux/app.py`，从 `reflux` 导出）：`id`／`path`／`query`／`data`（这条连接）、`emit(*ops)`（说一句话，一帧）、`send(frame)`（低门：已经拼好的帧，门里发畸形帧用）、`devices()`／`device_of(id)`（这场里的其它设备）、`draw()`／`go(url)`（页面动作，走 `App._draw`）。
+- 签名统一：上行事件 `handler(ctx, frame)`；页面 `handler(ctx, match)`；外框 `shell(ctx)`；layout `layout(ctx, match, page)`。`Registry` 注入上下文工厂（`Registry(self.context)`），`dispatch`／`announce` 的调用点仍收设备，投递的构造归 app——测试与门不必知道这件事。
+- `return` 的边界：页面返回的是页面（地址的描述，由 `_draw` 变成帧），事件处理器返回什么也不说；说话一律 `ctx.emit`。示例里 `chat.page` 的状态行播种从「塞进返回的操作表」改回 `ctx.emit`（它现在是单独一帧，`gate_chat` 第 1 条改判「先 set 后 create，两帧」）。
+- 迁移：`examples/app/*`、`reflux/demo_app.py`、`tests/`、`tools/gate_*.py`、`tools/measure.py` 全部改形；`FakeDevice` 补 `go()`；`tests/test_routes.py` 用真的 `Context(app=None, device=SESSION)`；`gate_dashboard` 的翻页检查改成读到「写 routes 槽」的那一帧为止（页面种子先出一帧）。
+
+**验证**：235 例 OK；`gate_{t2,t3,t4,t6,t7,t8,t9,t10}`、`gate_ingest`、`gate_chat`、`gate_dashboard` 全过；`ruff --select F,E9` 只剩生成 SDK 里既有的 F405。

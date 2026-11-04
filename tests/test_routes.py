@@ -12,7 +12,7 @@ import contextlib
 import io
 import unittest
 
-from reflux import cli
+from reflux import Context, cli
 from reflux.routes import (
     DEFAULT,
     Routes,
@@ -24,10 +24,12 @@ from reflux.routes import (
 )
 
 SESSION = object()
+# A delivery with no app: these tests only carry the cookie through, they never read it.
+CTX = Context(app=None, device=SESSION)  # type: ignore[arg-type]
 
 
 def handler(name: str = "h"):
-    def run(device, match):
+    def run(ctx, match):
         return f"{name}:{match.path}"
 
     return run
@@ -106,7 +108,7 @@ class TestRegistration(unittest.TestCase):
 
         @table.add("/a")
         @table.add("/b")
-        def page(device, match):
+        def page(ctx, match):
             return "page"
 
         self.assertEqual([route.path for route in table.routes()], ["/a", "/b"])
@@ -144,7 +146,7 @@ class TestScoring(unittest.TestCase):
                 match = table.match(path)
                 self.assertIsNotNone(match)
                 assert match is not None
-                self.assertTrue(match.resolve(SESSION).startswith(who), match.resolve(SESSION))
+                self.assertTrue(match.resolve(CTX).startswith(who), match.resolve(CTX))
 
 
 class TestMatching(unittest.TestCase):
@@ -235,14 +237,14 @@ class TestResolve(unittest.TestCase):
         match = table.match("/x/7")
         self.assertIsNotNone(match)
         assert match is not None
-        self.assertEqual(match.resolve(SESSION), "x:/x/7")
+        self.assertEqual(match.resolve(CTX), "x:/x/7")
         self.assertEqual(match.meta, {})
 
     def test_a_layout_wraps_the_page_the_handler_built(self) -> None:
         seen: dict = {}
 
-        def layout(device, match, page):
-            seen.update(device=device, path=match.path, page=page)
+        def layout(ctx, match, page):
+            seen.update(ctx=ctx, path=match.path, page=page)
             return f"layout({page})"
 
         table = Routes()
@@ -250,16 +252,16 @@ class TestResolve(unittest.TestCase):
         match = table.match("/admin")
         self.assertIsNotNone(match)
         assert match is not None
-        self.assertEqual(match.resolve(SESSION), "layout(admin:/admin)")
-        self.assertIs(seen["device"], SESSION)
+        self.assertEqual(match.resolve(CTX), "layout(admin:/admin)")
+        self.assertIs(seen["ctx"].device, SESSION)
         self.assertEqual(seen["page"], "admin:/admin")
         self.assertEqual(match.meta, {"title": "后台"})
 
     def test_routes_resolve_by_path_and_return_none_when_nothing_matches(self) -> None:
         table = Routes()
         table.add("/x", handler("x"))
-        self.assertEqual(table.resolve(SESSION, "/x"), "x:/x")
-        self.assertIsNone(table.resolve(SESSION, "/nope"))
+        self.assertEqual(table.resolve(CTX, "/x"), "x:/x")
+        self.assertIsNone(table.resolve(CTX, "/nope"))
 
 
 class TestDiscovery(unittest.TestCase):
