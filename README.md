@@ -153,7 +153,7 @@ def on_login(device, frame):
         device.emit(wire.set("form.error", b.text("wrong password")))
         return
     device.data["user"] = user
-    app.draw_page(device)                       # one frame, now with an identity
+    device.draw()                               # one frame, now with an identity
 ```
 
 The socket itself is a **route in a table**, next to whatever else you mount:
@@ -252,6 +252,10 @@ def dashboard(device, match):
   files its modules need. A 3D viewport is the same idea with `b.canvas(url=…, value=…)`.
 - **The address carries what the backend needs.** `hello` brings `path` and `query`, so `/chat` and
   `/?filter=…` open the right thing on the first frame; the URL belongs to the browser.
+- **A page turn is one call.** `device.go("/chat")` moves that device's address and draws the page the
+  way a click on a link would; `device.draw()` redraws where it already stands (a refresh, or after a
+  login changed what the page should show). The address bar follows on its own, because the page says
+  which address it is.
 - **Three names belong to the host** — `connect` / `location` / `disconnect` — registered like any
   other name, and refused if a client tries to send them.
 

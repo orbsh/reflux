@@ -921,3 +921,13 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 **验证**：229 例 OK（新增 4 例目录挂载：文件 200、缺文件 404、与通道并存、撞键报错）；`gate_dashboard` 17/17；`gate_chat` 12/12；`python3 -m examples.app.walkthrough --auto` 六步跑通；Chromium 截图确认两张图与 3D 都画出来（640×260 / 640×320 / 640×320）。3D 模块从 fluxen 的 `examples/renderer/assets` 挂载（28MB 不进仓，`REFLUX_ASSETS` 可覆盖），图表模块 1.1MB 随仓。
 
 **过程中三个「页面全白」的坑**（外面看都一样的空 `#main`、无 console error、`refused=0`）：页面钩子抛异常（`markers.page(path, title, *children)` 不吃 `grid=`）时框架一帧都不发；G2 spec 顶层写 `chart` 会被模块拒（`mount rejected: Unknown Component: composition.chart`，只在 console 里）——顶层只能是 mark（`line`/`area`）或 `view`，雷达是 `view` + polar + `[area, line]` 子节点，`axis.y: false` 去掉那圈数字轴（否则压住顶部维度标签），`scale.x` 的 `padding: 0.5 / align: 0` 就是 N 轴等分配方；模块文件不在盘上时 chart/canvas 只留空格——所以两张卡都改成「不在就写一句说明」而不是画空盒。外框现在自己占 `100vh`（`grid-template-rows: auto 1fr`），页面才能说「剩下的都给我」（聊天页的 rack 因此有得滚，输入框落到底部）。
+
+### 2026-11-04 — 重画归设备：`device.draw()` 与 `device.go(url)`
+
+**触发**：用户读示例时问两件事——`examples/app/app.py:89` 的 `heard` 是什么、`:77` 的 `go()` 这种每应用都要自己写的固定码能不能进框架（「直接 device.go 不行吗」「draw_page 也是 device 画，app 画哪里？」）。
+
+- `App.draw_page(device)` 退休。动词搬到 `Device`：`device.draw()` 按当前地址重画一页；`device.go("/chat?tag=a")` = 移动地址 + 重画（同一个 `split_location` 解析，查询串随行）。`go` 不抛 `location`——那个事件只说客户端导航了。app 侧只剩私有 `_draw(device)`，给 hello／nav／resync 三条内部路径用；设备没挂 app（测试手搓的）时 `draw()`／`go()` 直接报错，而不是安静地不画。
+- 示例里那两个 `@app.dests.register("go.*")` 处理器现在是 `device.go("/")` 一行，`go()` 帮手函数删除；`dashboard.refresh` 改成 `device.draw()`。§`heard` 仍是示例自己的记录表（三个宿主事件按序入列，walkthrough 与门据此断言事件到达），不是框架机制。
+- `Device` 增加 `app` 字段（`App.handle` 里挂上），`FakeDevice` 增加 `app=` 与 `draw()` 委托，`tests/test_devices_and_mounts.py` 新增 `TestGo` 三例（移动并重画、裸路径清掉上一个查询串、不抛 `location`）。
+
+**验证**：232 例 OK（新增 3 例）。
