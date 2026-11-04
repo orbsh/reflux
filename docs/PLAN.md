@@ -975,3 +975,34 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 新增 `tests/test_slots.py`（11 例：三种写法同一条、路径原样、空名拒、四动词各一帧、构造器收对象、声明记在 app、turn 合成一帧、空 turn 不发、无 app 的组照常发句柄）。
 
 **验证**：**246 例 OK**；`gate_dashboard`（含新的 `slots` 键）、`gate_chat`、`gate_ingest`、`gate_t2..t10` 全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 里既有的 F841。
+
+**同日再追加（用户：「app.py:92 这个注解太长了，改成 `@app.on` 怎么样」）**：`App.on(name)` 落地——`@app.on("go.chat")` 是 `@app.dests.register(name)` 的糖，与 `@app.route` 之于 `routes.add` 同一个道理：声明挂在处理器上面，读下来是直的。`dests` 仍是那张表（内建名走 `dests.builtin`，要查处理器的地方也走它）。示例、`demo_app`、`protocol.py` 的注释、gate 与 measure 的注册点全部换成 `app.on`；README / DESIGN 同改。`tools/gate_ingest.py` 的 `APP.dests.register` 一并换。
+
+**同日再追加（用户：「dest="chat.send" 这里还是文本，没有用 Slot 类型。dest source 之类参数要检查类型，不允许文本，只能用 Slot」）**：
+
+- `source=` 与 `dest=` 现在只收 `Slot` 句柄，字符串一律 `TypeError`（错误信息直接给出 `ctx.slot('chat.send')` 这个写法）。地址是槽还是上行目标，由 bind 条目的 kind 决定，不由调用方区分——所以一张表 `ctx.slot`、一个类型 `Slot` 管两边（先前试过给上行单开 `Dest` 与 `ctx.dest(...)`，被否：两个方向本来就是对偶的，共用一张表）。
+- `Slot(name, ctx=None)`：句柄自带投递上下文才能写（`set`／`append`／`patch`／`remove`），没有上下文时只能当名字用（`source=`／`dest=`），写就 `RuntimeError`——这一条把「构造器收句柄」和「句柄必须知道对谁说」两件事说清了。
+- 迁移：examples（`ctx.slot("chat.send")`、`ctx.slot("go.chat")`）、`demo_app`（`GO_HOME`/`GO_ABOUT` 两个句柄、`nav_form(label, dest: Slot)`、`home(ctx)` 收投递而不是收槽视图）、shell 的 `routes` 读取（`ctx.slot(ROUTES_SLOT)`）、tests（`Slot("title")`、`Slot("rows")`）、`gate_t2`。
+- 新增 5 例（`test_slots.py::TheAddressesInNodes`）：句柄送上线是名字、字符串三种写法都拒、错误信息带出 `ctx.slot(...)`、无上下文的句柄能命名不能写。
+
+**验证**：**251 例 OK**；11 个门全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 既有的 F841。
+
+**同日再追加（用户：「slots.chat.send —— Slot 能做成支持嵌套的吗？也方便管理」）**：槽名可嵌套。
+
+- `Slot.__getattr__`／`__getitem__` 产生子名：`ctx.slot.chat.send` 就是 `chat.send`，子句柄带同一个投递上下文（`slots.chat.status.set(...)` 照常一帧）。
+- 四个动词在任何层级都优先，撞名的名字走上标：`slots.row["remove"]` 是那个 dest，`slots.row.remove` 是删一行的动词——示例 `demo_app` 就用这一形，注释写明。
+- 记账从「拿句柄」改到「用名字」：`Slot.declare()` 在写（`_emit`）与进节点（`bind_entry` 校验之后）时登记，所以 `ctx.slot.go.dashboard` 只记 `go.dashboard`，不记沿途的 `go`；`/status` 的 `slots` 因此是「在用的名字」的清单（实测 demo 首页：`echo / login.submit / name.change / row.add / row.remove / rows / submitted`）。
+- `chat.py` 的视图一份读两边：`class ChatDests(Protocol): send, stop`，`class ChatSlots(Protocol): status, messages, chat: ChatDests` → `dest=slots.chat.send`、`dest=slots.chat.stop`。
+- 期间修掉 `tools/measure.py` 的两处陈旧调用（`home()` 无参、`row_node(row)` 无 ctx）——它不在测试与门里，`home(ctx)` 改形后是静默坏的。
+
+**验证**：**255 例 OK**；11 个门全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 既有的 F841。
+
+**同日再追加（用户：「多个 Slots 的声明怎么管理，是否需要单独一个文件集中管理？」+「app.py:72 `@app.on` 后的 slot 也用这种形式」）**：
+
+- 名字表搬到应用上：`App.slot`（property）就是那张表，`ctx.slot` 是同一张表接上投递（`Slots(app=…, ctx=…)`）。`app.slot.go.chat` 没有上下文，能命名能声明不能发；声明记账改在「用」的那一处，所以 `@app.on(app.slot.go.chat)` 只记 `go.chat`，不记沿途的 `go`。
+- `@app.on(...)` 收句柄（`Slot`）：登记前先 `declare()`，再取 `.name` 进处理器表。宿主事件（`connect`/`location`/`disconnect`）同样是名字，示例里走同一形 `@app.on(names.connect)`；字符串仍接受，给框架自己的名字留路。
+- `App.slots`（集合）改名 `App.declared`，`/status` 的 `slots` 键读它；`App.slot(name)` 记录器改名 `App.declare(name)`。
+- 集中管理：示例新增 `examples/app/names.py`——一个应用的名字放一处（`Names` + 三个子 `Protocol`），`app.py`/`chat.py`/`dashboard.py` 都从它取视图（`names: Names = app.slot`、`slots: Names = ctx.slot`）。注解不 import 任何会跑起来的东西，两个应用共用一部分名字时把那份 Protocol 挪到共用模块即可。
+- 实测（demo 首页 + 示例首页）：`declared` 只列叶子名——`chat.send, chat.stop, connect, dashboard.refresh, disconnect, go.chat, go.dashboard, location, routes`。
+
+**验证**：**255 例 OK**；11 个门全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 既有的 F841。

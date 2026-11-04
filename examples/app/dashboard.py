@@ -29,7 +29,7 @@ from reflux import Context, Match
 from reflux.sdk import builders as b
 from reflux.sdk.types import Accrete
 
-from .app import app
+from .app import app, names
 
 __all__ = ["dashboard", "line_spec", "radar_spec"]
 
@@ -156,14 +156,14 @@ def dashboard(ctx: Context, match: Match) -> None:
                 variant="muted",
                 id="viewer-note",
             ),
-            b.form(b.button("换一组数据"), dest="dashboard.refresh", id="refresh"),
+            b.form(b.button("换一组数据"), dest=names.dashboard.refresh, id="refresh"),
             id="page-dashboard",
             grid={"gap": "12px"},
         ),
     )
 
 
-@app.dests.register("dashboard.refresh")
+@app.on(names.dashboard.refresh)
 def on_refresh(ctx: Context, frame: dict) -> None:
     """New numbers, same page: a page turn is a redraw, so the whole structure comes again."""
     ctx.draw()

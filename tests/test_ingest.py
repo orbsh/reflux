@@ -20,6 +20,7 @@ from reflux.app import App, Device
 from reflux.channel import Channel
 from reflux.ingest import Refused
 from reflux.sdk import builders as b
+from reflux.slots import Slot
 from reflux.sdk._parse import dump
 from reflux.protocol import MAX_OPS_PER_FRAME
 
@@ -49,7 +50,7 @@ class TestTheFrame(unittest.TestCase):
     def test_a_legal_frame_passes_untouched(self) -> None:
         good = frame(
             wire.tmpl("t1", '{"type":"text"}'),
-            wire.create(b.case(b.text("hi", id="a"), b.rack(source="rows"))),
+            wire.create(b.case(b.text("hi", id="a"), b.rack(source=Slot("rows")))),
             wire.append("rows", b.text("row", id="r1")),
             wire.inject("chan", {"v": 1}),
         )

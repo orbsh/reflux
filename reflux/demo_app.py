@@ -51,17 +51,19 @@ class DemoSlots(Protocol):
     submitted: Slot  # the last form's fields, as one line of JSON
 
 # Where a navigation form sends the client. The frame's `event` is the target's name.
-GO = {"go.home": "/", "go.about": "/about"}
+GO_HOME, GO_ABOUT = Slot("go.home"), Slot("go.about")
+GO = {GO_HOME.name: "/", GO_ABOUT.name: "/about"}
 
 
-def nav_form(label: str, dest: str) -> Accrete:
+def nav_form(label: str, dest: Slot) -> Accrete:
     """A one-button form — the vocabulary's only clickable, and the demo's way between pages."""
-    return b.form(b.button(label), dest=dest, id=f"nav-{dest}")
+    return b.form(b.button(label), dest=dest, id=f"nav-{dest.name}")
 
 
-def row_node(row: dict) -> Accrete:
+def row_node(row: dict, ctx: Context) -> Accrete:
     """One row: its text, and the form whose submit carries the row's own id up."""
-    return b.form(b.text(row["text"]), b.button("删"), dest="row.remove", id=row["id"])
+    # `remove` is a verb on a slot, so this name is written with the subscript.
+    return b.form(b.text(row["text"]), b.button("删"), dest=ctx.slot.row["remove"], id=row["id"])
 
 
 class Demo:
@@ -83,29 +85,34 @@ class Demo:
         send like any other, so it is written as one: the page is `ctx.page(...)`, the seed is
         `ctx.emit(...)`, and neither of them is a return.
         """
-        ctx.page(*self.home(slots_of(ctx)))
+        ctx.page(*self.home(ctx))
         if not ctx.data.get("rows_seeded"):
             ctx.data["rows_seeded"] = True
             for row in self.rows:
-                slots_of(ctx).rows.append(row_node(row))
+                slots_of(ctx).rows.append(row_node(row, ctx))
 
-    def home(self, slots: "DemoSlots") -> list[Accrete]:
-        """The home page's content — the markers are `ctx.page`'s business, not the app's."""
+    def home(self, ctx: Context) -> list[Accrete]:
+        """The home page's content — the markers are `ctx.page`'s business, not the app's.
+
+        It takes the delivery because its nodes name things: the slots they read (`source=`) and the
+        dests they speak to (`dest=`) are handles, and a handle comes from the context that owns them.
+        """
+        slots = slots_of(ctx)
         return [
             b.text("演示", variant="heading-1"),
-            b.input(dest="name.change", id="name-input"),
+            b.input(dest=ctx.slot.name.change, id="name-input"),
             b.text(source=slots.echo, id="echo"),
-            b.form(b.button("加一行"), dest="row.add", id="add-row"),
+            b.form(b.button("加一行"), dest=ctx.slot.row.add, id="add-row"),
             b.rack(source=slots.rows, id="rows"),
             b.form(
                 b.input(field="user", id="f-user"),
                 b.input(field="pass", kind=JsType.password, id="f-pass"),
                 b.button("保存"),
-                dest="login.submit",
+                dest=ctx.slot.login.submit,
                 id="login",
             ),
             b.text(source=slots.submitted, id="submitted"),
-            nav_form("关于", "go.about"),
+            nav_form("关于", GO_ABOUT),
             b.text(
                 "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构"
                 "加上新的路径标记，runtime 把标记镜像进地址栏。",
@@ -117,7 +124,7 @@ class Demo:
         return [
             b.text("关于", variant="heading-1"),
             b.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
-            nav_form("回到演示", "go.home"),
+            nav_form("回到演示", GO_HOME),
         ]
 
     # --- handlers: change the app's data, push exactly that change -------------------------
@@ -131,7 +138,7 @@ class Demo:
         row = {"id": f"row-{self.next_row}", "text": f"第 {self.next_row} 行"}
         self.next_row += 1
         self.rows.append(row)
-        slots_of(ctx).rows.append(row_node(row))
+        slots_of(ctx).rows.append(row_node(row, ctx))
 
     def on_remove(self, ctx, frame) -> None:
         row_id = frame.get("id")  # the row's form carried its identity up
@@ -168,12 +175,12 @@ def make_app() -> App:
     """The demo's app: the routes declared above (a side effect of importing this module) and
     this app's event handlers."""
     app = App()
-    app.dests.register("name.change", demo.on_name)
-    app.dests.register("row.add", demo.on_add)
-    app.dests.register("row.remove", demo.on_remove)
-    app.dests.register("login.submit", demo.on_submit)
+    app.on(app.slot.name.change, demo.on_name)
+    app.on(app.slot.row.add, demo.on_add)
+    app.on(app.slot.row["remove"], demo.on_remove)  # `remove` is a verb: the name goes by subscript
+    app.on(app.slot.login.submit, demo.on_submit)
     for name in GO:
-        app.dests.register(name, demo.on_go)
+        app.on(app.slot(name), demo.on_go)
     return app
 
 

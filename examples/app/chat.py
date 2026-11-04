@@ -32,27 +32,17 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from typing import Protocol
-
 from reflux import Context, Match
 from reflux.sdk import builders as b
-from reflux.slots import Slot
 from reflux.sdk.types import Accrete
+from reflux.slots import Slot
 
-from .app import app
+from .app import app, names
 from .model import Model, Scripted, Turn
+from .names import Names
 
-__all__ = ["Chat", "ChatSlots", "MAX_CHARS", "WINDOW", "page", "send", "settings", "spawn", "stream"]
+__all__ = ["Chat", "MAX_CHARS", "WINDOW", "page", "send", "settings", "spawn", "stream"]
 
-class ChatSlots(Protocol):
-    """The slots this page owns, for the editor. The wire only ever sees the names.
-
-    `ctx.slot` answers any name at runtime; a Protocol is what tells the IDE which names exist, so
-    `slots.status.set(…)` completes and a typo is caught before the frame is built.
-    """
-
-    status: Slot  # one line: what the backend is doing
-    messages: Slot  # the rack's rows, one per turn
 TEXT_VALUE = "/bind/value/default"  # pointer into a text node stored in a slot
 MAX_CHARS = 4096  # an application limit, not a wire limit
 WINDOW = 12  # turns of context the model sees; older ones are dropped
@@ -125,7 +115,7 @@ def page(ctx: Context, match: Match) -> None:
     The address and the title come from the declaration above — `ctx.page` builds the markers — so the
     handler passes its content and nothing else.
     """
-    slots: ChatSlots = ctx.slot  # type: ignore[assignment]  # the names are the Protocol's
+    slots: Names = ctx.slot  # type: ignore[assignment]  # the names are `names.py`'s
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
         slots.status.set(b.text("就绪"))
@@ -135,8 +125,8 @@ def page(ctx: Context, match: Match) -> None:
             b.text(source=slots.status, variant="muted", id="status"),
             b.rack(source=slots.messages, scroll=True, id="messages"),
             b.case(
-                b.form(b.input(field="text", id="composer"), b.button("发送"), dest="chat.send", id="send"),
-                b.form(b.button("停止"), dest="chat.stop", id="stop"),
+                b.form(b.input(field="text", id="composer"), b.button("发送"), dest=slots.chat.send, id="send"),
+                b.form(b.button("停止"), dest=slots.chat.stop, id="stop"),
                 grid={"grid-template-columns": "1fr auto", "gap": "8px"},
                 id="composer-row",
             ),
@@ -166,7 +156,7 @@ def spawn(target, args: tuple) -> None:
 
 def send(ctx: Context, chat: Chat, text: str) -> None:
     """Take one message: refuse it with a reason, or put it on screen and start the reply."""
-    slots: ChatSlots = ctx.slot  # type: ignore[assignment]
+    slots: Names = ctx.slot  # type: ignore[assignment]
     if not text.strip():
         slots.status.set(b.text("空消息没有发出去"))
         return
@@ -212,7 +202,7 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
         with chat.lock:
             chat.busy = False
 
-    slots: ChatSlots = ctx.slot  # type: ignore[assignment]
+    slots: Names = ctx.slot  # type: ignore[assignment]
     if failure is not None:
         with ctx.turn():
             reply.patch(TEXT_VALUE, f"\n\n⚠️ 模型出错：{failure}", op="append")
@@ -227,21 +217,21 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
     slots.status.set(b.text(chat.status()))
 
 
-@app.dests.register("chat.send")
+@app.on(names.chat.send)
 def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        slots = ctx.slot  # type: ignore[assignment]
+        slots: Names = ctx.slot  # type: ignore[assignment]
         slots.status.set(b.text("这一帧里没有文本字段，什么都没发"))
         return
     send(ctx, state(ctx), text)
 
 
-@app.dests.register("chat.stop")
+@app.on(names.chat.stop)
 def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     if not chat.busy:
-        slots = ctx.slot  # type: ignore[assignment]
+        slots: Names = ctx.slot  # type: ignore[assignment]
         slots.status.set(b.text("没有正在进行的回答"))
         return
     chat.stop.set()

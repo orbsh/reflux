@@ -28,11 +28,13 @@ import argparse
 import json
 from typing import Any
 
-from reflux import ROUTES_SLOT, Routes
+from reflux import Routes
 from reflux.app import App, Context
 from reflux.server import Request, Response
 from reflux.sdk import builders as b
 from reflux.sdk.types import Accrete
+
+from .names import Names
 
 __all__ = ["app", "heard", "main", "shell", "status"]
 
@@ -52,13 +54,13 @@ def shell(ctx: Context) -> Accrete:
     """
     return b.case(
         b.case(
-            b.form(b.button("概览"), dest="go.dashboard", id="nav-dashboard"),
-            b.form(b.button("对话"), dest="go.chat", id="nav-chat"),
+            b.form(b.button("概览"), dest=names.go.dashboard, id="nav-dashboard"),
+            b.form(b.button("对话"), dest=names.go.chat, id="nav-chat"),
             b.text("reflux 示例", variant="muted"),
             id="nav",
             grid={"grid-template-columns": "auto auto 1fr", "gap": "8px", "align-items": "center"},
         ),
-        b.placeholder(source=ROUTES_SLOT, id="routes"),
+        b.placeholder(source=names.routes, id="routes"),
         id=SHELL_ID,
         grid={"grid-template-rows": "auto 1fr", "height": "100vh", "padding": "16px", "gap": "12px", "box-sizing": "border-box"},
     )
@@ -68,28 +70,31 @@ def shell(ctx: Context) -> Accrete:
 # is shared by every module that uses `@route`.
 app = App(routes=Routes(), shell=shell)
 
+# 名字集中声明在 `names.py`；这里拿的是这张表本身，`app.slot.x.y` 只是它的一种写法。
+names: Names = app.slot  # type: ignore[assignment]
 
-@app.dests.register("go.dashboard")
+
+@app.on(names.go.dashboard)
 def on_dashboard(ctx: Context, frame: dict) -> None:
     ctx.go("/")
 
 
-@app.dests.register("go.chat")
+@app.on(names.go.chat)
 def on_chat(ctx: Context, frame: dict) -> None:
     ctx.go("/chat")
 
 
-@app.dests.register("connect")
+@app.on(names.connect)
 def on_connect(ctx: Context, frame: dict) -> None:
     heard.append(("connect", ctx.path, dict(ctx.query)))
 
 
-@app.dests.register("location")
+@app.on(names.location)
 def on_location(ctx: Context, frame: dict) -> None:
     heard.append(("location", ctx.path, dict(ctx.query)))
 
 
-@app.dests.register("disconnect")
+@app.on(names.disconnect)
 def on_disconnect(ctx: Context, frame: dict) -> None:
     heard.append(("disconnect", ctx.id, dict(ctx.query)))
 
@@ -111,7 +116,7 @@ def status(request: Request) -> Response:
                 "routes": [route.path for route in app.routes],
                 "mounts": sorted(app.mounts),
                 "devices": len(app.live()),
-                "slots": sorted(app.slots),  # every name the app has declared, wherever it did
+                "slots": sorted(app.declared),  # every name the app has used: slots, dests, host events
                 "stats": dict(app.stats),
                 "modules": {"charts": dashboard.CHARTS, "viewer": dashboard.VIEWER},
             },

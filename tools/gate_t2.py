@@ -26,6 +26,7 @@ from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
+from reflux.slots import Slot  # noqa: E402
 
 PAGE = "/"
 
@@ -47,8 +48,8 @@ def local_text(slot: str, *, id: str):
 
 def tree():
     return b.case(
-        b.text(source="echo", id="echo"),          # the data-slot reader (set / patch)
-        b.rack(source="rows", id="rows"),          # the list slot (append / remove)
+        b.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
+        b.rack(source=Slot("rows"), id="rows"),          # the list slot (append / remove)
         local_text("chan", id="local-echo"),       # the vals plane (inject)
         {"type": "template", "name": "t1", "data": {"label": "expanded"}},
         id="root",

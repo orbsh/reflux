@@ -20,8 +20,27 @@ class TheSlot(unittest.TestCase):
     def test_a_slot_is_its_name_and_says_so(self) -> None:
         status = self.ctx.slot("status")
         self.assertEqual(status.name, "status")
-        self.assertEqual(status, Slot(self.ctx, "status"))  # two handles, one plane
+        self.assertEqual(status, Slot("status", self.ctx))  # two handles, one plane
         self.assertEqual(len({status, self.ctx.slot["status"]}), 1)  # hashable, equal, not duplicated
+
+    def test_a_name_nests(self) -> None:
+        """`ctx.slot.go.dashboard` is the name "go.dashboard" — a dest reads off the same view."""
+        self.assertEqual(self.ctx.slot.go.dashboard.name, "go.dashboard")
+        self.assertEqual(self.ctx.slot.chat["send"].name, "chat.send")  # subscript works at either level
+        self.assertEqual(self.ctx.slot.go.dashboard, self.ctx.slot("go.dashboard"))
+
+    def test_a_child_carries_the_delivery(self) -> None:
+        self.ctx.slot.chat.status.set(b.text("x"))
+        self.assertEqual(self.device.frames[0][0]["slot"], "chat.status")
+
+    def test_nesting_keeps_the_verbs_verbs(self) -> None:
+        for verb in ("set", "append", "patch", "remove"):
+            self.assertTrue(callable(getattr(self.ctx.slot.chat, verb)))
+
+    def test_a_name_ending_in_a_verb_goes_by_subscript(self) -> None:
+        """`set`/`append`/`patch`/`remove` stay verbs at every level; the subscript is the way past."""
+        self.assertEqual(self.ctx.slot.row["remove"].name, "row.remove")
+        self.assertTrue(callable(self.ctx.slot.row.remove), "the verb, not a child")
 
     def test_the_three_forms_are_one_slot(self) -> None:
         self.assertEqual(self.ctx.slot("chat/status").name, self.ctx.slot["chat/status"].name)
@@ -59,10 +78,45 @@ class TheSlot(unittest.TestCase):
 
     def test_a_declaration_is_recorded_on_the_app(self) -> None:
         self.ctx.slot["status"].set(b.text("x"))
-        self.assertEqual(self.app.slots, {"status"})
+        self.assertEqual(self.app.declared, {"status"})
 
         self.ctx.slot("chat/reply").set(b.text("y"))
-        self.assertEqual(self.app.slots, {"status", "chat/reply"})
+        self.assertEqual(self.app.declared, {"status", "chat/reply"})
+
+
+class TheAddressesInNodes(unittest.TestCase):
+    """`source=` and `dest=` take handles. A string is the name written a second time — refused."""
+
+    def setUp(self) -> None:
+        self.app = App()
+        self.ctx = self.app.context(FakeDevice())
+
+    def test_a_source_handle_reaches_the_wire_as_its_name(self) -> None:
+        self.assertEqual(b.text(source=self.ctx.slot["status"]).bind["value"].source, "status")
+
+    def test_a_dest_handle_reaches_the_wire_as_its_name(self) -> None:
+        node = b.form(b.button("send"), dest=self.ctx.slot("chat.send"))
+        self.assertEqual(node.bind["value"].dest, "chat.send")
+
+    def test_a_string_is_refused_for_both(self) -> None:
+        for build in (
+            lambda: b.text(source="status"),
+            lambda: b.form(b.button("send"), dest="chat.send"),
+            lambda: b.rack(source="rows"),
+        ):
+            with self.assertRaises(TypeError):
+                build()
+
+    def test_the_message_says_where_the_handle_comes_from(self) -> None:
+        with self.assertRaises(TypeError) as caught:
+            b.text(source="status")
+        self.assertIn("ctx.slot('status')", str(caught.exception))
+
+    def test_a_slot_with_no_delivery_can_name_but_not_write(self) -> None:
+        handle = Slot("rows")
+        self.assertEqual(b.rack(source=handle).bind["value"].source, "rows")
+        with self.assertRaises(RuntimeError):
+            handle.append(b.text("row"))
 
 
 class TheTurn(unittest.TestCase):

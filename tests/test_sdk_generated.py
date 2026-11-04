@@ -26,6 +26,7 @@ import unittest
 import pydantic
 
 from reflux import sdk
+from reflux.slots import Slot
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA = json.loads((ROOT / "schema" / "accrete.schema.json").read_text())
@@ -188,23 +189,23 @@ class ProfileTest(unittest.TestCase):
 
     def test_one_off_bind_reaches_the_wire(self):
         self.assertEqual(sdk.dump(sdk.text("hi"))["bind"], {"value": {"kind": "default", "default": "hi"}})
-        self.assertEqual(sdk.dump(sdk.text(source="title"))["bind"],
+        self.assertEqual(sdk.dump(sdk.text(source=Slot("title")))["bind"],
                          {"value": {"kind": "source", "source": "title"}})
         with self.assertRaises(ValueError):
-            sdk.text("hi", source="title")  # two sources for one slot
+            sdk.text("hi", source=Slot("title"))  # two sources for one slot
         self.assertEqual(sdk.dump(sdk.button("提交"))["bind"],
                          {"value": {"kind": "submit", "default": "提交"}})
-        self.assertEqual(sdk.dump(sdk.select(options_source="rows"))["bind"],
+        self.assertEqual(sdk.dump(sdk.select(options_source=Slot("rows")))["bind"],
                          {"options": {"kind": "source", "source": "rows"}})
         self.assertEqual(sdk.dump(sdk.textarea(placeholder="写点什么"))["bind"],
                          {"placeholder": {"kind": "default", "default": "写点什么"}})
         node = sdk.input(field="name", kind=sdk.JsType.text)
         self.assertEqual(sdk.dump(node)["bind"],
                          {"value": {"kind": "field", "field": "name", "type": "text"}})
-        self.assertEqual(sdk.dump(sdk.input(dest="save"))["bind"],
+        self.assertEqual(sdk.dump(sdk.input(dest=Slot("save")))["bind"],
                          {"value": {"kind": "dest", "dest": "save"}})
         with self.assertRaises(ValueError):
-            sdk.input(dest="save", field="name")  # one落点 at a time
+            sdk.input(dest=Slot("save"), field="name")  # one落点 at a time
         with self.assertRaises(ValueError):
             sdk.input(payload={"k": 1})  # payload rides a field落点, not thin air
 
@@ -218,7 +219,7 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(sdk.dump(sdk.text(local="chan"))["bind"],
                          {"value": {"kind": "local", "slot": "chan"}})
         with self.assertRaises(ValueError):
-            sdk.text(source="title", path="/data")  # path on a source落点
+            sdk.text(source=Slot("title"), path="/data")  # path on a source落点
         with self.assertRaises(ValueError):
             sdk.text(path="/data")  # path with no落点 at all
 
@@ -226,7 +227,7 @@ class ProfileTest(unittest.TestCase):
         node = sdk.case(sdk.text("a"), sdk.text("b"))
         self.assertEqual([n["type"] for n in sdk.dump(node)["children"]], ["text", "text"])
         self.assertIsNone(sdk.dump(sdk.case()).get("children"))  # an empty container is noise, not a frame
-        rack = sdk.rack(source="rows", item=[sdk.text("row")])
+        rack = sdk.rack(source=Slot("rows"), item=[sdk.text("row")])
         self.assertEqual(len(sdk.dump(rack)["item"]), 1)
 
 

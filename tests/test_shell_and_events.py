@@ -29,7 +29,7 @@ def page_for(ctx, match):
 
 def shell(ctx) -> object:
     """A frame with one nav line and the routes reader — the shape the slot is written into."""
-    return b.case(b.text("shell"), b.placeholder(source=ROUTES_SLOT, id="routes"), id="shell")
+    return b.case(b.text("shell"), b.placeholder(source=ctx.slot(ROUTES_SLOT), id="routes"), id="shell")
 
 
 def app_with_shell(*paths: str, page=None) -> App:

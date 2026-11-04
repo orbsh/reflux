@@ -61,11 +61,16 @@ def table(title: str, header: list[str], rows: list[list[str]]) -> None:
 # --- bytes ---------------------------------------------------------------------------------
 
 
+def _ctx():
+    """A delivery with no device: these frames are built and measured, never sent."""
+    return demo.make_app().context(None)
+
+
 def seed_frame() -> dict:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
-wire.create(demo.demo.home()),
-        *[wire.append("rows", demo.row_node(row)) for row in demo.demo.rows])
+wire.create(demo.demo.home(_ctx())),
+        *[wire.append("rows", demo.row_node(row, _ctx())) for row in demo.demo.rows])
 
 
 def section_bytes() -> None:
@@ -73,7 +78,7 @@ def section_bytes() -> None:
         ("echo (`set`)", wire.draw(wire.set("echo", b.text("hello")))),
         (
             "add row (`append`)",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}, _ctx()))),
         ),
         ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
         (
@@ -131,7 +136,7 @@ def section_mutations() -> None:
         )
         turn(
             "list: `append` one row",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-m", "text": "measured-row"}))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-m", "text": "measured-row"}, _ctx()))),
             "measured-row",
         )
         turn(
@@ -266,7 +271,7 @@ def check_cost() -> list[list[str]]:
 
 def section_cpu() -> None:
     app = demo.make_app()
-    app.dests.register("measure.ping", lambda ctx, frame: ctx.emit(wire.set("echo", b.text("pong"))))
+    app.on("measure.ping", lambda ctx, frame: ctx.emit(wire.set("echo", b.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()

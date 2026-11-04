@@ -124,7 +124,18 @@ def bind_entry(
             raise ValueError(f"bind[{key!r}]: payload / type / path need an entry to ride on")
         return None
     kind, value = chosen[0]
-    value = getattr(value, "name", value)  # a `Slot` stands for its own name
+    if kind in ("source", "dest"):
+        # A name is written once, where the handle lives. A string here would be the second spelling
+        # of the same name and the place typos go to die, so it is refused rather than accepted.
+        from ..slots import Slot  # local: reflux.slots -> reflux.wire -> reflux.sdk is a cycle here
+
+        if not isinstance(value, Slot):
+            raise TypeError(
+                f"bind[{key!r}]: {kind}= takes a Slot, got {value!r} — take the name from the table "
+                f"first (ctx.slot({value!r}))"
+            )
+        value.declare()  # the name is used here; `/status` lists names in use
+        value = value.name
     entry: dict[str, Any] = {"kind": kind}
     if kind in ("default", "submit"):
         entry["default"] = value  # the variant is unit; its value is the entry's own `default`

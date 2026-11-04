@@ -79,7 +79,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
  "type": "input"}                                                                  // 取自组件表
 ```
 
-这一段是 `wire.draw(wire.create(b.input(dest="login.submit", kind="password", id="pw")))` 真打出来的（字段顺序也是线上的顺序）：没有 `attrs`、没有 `children`，是因为这个类型没用上它们——省略就等于默认值。
+这一段是 `wire.draw(wire.create(b.input(dest=ctx.slot.login.submit, kind="password", id="pw")))` 真打出来的（字段顺序也是线上的顺序）：没有 `attrs`、没有 `children`，是因为这个类型没用上它们——省略就等于默认值。
 
 - **`attrs` 是每类型的白名单**（accrete 那份的形状），取值是枚举或受限值域；reflux 的 profile 在它上面选与设默认。生产端见不到自由 class 字符串——变体的闭集合由 profile 落成 class 令牌；accrete 的线上是允许 class 的，收窄落在 profile 与 SDK 上（见「组件词表」）。
 - **`bind` 是组件与事件流之间的唯一接口**：线上是 `{"value": {kind, …}}` 这层薄包装里的判别联合——`kind: source` 是读（`source` 指向一个数据槽，可带 `path` 从槽内节点里取子值）、`kind: dest` 是写（`dest` 是上行落点，组件往上送它）、`kind: field` 是表单收集的一个字段（提交时随帧上去）、`kind: submit` 是提交按钮、`kind: local` 是页内 emit 的落点（`slot` + 可选的 `name`）、`kind: default` 只带默认值。I4 的落点就在这一行：**要什么状态，组件随事件自己带上来**——`payload` 那张「这次上行带哪几件本地态」的声明表随旧规格退场，送什么由组件的实现定。
@@ -130,9 +130,12 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - **列表槽**：`rack` 一类组件读的是列表槽，行按 `id` 合并；生产者的 `append` / `remove` 按行来，没有 `id` 的行退化为按位置渲染（合法，但丢掉跨插入的行身份）。
 - **vals 平面**：`inject` 写的具名值槽，与上面两者分开——事件数据不是展示形态（所以它是裸 `Value`，不是节点）。
 - 渲染器侧的槽是**按路径的惰性订阅**：写某个槽只惊动读它的那些组件，不广播全表。这是「增量」从线上延伸到客户端内部的那一段。
-- **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")`、`ctx.slot["status"]`、`ctx.slot.status` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`b.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。槽名可以是路径（`chat/status`、`reply.3`），现在原样送上线，框架不解析那个分隔符——层级是留给以后的，不是今天要实现的。
+- **两个地址口径上一视同仁**：`source=`（这条槽）和 `dest=`（那个处理器）都只收 `Slot` 句柄，不收字符串——句柄从同一张表 `ctx.slot` 来，指向哪边是 bind 条目的事，不是调用方的事。名字只写一次，拼错在构造那一行就 `TypeError`，而不是在客户端变成一个永远空的槽或一个没人接的上行。
+- **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")`、`ctx.slot["status"]`、`ctx.slot.status` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`b.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。名字会嵌套：`slots.chat.send` 就是 `chat.send`，和 `slots.status` 是 `status` 一样——一份视图读完页面读的槽和它说话的上行，因为两个方向本来就是对偶的（一条槽是页面里的位置，一个 dest 是宿主的处理器，都是名字）。名字原样送上线，框架不解析分隔符，`reply.{seq}` 这种现拼的照样能写。
+- **四个动词在任何层级都优先**：`set`／`append`／`patch`／`remove` 永远是动词，所以名字末尾撞上它们的走上标——`slots.row["remove"]` 是那个 dest，`slots.row.remove` 是删一行。例外只有这一种，且它出现在页面上就说明那个名字该换一个。
 - **写完几处要一起到，就用 `with ctx.turn():`**：块里的每次发送（`ctx.emit`、`ctx.slot.*` 的动词）进同一帧，出块时一起送。一个回合是一个客户端的所见，客户端看到「行、空气泡、状态行」同时出现，比省几帧更值钱。不嵌套——块里的块得先回答它属于哪一帧，而还没有页面需要两帧。
-- **名字的静态补全交给 `Protocol`**，不交给框架：`ctx.slot` 运行时认任何名字，应用声明一个只含注解的 `Protocol`（`status: Slot`、`messages: Slot`），在处理器里 `slots: ChatSlots = ctx.slot  # type: ignore[assignment]` —— 编辑器据此补全，拼错在第一次调用就是 `AttributeError`，而不是一个永远空的槽。声明过的名字记在 `App.slots` 里，`/status` 顺手列出来。
+- **表在应用上，投递只是给表接上设备**：`app.slot` 是这个应用的名字表，拿到的句柄没有投递上下文，能命名、能声明、不能发；`ctx.slot` 是同一张表接上这一条连接，动词于是能说话。所以 `@app.on(app.slot.go.chat)` 声明的那个名字，页面里写 `dest=names.go.chat` 就是它——不是两份拼写。
+- **静态补全交给 `Protocol`**，不交给框架：`ctx.slot` 运行时认任何名字，应用声明一个只含注解的 `Protocol`（`status: Slot`、`messages: Slot`），在处理器里 `slots: ChatSlots = ctx.slot  # type: ignore[assignment]` —— 编辑器据此补全，拼错在第一次调用就是 `AttributeError`，而不是一个永远空的槽。声明记账发生在**用**的那一处（一次写，或者进节点当 `source=`／`dest=`），所以 `App.slots` 与 `/status` 列的是真正在用的名字，不是沿途路过的前缀。
 
 ### 上行落点就是寻址契约
 
@@ -347,8 +350,8 @@ def post_index(ctx, match): ...
 def shell(device):
     return b.case(
         b.text("示例站点", variant="heading-1"),
-        b.form(b.button("首页"), dest="go.home"),
-        b.placeholder(source="routes", id="routes"),   # 页面就画在这里
+        b.form(b.button("首页"), dest=ctx.slot.go.home),
+        b.placeholder(source=ctx.slot.routes, id="routes"),   # 页面就画在这里
     )
 ```
 
@@ -406,15 +409,15 @@ app.unmount("/ws"); app.mount("/socket", CHANNEL)   # 通道换个路径
 三个名字是**宿主**的，不是线上的地址：`connect`（hello 落地）、`location`（客户端导航了）、`disconnect`（设备结束）。它们注册的方式和别的名字一样，形状也一样（`handler(device, frame)`，`frame.data` 带地址）：
 
 ```python
-@app.dests.register("connect")
+@app.on(app.slot.connect)
 def on_connect(device, frame):
     device.emit(wire.set("hello", b.text(f"来自 {device.path}")))
 
-@app.dests.register("location")
+@app.on(app.slot.location)
 def on_location(device, frame):
     print("客户端走到了", frame["data"]["path"])
 
-@app.dests.register("disconnect")
+@app.on(app.slot.disconnect)
 def on_disconnect(device, frame):
     print("走了", device.id, frame["data"]["reason"])   # reason: "closed" 或 "dead"
 ```

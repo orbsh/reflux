@@ -131,7 +131,7 @@ class EverySendableDestHasAHandler(unittest.TestCase):
         self.registered = set(self.app.dests.names())
 
     def test_the_reference_page_sends_only_registered_dests(self) -> None:
-        sent = sent_dests(markers.page('/', '演示', *demo.demo.home(demo.slots_of(_CTX))))
+        sent = sent_dests(markers.page('/', '演示', *demo.demo.home(_CTX)))
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
         self.assertEqual(sent - self.registered, set(), "the page sends an event nobody handles")
 
@@ -143,7 +143,7 @@ class EverySendableDestHasAHandler(unittest.TestCase):
     def test_the_walk_sees_the_row_forms_the_page_does_not_contain(self) -> None:
         # Rows arrive through `append`, not through the page tree, so the row template is its own
         # subject — a row's remove event is exactly the kind of thing a page walk would miss.
-        row = demo.row_node({"id": "row-9", "text": "x"})
+        row = demo.row_node({"id": "row-9", "text": "x"}, _CTX)
         self.assertEqual(sent_dests(row), {"row.remove"})
         self.assertIn("row.remove", self.registered)
 

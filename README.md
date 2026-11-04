@@ -99,12 +99,12 @@ def home(ctx, match):
         "/",
         "Hello",
         b.text("Hello", variant="heading-1"),
-        b.input(dest="name.change", id="name"),
-        b.text(source="echo", id="echo"),
+        b.input(dest=ctx.slot.name.change, id="name"),   # a dest: the handler's name
+        b.text(source=ctx.slot.echo, id="echo"),          # a slot: the data plane's name
     )
 
 
-@app.dests.register("name.change")
+@app.on(app.slot.name.change)
 def on_name(ctx, frame):
     ctx.slot["echo"].set(b.text(str(frame["data"])))   # one frame: set the `echo` slot
 
@@ -125,11 +125,15 @@ What the pieces are:
   mirrors into the address bar and the tab title, then your content. It is a convention, not a wire type
   — reach for it directly only when you are assembling a page by hand.
 - **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
-  values. `b.text(source="echo")` reads a slot; `b.input(dest="name.change")` sends one.
-- **`@app.dests.register("name.change")`** is the only way an uplink frame reaches your code. An
+  values. `b.text(source=…)` reads a slot and `b.input(dest=…)` speaks to a dest — both take a handle
+  from `ctx.slot`, never a string. A handle nests: `ctx.slot.chat.send` is the name `chat.send`, so a
+  page's slots and its uplinks read off the same view.
+- **`@app.on(app.slot.name.change)`** is the only way an uplink frame reaches your code — the handle
+  is the app's own table, so the page that sends to the dest and the handler that answers it are one
+  name (`@app.dests.register(name)` is the same declaration spelled at the registry). An
   unregistered name is refused and counted — never dispatched dynamically.
 "- **`ctx.emit(*ops)`** is exactly one frame, flushed in order — a handler's only way to speak.
-- **A slot is an object.** `ctx.slot["status"]` / `ctx.slot("chat/status")` hand out a `Slot`; its verbs
+- **A slot is an object.** `ctx.slot["status"]` / `ctx.slot.chat.send` hand out a `Slot`; its verbs
   are the wire's: `.set(node)`, `.append(node)`, `.patch(path, value, op=)`, `.remove(id)`. The name is
   written once, and a `Protocol` with the names is what the editor completes — no `STATUS = "status"`
   constants kept in step by eye. `with ctx.turn():` collects several writes into one frame.
@@ -156,7 +160,7 @@ own verification (`user = check_credentials(...)`, an external service, whatever
 the connection and redraw:
 
 ```python
-@app.dests.register("login")
+@app.on(app.slot.login)
 def on_login(ctx, frame):
     user = check_credentials(frame["data"])     # yours; may call an external service
     if user is None:

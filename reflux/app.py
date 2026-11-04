@@ -73,7 +73,7 @@ from .sdk import builders as b
 from .sdk import markers
 from .sdk.markers import PAGE_ID
 from .sdk.types import Accrete
-from .slots import Slots
+from .slots import Slot, Slots
 from .server import CHANNEL, make_server
 
 # "no handler was passed" — apart from `None`, which means the channel (a route that answers an
@@ -333,7 +333,8 @@ class Context:
         so a handler never writes `wire.set("status", …)` and never keeps the name in a constant of
         its own. Declaring a `Protocol` with the names gives the editor completion; see `slots.py`.
         """
-        return Slots(self)
+        return Slots(app=self.app, ctx=self)
+
 
     def turn(self) -> Any:
         """One frame out of several writes: every send inside the block lands in the same frame.
@@ -420,7 +421,7 @@ class App:
         # `/static/` when that directory exists (a produced site may have none).
         self.root = Path(root) if root is not None else PAGE_ROOT
         self.dests = Registry(self.context)
-        self.slots: set[str] = set()  # every slot name the app has declared, for /status
+        self.declared: set[str] = set()  # every name the app has used: slots, dests, host events
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(device, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
@@ -492,9 +493,37 @@ class App:
         declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
         return declared
 
-    def slot(self, name: str) -> None:
-        """Record a slot's name. Declaring is idempotent, and the set is what `/status` can list."""
-        self.slots.add(name)
+    def on(self, name: "str | Slot", handler: Callable | None = None) -> Callable:
+        """Declare a handler for one upstream dest: `@app.on(app.slot.go.chat)` above it.
+
+        The dest is a handle from the app's table, so a page saying `dest=ctx.slot.go.chat` and the
+        handler answering it are one name. A plain string is still accepted for the framework's own
+        host events (`connect`, `location`, `disconnect`) — those names are the framework's, not the
+        app's.
+
+        Sugar over `self.dests.register`, the way `route` is sugar over `self.routes.add` — the verb
+        you write at a handler with no page to its name. Both of the registry's shapes come through:
+        `@app.on("x")` as a decorator, `app.on("x", handler)` when the table is built at runtime. The
+        registry is still the table — `dests` stays public for the built-ins and for lookups.
+        """
+        if isinstance(name, Slot):
+            name.declare()
+            name = name.name
+        return self.dests.register(name, handler)
+
+    @property
+    def slot(self) -> Slots:
+        """The app's own table: `@app.on(app.slot.go.chat)`, `app.slot.routes`.
+
+        The names belong to the app — a page and its handler answering the same dest are the same
+        name — and a handle taken here has no delivery, so it names and declares but cannot send.
+        `ctx.slot` is this same table with a device attached.
+        """
+        return Slots(app=self)
+
+    def declare(self, name: str) -> None:
+        """Record a name. Idempotent; `declared` is what `/status` lists."""
+        self.declared.add(name)
 
     def context(self, device: Device, frame: dict | None = None, match: Any = None) -> Context:
         """One delivery, ready to hand a handler: this app, this device, and what came in."""

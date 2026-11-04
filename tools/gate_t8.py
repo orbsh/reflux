@@ -72,11 +72,11 @@ def main() -> int:
     app = App()
     checks: list[tuple[str, bool, str]] = []
 
-    @app.dests.register("gate.boom")
+    @app.on("gate.boom")
     def boom(ctx, frame):
         raise RuntimeError("the producer's own defect")
 
-    @app.dests.register("gate.half")
+    @app.on("gate.half")
     def half(ctx, frame):
         # One legal operation and one that is not a wire type: the whole frame must be refused, so
         # "half-way" can never reach the page — and the frame after it still must.
