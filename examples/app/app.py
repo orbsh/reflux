@@ -66,22 +66,12 @@ app = App(routes=Routes(), shell=shell)
 
 @app.dests.register("go.dashboard")
 def on_dashboard(device: Device, frame: dict) -> None:
-    go(device, "/")
+    device.go("/")
 
 
 @app.dests.register("go.chat")
 def on_chat(device: Device, frame: dict) -> None:
-    go(device, "/chat")
-
-
-def go(device: Device, path: str) -> None:
-    """Turn to `path` as one frame: the page into the `routes` slot (plus the shell on the first turn).
-
-    `device.path` moves first — the page is built from it, so the redraw a resync asks for later draws
-    the page the client is standing on.
-    """
-    device.path = path
-    app.draw_page(device)
+    device.go("/chat")
 
 
 @app.dests.register("connect")

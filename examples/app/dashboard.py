@@ -169,4 +169,4 @@ def dashboard(device: Device, match: Match) -> Accrete:
 @app.dests.register("dashboard.refresh")
 def on_refresh(device: Device, frame: dict) -> None:
     """New numbers, same page: a page turn is a redraw, so the whole structure comes again."""
-    app.draw_page(device)
+    device.draw()

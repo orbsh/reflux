@@ -29,16 +29,18 @@ from tools.wire_probe import Socket
 def hello(app: App, ws: Socket, path: str = "/") -> Device:
     """Open the connection the way the page does, and hand back the device the app registered.
 
-    An app with nothing to draw answers with no frame, so the device appearing in the table is the
-    fact to wait on — not a frame.
+    An app with nothing to draw answers with no frame, so the fact to wait on is `connected` — the
+    flag the framework raises *after* the hello is processed. Waiting for the device to appear in the
+    table is not enough: the entry is made before the frame is read, so a test that moves the device
+    straight away can be overtaken by the hello it just sent and find itself back on `/`.
     """
     ws.send({"dest": "reflux:hello", "data": {"path": path}})
     for _ in range(200):
         live = app.live()
-        if live:
+        if live and live[0].connected:
             return live[0]
         threading.Event().wait(0.01)
-    raise AssertionError("the device never reached the table")
+    raise AssertionError("the hello never landed")
 
 
 def bare_app(**kwargs: Any) -> App:
@@ -168,6 +170,59 @@ class TestTheTable(unittest.TestCase):
     def test_the_channel_route_answers_a_plain_get_with_426(self):
         with Served(bare_app()) as served:
             self.assertEqual(served.get("/ws")[0], 426)
+
+
+class TestGo(unittest.TestCase):
+    """`device.go` is the server's own page turn: the move a nav makes, without the client asking."""
+
+    def setUp(self) -> None:
+        self.heard: list[dict] = []
+
+    def test_go_moves_the_path_and_draws_the_page(self):
+        app = page_app()
+
+        @app.dests.register("location")
+        def on_location(device, frame):
+            self.heard.append(frame)
+
+        with Served(app) as served:
+            with Socket(served.port) as ws:
+                device = hello(app, ws)
+                ws.recv()  # the hello's own frame
+                device.go("/chat?tag=a")
+                frame = ws.recv()
+        self.assertEqual(device.path, "/chat")
+        self.assertEqual(device.query, {"tag": ["a"]})
+        self.assertEqual(
+            [op.get("action") for op in frame], ["create"], "a page without a shell replaces the root"
+        )
+        self.assertIn("page/chat", json.dumps(frame, ensure_ascii=False))
+
+    def test_a_bare_path_clears_the_query_of_the_last_one(self):
+        app = page_app()
+        with Served(app) as served:
+            with Socket(served.port) as ws:
+                device = hello(app, ws)
+                device.go("/a?tag=a")
+                ws.recv()
+                device.go("/b")
+                ws.recv()
+                self.assertEqual((device.path, device.query), ("/b", {}))
+
+    def test_go_does_not_raise_location_the_client_did_not_move(self):
+        app = page_app()
+
+        @app.dests.register("location")
+        def on_location(device, frame):
+            self.heard.append(frame)
+
+        with Served(app) as served:
+            with Socket(served.port) as ws:
+                device = hello(app, ws)
+                device.go("/chat")
+                ws.recv()
+                threading.Event().wait(0.15)
+        self.assertEqual(self.heard, [], "location says *the client* navigated")
 
 
 class TestDirectoryMounts(unittest.TestCase):

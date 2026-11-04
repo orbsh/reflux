@@ -124,14 +124,14 @@ class TestShell(unittest.TestCase):
 
     def test_a_resync_re_creates_the_shell_the_stale_client_may_have_missed(self):
         app = app_with_shell("/")
-        device = FakeDevice()
+        device = FakeDevice(app=app)
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})
         self.assertEqual([op["action"] for op in ops(device)], ["set"])
         # What `flush_device` does when frames were shed: forget the shell, draw again.
         device.stale = True
         device.shell_drawn = False
-        app.draw_page(device)
+        device.draw()
         self.assertEqual([op["action"] for op in ops(device)], ["create", "set"])
 
 

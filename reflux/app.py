@@ -101,6 +101,12 @@ def query_of(raw: Any) -> dict[str, list[str]]:
     return {}
 
 
+def split_location(url: str) -> tuple[str, dict[str, list[str]]]:
+    """`"/chat?tag=a"` as a path and a query — what `hello`/`nav` carry, arriving as one string."""
+    path, _, search = url.partition("?")
+    return (path or "/"), query_of(search)
+
+
 def location_of(frame: Any) -> tuple[str, dict[str, list[str]]]:
     """The location a `hello` or a `nav` carried: its path and its query, both total."""
     data = frame.get("data") if isinstance(frame, dict) else None
@@ -113,7 +119,7 @@ def location_of(frame: Any) -> tuple[str, dict[str, list[str]]]:
 def into_routes(operations: list[dict]) -> list[dict]:
     """A page's own operations, with its structure written into the `routes` slot instead of the root.
 
-    A page in shell mode owes a structure — a node (which `draw_page` wrapped in `create`) or a
+    A page in shell mode owes a structure — a node (which `Device.draw` wrapped in `create`) or a
     `create` of its own. That single operation becomes `set(routes, …)`; everything else (the slot
     seeds a view sends along) passes through in order, so "structure first, data after" still reads
     the same way in the frame. No structure at all is a producer defect and says so here: the slot
@@ -160,6 +166,9 @@ class Device:
     ) -> None:
         self.id = id
         self.channel = channel
+        # Its app, for the move that has to draw a page (`go`). Set by `App.handle`, which is the
+        # only place devices are made.
+        self.app: App | None = None
         self.path = "/"
         # What the address bar carried after the path: `?q=1&tag=a&tag=b` is {"q": ["1"], "tag": ["a","b"]}.
         self.query: dict[str, list[str]] = {}
@@ -178,6 +187,35 @@ class Device:
         self._stats = stats
         self._note = note or (lambda line: None)
         self._wake = threading.Event()
+
+    def go(self, url: str) -> None:
+        """Stand somewhere else and draw it — the server's own page turn.
+
+        `device.go("/chat")` is the move a client's `reflux:nav` makes, with one difference: the
+        client did not ask. The address moves first (the page is built from it), then the page is
+        drawn into the slot; the browser's own address bar follows because the page carries the path
+        marker. `location` is *not* raised — that event says the client navigated, and a handler
+        listening for it would otherwise turn one move into two.
+
+        A query may ride the same string: `device.go("/?filter=done")` stands on the filtered list.
+        """
+        self.path, self.query = split_location(url)
+        self.draw()
+
+    def draw(self) -> None:
+        """Draw the page this device stands on — one frame, the app's route for its own path.
+
+        With a shell the frame is `create(shell)` (once per connection) followed by the page written
+        into the `routes` slot, so a page turn after that replaces one slot and leaves the frame
+        around it alone. Without one the page replaces the layout root: the single-page-app shape.
+
+        An app that declares neither a page hook nor any route draws nothing at all — that is the
+        gates that drive the plane themselves; the page keeps whatever it has. A device with no app
+        (one a test made by hand) says so instead of drawing nothing and looking healthy.
+        """
+        if self.app is None:
+            raise RuntimeError("device.draw: this device is not attached to an app")
+        self.app._draw(self)
 
     def send(self, frame: list[dict]) -> None:
         """Queue one frame out. The writer writes it; nobody blocks on the socket here.
@@ -276,7 +314,7 @@ class App:
     def _on_hello(self, device: Device, frame: dict) -> None:
         """The client says where it stands; the first frame answers, then `connect` is raised."""
         device.path, device.query = location_of(frame)
-        self.draw_page(device)
+        self._draw(device)
         if not device.connected:
             device.connected = True
             # After the frame is queued: a handler that draws more lands on top of a page the
@@ -290,7 +328,7 @@ class App:
         re-draws and tells the app: `location` is the host's event, not a wire address.
         """
         device.path, device.query = location_of(frame)
-        self.draw_page(device)
+        self._draw(device)
         self.dests.announce(
             "location", device, {"dest": "location", "data": {"path": device.path, "query": device.query}}
         )
@@ -307,21 +345,16 @@ class App:
         declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
         return declared
 
-    def draw_page(self, device: Device) -> None:
-        """One frame for the device's current location: a create, or the ops the app gave for it.
+    def _draw(self, device: Device) -> None:
+        """One frame for the device's current location: a create, or the ops the page gave for it.
 
-        With a shell the frame is `create(shell)` (once per connection) followed by the page written
-        into the `routes` slot — so a page turn after that replaces one slot and leaves the frame
-        around it alone. Without one, the page replaces the layout root: the single-page-app shape.
-
-        An app that declares neither a page nor any route draws nothing at all — that is the gates
-        that drive the plane themselves; the page keeps whatever it has.
+        Private on purpose: the page is the app's, the act is the device's. `device.draw()` is how
+        anything else asks for this, and `Device.go` is a move plus a draw.
         """
-        page = self.page
-        if page is None and len(self.routes) == 0:
+        if self.page is None and len(self.routes) == 0:
             return
-        if page is not None:
-            drawn = page(device, device.path)
+        if self.page is not None:
+            drawn = self.page(device, device.path)
         else:
             match = self.routes.match(device.path)
             drawn = not_found(device.path) if match is None else match.resolve(device)
@@ -496,6 +529,7 @@ class App:
         device = Device(
             secrets.token_hex(4), channel, self._record, self.stats, self.outbox, self.dests.log.append
         )
+        device.app = self
         self.devices[channel] = device
         self.stats["issued"] += 1
         # Writing is a thread of its own, so nothing that produces a frame can be held by a client
@@ -568,7 +602,7 @@ class App:
         if device.stale:
             device.stale = False
             device.shell_drawn = False
-            self.draw_page(device)
+            self._draw(device)
             frames, device.outbox = device.outbox, []
             if all(self._write(device.channel, frame) for frame in frames):
                 self.stats["resync"] += 1
