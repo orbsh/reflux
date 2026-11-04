@@ -235,17 +235,18 @@ class OneExchange(unittest.TestCase):
 
 
 class Frames(unittest.TestCase):
-    def test_the_page_seeds_its_slots_once(self):
+    def test_the_page_draws_and_seeds_its_slot_once(self):
         device = FakeDevice()
         match = chat.app.routes.match("/chat")
-        first = chat.page(context(device), match)
-        second = chat.page(context(device), match)
-        self.assertNotIsInstance(first, list)  # the hook returns a page, not frames
-        self.assertEqual(first.type, "case")
+        ctx = context(device)
+        self.assertIsNone(chat.page(ctx, match))  # a page handler says nothing by returning
+        page = ctx.take_page()
+        self.assertEqual(page.type, "case")  # it drew a page instead
         self.assertEqual(len(device.frames), 1)  # the seed left as a send, once
         self.assertEqual(device.frames[0][0]["action"], "set")
         self.assertEqual(device.frames[0][0]["slot"], chat.STATUS)
-        self.assertEqual(chat.page(context(device), match), second)  # a second look does not seed again
+        chat.page(ctx, match)  # a second look seeds nothing new
+        self.assertEqual(len(device.frames), 1)
 
     def test_the_page_is_one_route_of_the_application(self):
         """A second address is the table's business now, not this page's: `/chat` or nothing."""

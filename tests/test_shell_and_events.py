@@ -23,8 +23,8 @@ from tests.fakes import FakeDevice
 
 
 def page_for(ctx, match):
-    """A page that says which path it is — enough to tell which one landed in the slot."""
-    return b.text(f"page:{match.path}")
+    """A page that draws which path it is — enough to tell which one landed in the slot."""
+    ctx.page(b.text(f"page:{match.path}"))
 
 
 def shell(ctx) -> object:
@@ -75,7 +75,7 @@ class TestShell(unittest.TestCase):
         self.assertEqual([op["action"] for op in first], ["create", "set"])
         self.assertEqual(first[0]["data"]["id"], "shell")
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
-        self.assertEqual(first[1]["data"]["bind"]["value"]["default"], "page:/")
+        self.assertEqual(first[1]["data"]["children"][2]["bind"]["value"]["default"], "page:/")
 
     def test_a_page_turn_after_that_writes_the_slot_and_nothing_else(self):
         app = app_with_shell("/", "/about")
@@ -85,7 +85,7 @@ class TestShell(unittest.TestCase):
         second = ops(device)
         self.assertEqual([op["action"] for op in second], ["set"])
         self.assertEqual(second[0]["slot"], ROUTES_SLOT)
-        self.assertEqual(second[0]["data"]["bind"]["value"]["default"], "page:/about")
+        self.assertEqual(second[0]["data"]["children"][2]["bind"]["value"]["default"], "page:/about")
 
     def test_a_missing_path_lands_as_the_builtin_404_inside_the_shell(self):
         app = app_with_shell("/")
@@ -96,17 +96,19 @@ class TestShell(unittest.TestCase):
         self.assertIn("404", str(first[1]["data"]))
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
 
-    def test_slot_seeds_a_page_sends_ride_along_after_its_structure(self):
+    def test_a_page_draws_and_a_seed_is_a_send_of_its_own(self):
         def seeding(ctx, match):
-            return [wire.create(b.text("page")), wire.set("status", b.text("就绪"))]
+            ctx.emit(wire.set("status", b.text("就绪")))  # a send, not part of the page
+            ctx.page(b.text("page"))  # the page itself
 
         app = app_with_shell("/", page=seeding)
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
-        first = ops(device)
-        self.assertEqual([op["action"] for op in first], ["create", "set", "set"])
-        self.assertEqual(first[1]["slot"], ROUTES_SLOT)  # the page, rewritten into the slot
-        self.assertEqual(first[2]["slot"], "status")  # the seed, untouched and after it
+        seed, first = device.frames[0], device.frames[1]
+        self.assertEqual([op["action"] for op in seed], ["set"])  # what the handler said
+        self.assertEqual(seed[0]["slot"], "status")
+        self.assertEqual([op["action"] for op in first], ["create", "set"])  # what the app drew
+        self.assertEqual(first[1]["slot"], ROUTES_SLOT)
 
     def test_a_page_that_produces_no_structure_is_a_loud_producer_defect(self):
         with self.assertRaises(ValueError):
@@ -163,7 +165,10 @@ class TestHostEvents(unittest.TestCase):
 
     def test_connect_is_raised_after_the_first_frame_is_queued(self):
         app, device = App(), FakeDevice()
-        app.page = lambda ctx, path: b.text("page")  # something to draw, so there is a frame
+        def single(ctx, path):
+            ctx.page(b.text("page"))
+
+        app.page = single  # something to draw, so there is a frame
         seen: list[int] = []
 
         def record(ctx, frame):

@@ -34,7 +34,6 @@ from dataclasses import dataclass, field
 
 from reflux import Context, Match, wire
 from reflux.sdk import builders as b
-from reflux.sdk import markers
 from reflux.sdk.types import Accrete
 
 from .app import app
@@ -106,19 +105,20 @@ def row(*children: Accrete, id: str) -> Accrete:
 
 
 @app.route("/chat", title="对话")
-def page(ctx: Context, match: Match) -> Accrete:
+def page(ctx: Context, match: Match) -> None:
     """The page — and, the first time this connection asks for it, the status line it reads.
 
-    The seed is a **send**, so it is written as one (`ctx.send`), not folded into the return: on this
+    The seed is a **send**, so it is written as one (`ctx.emit`), not folded into the page: on this
     side of the socket nothing is a response, and a page that later has to say something to more than
     the one device that asked (a broadcast, a nudge from a timer) says it the same way.
+
+    The address and the title come from the declaration above — `ctx.page` builds the markers — so the
+    handler passes its content and nothing else.
     """
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
         ctx.emit(wire.set(STATUS, b.text("就绪")))
-    return markers.page(
-        "/chat",
-        "对话",
+    ctx.page(
         b.case(
             b.text("对话", variant="heading-1"),
             b.text(source=STATUS, variant="muted", id="status"),

@@ -35,7 +35,6 @@ from . import wire
 from .app import App
 from .routes import route
 from .sdk import builders as b
-from .sdk import markers
 from .sdk.types import Accrete, JsType
 
 ECHO, ROWS, SUBMITTED = "echo", "rows", "submitted"
@@ -65,25 +64,23 @@ class Demo:
 
     # --- the pages the routes below hand back ---------------------------------------------
 
-    def frame_for(self, device, path: str) -> list[dict]:
-        """The ops of one page turn: the structure, plus the rows seeded into the slot it reads.
+    def draw_home(self, ctx) -> None:
+        """The home page, and — the first time this connection asks — the rows it reads.
 
         The seed happens **once per device**: a slot outlives a `create` (the tree is replaced, the
-        data planes are not), so appending the seed rows on a second visit would double them. That
-        is the price of a client that keeps the state — the producer counts, per DESIGN's「操作」.
+        data planes are not), so appending the seed rows on a second visit would double them. It is a
+        send like any other, so it is written as one: the page is `ctx.page(...)`, the seed is
+        `ctx.emit(...)`, and neither of them is a return.
         """
-        if path == "/about":
-            return [wire.create(self.about())]
-        ops = [wire.create(self.home())]
-        if not getattr(device, "rows_seeded", False):
-            device.rows_seeded = True
-            ops.extend(wire.append(ROWS, row_node(row)) for row in self.rows)
-        return ops
+        ctx.page(*self.home())
+        if not ctx.data.get("rows_seeded"):
+            ctx.data["rows_seeded"] = True
+            for row in self.rows:
+                ctx.emit(wire.append(ROWS, row_node(row)))
 
-    def home(self) -> Accrete:
-        return markers.page(
-            "/",
-            "演示",
+    def home(self) -> list[Accrete]:
+        """The home page's content — the markers are `ctx.page`'s business, not the app's."""
+        return [
             b.text("演示", variant="heading-1"),
             b.input(dest="name.change", id="name-input"),
             b.text(source=ECHO, id="echo"),
@@ -103,16 +100,14 @@ class Demo:
                 "加上新的路径标记，runtime 把标记镜像进地址栏。",
                 variant="muted",
             ),
-        )
+        ]
 
-    def about(self) -> Accrete:
-        return markers.page(
-            "/about",
-            "关于",
+    def about(self) -> list[Accrete]:
+        return [
             b.text("关于", variant="heading-1"),
             b.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
             nav_form("回到演示", "go.home"),
-        )
+        ]
 
     # --- handlers: change the app's data, push exactly that change -------------------------
 
@@ -141,7 +136,7 @@ class Demo:
         ctx.emit(wire.set(SUBMITTED, b.text(f"已提交 {summary}")))
 
     def on_go(self, ctx, frame) -> None:
-        """A submit that moves the client: new structure and the new path marker, one frame."""
+        """A submit that moves the client: the new structure and the new path marker."""
         ctx.go(GO[frame["dest"]])
 
 
@@ -150,12 +145,12 @@ demo = Demo()  # the routes are module-level declarations, so they attach to one
 
 @route("/", title="演示")
 def home_page(ctx, match):
-    return demo.frame_for(ctx.device, "/")
+    demo.draw_home(ctx)
 
 
 @route("/about", title="关于")
 def about_page(ctx, match):
-    return demo.frame_for(ctx.device, "/about")
+    ctx.page(*demo.about())
 
 
 def make_app() -> App:

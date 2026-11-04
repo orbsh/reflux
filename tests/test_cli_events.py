@@ -19,6 +19,7 @@ import io
 import unittest
 
 import reflux.demo_app as demo
+from reflux.sdk import markers
 from reflux import cli
 from reflux.app import App
 from reflux.sdk import dump
@@ -127,12 +128,12 @@ class EverySendableDestHasAHandler(unittest.TestCase):
         self.registered = set(self.app.dests.names())
 
     def test_the_reference_page_sends_only_registered_dests(self) -> None:
-        sent = sent_dests(demo.demo.home())
+        sent = sent_dests(markers.page('/', '演示', *demo.demo.home()))
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
         self.assertEqual(sent - self.registered, set(), "the page sends an event nobody handles")
 
     def test_the_about_page_sends_only_registered_dests(self) -> None:
-        sent = sent_dests(demo.demo.about())
+        sent = sent_dests(markers.page('/about', '关于', *demo.demo.about()))
         self.assertTrue(sent)
         self.assertEqual(sent - self.registered, set())
 

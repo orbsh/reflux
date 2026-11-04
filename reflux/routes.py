@@ -181,13 +181,17 @@ class Match:
         return self.route.meta
 
     def resolve(self, ctx) -> Any:
-        """The structure of this page: the handler's, wrapped by the layout when it declared one.
+        """The structure of this page: what the handler drew, wrapped by its layout when it has one.
 
-        A page handler gets `(ctx, match)` and returns the page — a description, not frames. Saying
-        something to a client is `ctx.send(...)`, on the page and off it alike.
+        The handler gets `(ctx, match)` and calls `ctx.page(node)` — a page handler draws, it does not
+        return, because this side of the socket is event-driven: what comes back from a handler is
+        never sent anywhere. `None` here means the handler drew nothing, and the app answers with its
+        own 404 rather than a blank frame.
         """
-        page = self.route.handler(ctx, self)
-        if self.route.layout is None:
+        ctx.match = self  # the delivery now knows which declaration it is answering
+        self.route.handler(ctx, self)
+        page = ctx.take_page()
+        if page is None or self.route.layout is None:
             return page
         return self.route.layout(ctx, self, page)
 

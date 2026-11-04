@@ -58,7 +58,7 @@ import json
 import secrets
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
@@ -68,10 +68,11 @@ from . import ingest, wire
 from .channel import EVICTED, JUDGED_DEAD, WS_PATH, Channel, ChannelClosed
 from .dests import Registry
 from .protocol import RESERVED_PREFIX, ROUTES_SLOT
-from .routes import DEFAULT, Routes
+from .routes import DEFAULT, Match, Routes
 from .sdk import builders as b
+from .sdk import markers
+from .sdk.markers import PAGE_ID
 from .sdk.types import Accrete
-from .routes import Match
 from .server import CHANNEL, make_server
 
 # "no handler was passed" — apart from `None`, which means the channel (a route that answers an
@@ -268,22 +269,22 @@ class Device:
         self.send(wire.draw(*operations))
 
 
-@dataclass(frozen=True)
+@dataclass
 class Context:
     """One delivery — and the room around it: this app, the device it was addressed to, its frame.
 
     Handlers get `(ctx, …)`. Everything that *says* something goes through `ctx.emit(*operations)`:
     on this side of the socket there is no response to return, and a reply that is not a return is what
     makes a second device (or a thousand) addressable at all — `ctx.devices` is the snapshot of the
-    room, `ctx.device_of(id)` is one of them. (`ctx.send(frame)` is the lower door: a frame already
-    built, for a gate that has to send a malformed one.) Only a page returns, and what it returns is a
-    page — the app's description of an address, not frames.
+    room, `ctx.device_of(id)` is one of them. Nothing here returns: a page handler draws with
+    `ctx.page(node)` and the app composes the frame around it; an event handler says nothing.
     """
 
     app: "App"
     device: "Device"
     frame: dict | None = None
     match: "Match | None" = None
+    _page: Any = field(default=None, repr=False)
 
     # --- the connection this delivery came from ---
     @property
@@ -305,12 +306,12 @@ class Context:
 
     # --- what it can say ---
     def emit(self, *operations: dict) -> None:
-        """Say something to the device this delivery came from: these accrete operations, one frame."""
-        self.device.emit(*operations)
+        """Say something to the device this delivery came from: these accrete operations, one frame.
 
-    def send(self, frame: list[dict]) -> None:
-        """The lower door: a frame already built (a gate that has to send a malformed one)."""
-        self.device.send(frame)
+        A later frame (a broadcast, a timer's nudge) says it to `ctx.devices()` instead — same verb,
+        on those devices, because saying is a device's act and not a handler's return.
+        """
+        self.device.emit(*operations)
 
     def devices(self) -> list["Device"]:
         """Every live device, this one included — the room a broadcast picks from."""
@@ -321,6 +322,35 @@ class Context:
         return self.app.device(id)
 
     # --- what it can ask of the page ---
+    def page(self, *children: Any, title: str | None = None, path: str | None = None, id: str = PAGE_ID) -> None:
+        """This is the page for the address this delivery is about.
+
+        A page handler **draws**; it does not return. The framework composes the frame around the
+        page (the shell once per connection, the `routes` slot after that) and sends it — which is why
+        a page handler and an uplink handler have the same shape, and why neither of them can
+        accidentally answer a device that is not the one in front of it.
+
+        The page is `markers.page(...)`, built here: the address and the title are what the route
+        already declared (`@app.route("/chat", title="对话")`), so a handler passes neither — only
+        its content. `path=` / `title=` override them for the case where the declaration is not the
+        whole story (the single-page hook, which has no route).
+        """
+        self._page = markers.page(
+            self.match.path if path is None and self.match else (path if path is not None else self.device.path),
+            title if title is not None else self._declared_title(),
+            *children,
+            id=id,
+        )
+
+    def _declared_title(self) -> str:
+        """The title the route declared, or "" when there is no route to ask."""
+        return str(self.match.route.meta.get("title", "")) if self.match else ""
+
+    def take_page(self) -> Any:
+        """The node this delivery drew, once: the framework composes frames out of it."""
+        node, self._page = self._page, None
+        return node
+
     def draw(self) -> None:
         """Redraw the page this device stands on. The app draws it; the device is where it lands."""
         self.app._draw(self.device)
@@ -433,14 +463,16 @@ class App:
             return
         ctx = self.context(device)
         if self.page is not None:
-            drawn = self.page(ctx, device.path)
+            self.page(ctx, device.path)
+            drawn = ctx.take_page()
         else:
             match = self.routes.match(device.path)
-            if match is None:
-                drawn = not_found(device.path)
-            else:
+            drawn = None
+            if match is not None:
                 ctx = self.context(device, match=match)
                 drawn = match.resolve(ctx)
+        if drawn is None:  # nothing drew for this address: the app's own 404, not a blank page
+            drawn = not_found(device.path)
         operations = drawn if isinstance(drawn, list) else [wire.create(drawn)]
         if self.shell is None:
             device.emit(*operations)

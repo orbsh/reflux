@@ -27,7 +27,6 @@ from typing import Any
 
 from reflux import Context, Match
 from reflux.sdk import builders as b
-from reflux.sdk import markers
 from reflux.sdk.types import Accrete
 
 from .app import app
@@ -130,16 +129,15 @@ def summary(series: list[int]) -> str:
 
 
 @app.route("/", title="概览")
-def dashboard(ctx: Context, match: Match) -> Accrete:
+def dashboard(ctx: Context, match: Match) -> None:
     """The page: a heading, the week's numbers, the charts, the viewport, and a way to redraw it.
 
     Everything hangs off one `case` with a gap — the page owns its own spacing, because the shell
-    above only says where the page goes, not what it looks like inside.
+    above only says where the page goes, not what it looks like inside. The address and the title are
+    the declaration's, so `ctx.page` alone carries them.
     """
     series = [random.randint(20, 120) for _ in DAYS]
-    return markers.page(
-        "/",
-        "概览",
+    ctx.page(
         b.case(
             b.text("概览", variant="heading-1"),
             b.text(summary(series), variant="muted", id="summary"),

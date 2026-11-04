@@ -20,8 +20,8 @@ from tests.fakes import FakeDevice
 
 
 def page_for(ctx, match):
-    """A handler that says which path it was given — enough to see which page came back."""
-    return b.text(f"page:{match.path}")
+    """A handler that draws which path it was given — enough to see which page came back."""
+    ctx.page(b.text(f"page:{match.path}"))
 
 
 def drawn(device: FakeDevice) -> list[dict]:
@@ -30,7 +30,9 @@ def drawn(device: FakeDevice) -> list[dict]:
 
 
 def shown(node: dict) -> str:
-    """The text a `text` node carries by default — what a plain text page renders."""
+    """The text the page's content carries — `ctx.page` writes the two markers ahead of it."""
+    if node.get("type") == "case" and (node.get("children") or [{}])[0].get("id") == "reflux:path":
+        node = node["children"][2]
     return node["bind"]["value"]["default"]
 
 
@@ -49,7 +51,8 @@ class TestPageResolution(unittest.TestCase):
         self.assertEqual(len(device.frames), 1)
         self.assertTrue(isinstance(device.frames[0], list), "一帧就是动作列表")
         root = drawn(device)[0]["data"]
-        self.assertEqual(root["type"], "text")
+        self.assertEqual(root["type"], "case")  # a page: the two markers, then the content
+        self.assertEqual([kid.get("id") for kid in root["children"][:2]], ["reflux:path", "reflux:title"])
         self.assertEqual(shown(root), "page:/a")
 
     def test_a_nav_frame_takes_the_same_road(self) -> None:
@@ -85,15 +88,17 @@ class TestPageResolution(unittest.TestCase):
         self.assertEqual(node["children"][1]["attrs"]["class"], ["rx-muted"])
 
     def test_an_app_that_sets_page_overrides_the_table(self) -> None:
-        from reflux import wire
-
         app = self.app("/a")  # a table is there; the hook still wins
-        app.page = lambda ctx, path: [wire.patch("here", "/bind/value/default", path)]
+
+        def single(ctx, path):
+            ctx.page(b.text(f"single:{path}"))  # a page is a node; ops are `ctx.emit`
+
+        app.page = single
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/whatever"}})
         op = drawn(device)[0]
-        self.assertEqual(op["action"], "patch")
-        self.assertEqual(op["value"], "/whatever")
+        self.assertEqual(op["action"], "create")
+        self.assertEqual(shown(op["data"]), "single:/whatever")
 
     def test_an_app_with_neither_page_nor_routes_draws_nothing(self) -> None:
         app = App(routes=Routes())
@@ -122,13 +127,16 @@ class TestTheDemoApp(unittest.TestCase):
             ],
         )
 
-    def test_the_demo_page_carries_its_slot_seed_in_the_same_frame(self) -> None:
+    def test_the_demo_page_sends_its_slot_seed_before_the_page(self) -> None:
+        """The rows are a send (`ctx.emit`), so they leave as their own frames, before the page."""
         app = demo.make_app()
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
-        ops = drawn(device)
-        self.assertEqual([op["action"] for op in ops], ["create", "append", "append"])
-        self.assertEqual({op["slot"] for op in ops[1:]}, {demo.ROWS})
+        frames = device.frames
+        self.assertEqual(device.frames[-1][0]["action"], "create")
+        seeds = [frame for frame in frames[:-1]]
+        self.assertEqual([op["action"] for frame in seeds for op in frame], ["append", "append"])
+        self.assertEqual({op["slot"] for frame in seeds for op in frame}, {demo.ROWS})
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
         """A slot outlives a `create`, so the seed is once per device — not once per page turn."""

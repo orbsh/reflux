@@ -12,4 +12,4 @@ def admin_layout(ctx, match, page):
 
 @route("/admin", layout=admin_layout, title="后台")
 def admin(ctx, match):
-    return "admin"
+    ctx.page("admin")

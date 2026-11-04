@@ -55,7 +55,10 @@ def bare_app(**kwargs: Any) -> App:
 def page_app(**kwargs) -> App:
     """An app with one page, so hello is answered with a frame."""
     app = App(**kwargs)
-    app.page = lambda ctx, path: b.text(f"page{path}")
+    def single(ctx, path):
+        ctx.page(b.text(f"page{path}"))
+
+    app.page = single
     return app
 
 
@@ -172,7 +175,10 @@ class TestTheTable(unittest.TestCase):
         app = bare_app()
         app.unmount("/ws")
         app.mount("/socket", CHANNEL)
-        app.page = lambda ctx, path: b.text("page")
+        def single(ctx, path):
+            ctx.page(b.text("page"))
+
+        app.page = single
         with Served(app) as served:
             with Socket(served.port, path="/socket") as ws:
                 hello(app, ws)

@@ -126,7 +126,11 @@ What the pieces are:
   values. `b.text(source="echo")` reads a slot; `b.input(dest="name.change")` sends one.
 - **`@app.dests.register("name.change")`** is the only way an uplink frame reaches your code. An
   unregistered name is refused and counted — never dispatched dynamically.
-- **`ctx.emit(*ops)`** is exactly one frame, flushed in order — the handler's only way to speak.
+"- **`ctx.emit(*ops)`** is exactly one frame, flushed in order — a handler's only way to speak.
+- **Nothing returns.** An uplink handler says `ctx.emit(...)`; a page handler says `ctx.page(*content)`
+  and the app composes the frame (shell once, then the `routes` slot) — including the two markers, so
+  the address and the title are written once, on the route where they were declared. Only an HTTP route
+  returns, because only HTTP is a request waiting for an answer.".strip('"')
 - **`device.data`** is yours. The framework hands you a device per connection and never reads that
   bag: put the user on it after a login, and it dies with the socket.
 
@@ -241,7 +245,7 @@ from .app import app
 
 @app.route("/", title="概览")
 def dashboard(ctx, match):
-    return markers.page("/", "概览", b.text("概览", variant="heading-1"), ...)
+    ctx.page(b.text("概览", variant="heading-1"), ...)      # "/" 与 "概览" 来自 @app.route
 ```
 
 - **The shell is drawn once.** The first frame is `create(shell)` plus the page in the `routes` slot;

@@ -956,3 +956,11 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 迁移：`examples/app/*`、`reflux/demo_app.py`、`tests/`、`tools/gate_*.py`、`tools/measure.py` 全部改形；`FakeDevice` 补 `go()`；`tests/test_routes.py` 用真的 `Context(app=None, device=SESSION)`；`gate_dashboard` 的翻页检查改成读到「写 routes 槽」的那一帧为止（页面种子先出一帧）。
 
 **验证**：235 例 OK；`gate_{t2,t3,t4,t6,t7,t8,t9,t10}`、`gate_ingest`、`gate_chat`、`gate_dashboard` 全过；`ruff --select F,E9` 只剩生成 SDK 里既有的 F405。
+
+**同日追加（用户：「router 返回的也是 ws，为什么用 return？只有 http 的接口才用 return」）**：页面处理器也改成画，不返回——`ctx.page(node)` 把这一页交给框架，由 `_draw` 组帧（外框一次、之后写 `routes` 槽；没有外框就直接成帧）。`Match.resolve` 改成「调处理器 → 取它画的页 → layout 包装」，处理器没画则回内置 404（不留空白页）。`Context` 随之只剩两个动词：`ctx.page(node)` 画一页、`ctx.emit(*ops)` 说一句话；`ctx.send(frame)` 撤掉（它是和 `emit` 重复的低门，门的畸形帧改用 `ctx.device.send`）。`demo_app` 的 `frame_for` 拆成 `draw_home(ctx)`（`ctx.page` + 一次性的行种子 `ctx.emit`），示例、测试夹具、各 gate 一并改形；`gate_chat` 第 1 条与 `gate_dashboard` 的翻页检查都按「种子与页面各成帧」读。
+
+**验证**：235 例 OK；`gate_dashboard`／`gate_chat`／`gate_ingest`／`gate_t2,t3,t4,t6,t7,t8,t9,t10` 全过。
+
+**同日再追加（用户：「ctx.page 都是专用的了，把 markers.page 一起包装进去还省一层」）**：`ctx.page` 自己建页面——签名变成 `ctx.page(*children, title=…, path=…, id=PAGE_ID)`，里面调 `markers.page`，**地址与标题默认取自路由声明**（`match.path`、`match.route.meta["title"]`），处理器只交内容；`path=`／`title=` 是单页钩子（没有路由可问）与特例的出口。`Match.resolve` 顺手把 `ctx.match` 设好，所以页面里 `ctx.match.params` 仍然能用。示例与 `demo_app` 的 `home()`／`about()` 改回交内容（之前它们返回整页，包一层会撞 `page-root` 重名）。
+
+**验证**：235 例 OK；各 gate 见下一行。

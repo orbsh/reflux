@@ -13,6 +13,7 @@ import io
 import unittest
 
 from reflux import Context, cli
+from reflux.sdk import builders as b
 from reflux.routes import (
     DEFAULT,
     Routes,
@@ -28,9 +29,14 @@ SESSION = object()
 CTX = Context(app=None, device=SESSION)  # type: ignore[arg-type]
 
 
+def drew(page):
+    """The content a page handler drew: `ctx.page` writes the two markers ahead of it."""
+    return page.children[2].bind["value"].default
+
+
 def handler(name: str = "h"):
     def run(ctx, match):
-        return f"{name}:{match.path}"
+        ctx.page(b.text(f"{name}:{match.path}"))
 
     return run
 
@@ -146,7 +152,7 @@ class TestScoring(unittest.TestCase):
                 match = table.match(path)
                 self.assertIsNotNone(match)
                 assert match is not None
-                self.assertTrue(match.resolve(CTX).startswith(who), match.resolve(CTX))
+                self.assertTrue(drew(match.resolve(CTX)).startswith(who), drew(match.resolve(CTX)))
 
 
 class TestMatching(unittest.TestCase):
@@ -237,7 +243,7 @@ class TestResolve(unittest.TestCase):
         match = table.match("/x/7")
         self.assertIsNotNone(match)
         assert match is not None
-        self.assertEqual(match.resolve(CTX), "x:/x/7")
+        self.assertEqual(drew(match.resolve(CTX)), "x:/x/7")
         self.assertEqual(match.meta, {})
 
     def test_a_layout_wraps_the_page_the_handler_built(self) -> None:
@@ -245,7 +251,7 @@ class TestResolve(unittest.TestCase):
 
         def layout(ctx, match, page):
             seen.update(ctx=ctx, path=match.path, page=page)
-            return f"layout({page})"
+            return f"layout({drew(page)})"
 
         table = Routes()
         table.add("/admin", handler("admin"), layout=layout, title="后台")
@@ -254,13 +260,13 @@ class TestResolve(unittest.TestCase):
         assert match is not None
         self.assertEqual(match.resolve(CTX), "layout(admin:/admin)")
         self.assertIs(seen["ctx"].device, SESSION)
-        self.assertEqual(seen["page"], "admin:/admin")
+        self.assertEqual(drew(seen["page"]), "admin:/admin")
         self.assertEqual(match.meta, {"title": "后台"})
 
     def test_routes_resolve_by_path_and_return_none_when_nothing_matches(self) -> None:
         table = Routes()
         table.add("/x", handler("x"))
-        self.assertEqual(table.resolve(CTX, "/x"), "x:/x")
+        self.assertEqual(drew(table.resolve(CTX, "/x")), "x:/x")
         self.assertIsNone(table.resolve(CTX, "/nope"))
 
 

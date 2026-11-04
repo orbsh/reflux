@@ -44,6 +44,7 @@ def python_turns() -> list[tuple[str, dict]]:
     import reflux.demo_app as demo
     from reflux import wire
     from reflux.sdk import builders as b
+    from reflux.sdk import markers
 
     return [
         ("echo", wire.draw(wire.set(demo.ECHO, b.text("hello")))),
@@ -60,12 +61,12 @@ wire.set(demo.SUBMITTED, b.text('已提交 {"pass": "secret", "user": "ada"}')))
         (
             "page turn",
             wire.draw(
-wire.create(demo.demo.home()),
+wire.create(markers.page("/", "演示", *demo.demo.home())),
                 *[wire.append(demo.ROWS, demo.row_node(row)) for row in demo.demo.rows]),
         ),
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.
-        ("about page", wire.draw(wire.create(demo.demo.about()))),
+        ("about page", wire.draw(wire.create(markers.page("/about", "关于", *demo.demo.about())))),
         # The `local` 落点 and its `path` rider: a client-side slot, addressed one level in.
         (
             "local binding",

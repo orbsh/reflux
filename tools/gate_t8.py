@@ -15,7 +15,6 @@ user's screen does when the producer or the page misbehaves:
 
 from __future__ import annotations
 
-import json
 import sys
 import time
 from pathlib import Path
@@ -81,12 +80,12 @@ def main() -> int:
     def half(ctx, frame):
         # One legal operation and one that is not a wire type: the whole frame must be refused, so
         # "half-way" can never reach the page — and the frame after it still must.
-        ctx.send(
+        ctx.device.send(
             wire.draw(
 wire.set("echo", b.text("half-way")),
                 {"action": "create", "slot": "", "data": {"type": "widget"}})
         )
-        ctx.send(wire.draw(wire.set("echo", b.text("whole"))))
+        ctx.device.send(wire.draw(wire.set("echo", b.text("whole"))))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
         device = next(iter(app.live()), None)
@@ -132,7 +131,7 @@ wire.set("echo", b.text("half-way")),
 
         # 3 — one bad operation refuses the frame whole: no half turn, and the next frame lands.
         before = app.stats["refused"]
-        half(device, {})  # the handler directly: a `local` inject would not call it
+        half(app.context(device, {}), {})  # the handler directly: a `local` inject would not call it
         wait_for(lambda: "whole" in (cdp.eval("document.body.innerText") or ""))
         time.sleep(0.2)
         body = cdp.eval("document.body.innerText") or ""

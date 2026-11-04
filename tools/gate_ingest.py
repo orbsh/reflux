@@ -58,20 +58,20 @@ def send_all_events() -> None:
 
     @APP.dests.register("gate.legal")
     def legal(ctx, frame):
-        ctx.send(wire.draw(wire.create(b.case(b.text("landed", id="ok")))))
+        ctx.device.send(wire.draw(wire.create(b.case(b.text("landed", id="ok")))))
 
     @APP.dests.register("gate.unknown-type")
     def unknown_type(ctx, frame):
-        ctx.send(hand({"type": "widget"}))
+        ctx.device.send(hand({"type": "widget"}))
 
     @APP.dests.register("gate.unknown-attr")
     def unknown_attr(ctx, frame):
         # `selector` is hidden for every type (unlike `class`, which is the token lane now).
-        ctx.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
+        ctx.device.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
 
     @APP.dests.register("gate.duplicate-row")
     def duplicate_row(ctx, frame):
-        ctx.send(
+        ctx.device.send(
             wire.draw(
 wire.append("rows", b.text("a", id="r")),
                 wire.append("rows", b.text("b", id="r")))
@@ -82,24 +82,24 @@ wire.append("rows", b.text("a", id="r")),
         # Written out by hand on purpose: `wire.draw` refuses to *build* a frame over the cap (the
         # producer's half of the rule), so only a hand-written one can reach the server's door —
         # and that door is what this gate proves.
-        ctx.send([wire.empty()] * (MAX_OPS_PER_FRAME + 1))
+        ctx.device.send([wire.empty()] * (MAX_OPS_PER_FRAME + 1))
 
     @APP.dests.register("gate.unknown-key")
     def unknown_key(ctx, frame):
         # An op with a field its action does not have — serde would ignore it silently.
         bad = hand({"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}})
         bad[0]["root"] = {}
-        ctx.send(bad)
+        ctx.device.send(bad)
 
     @APP.dests.register("gate.legacy")
     def legacy(ctx, frame):
         # The retired envelope (`Message`) and, behind it, the shell's `ops` dialect: both are
         # objects, and a frame is the action list. Refused whole, and the reason names the shape.
-        ctx.send({"ev": "draw", "ops": [legacy_op()]})
+        ctx.device.send({"ev": "draw", "ops": [legacy_op()]})
 
     @APP.dests.register("gate.alive")
     def alive(ctx, frame):
-        ctx.send(wire.draw(wire.set("echo", b.text("alive"))))
+        ctx.device.send(wire.draw(wire.set("echo", b.text("alive"))))
 
 
 def uplink_handlers() -> list[dict]:
@@ -108,7 +108,7 @@ def uplink_handlers() -> list[dict]:
     @APP.dests.register("gate.uplink")
     def uplink(ctx, frame):
         SEEN.append(frame)
-        ctx.send(wire.draw(wire.set("echo", b.text(repr(frame["data"])))))
+        ctx.device.send(wire.draw(wire.set("echo", b.text(repr(frame["data"])))))
 
     return SEEN
 
