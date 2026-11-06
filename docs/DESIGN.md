@@ -348,7 +348,7 @@ def post_index(ctx, match): ...
 一个站点通常有**不随页面变的那一层**：标题、导航、页脚。把它交给框架重画一遍是浪费，也会让每换一页都闪一下。所以 `App(shell=…)`：
 
 ```python
-def shell(device):
+def shell(ctx):
     return b.case(
         b.text("示例站点", variant="heading-1"),
         b.form(b.button("首页"), dest=ctx.slot.go.home),
@@ -358,9 +358,9 @@ def shell(device):
 
 - 连接时的首帧是**一帧两条**：`create(shell)` 加 `set("routes", 页面)` —— 外框和首页一起到，客户端不会先看到空壳。
 - 之后的每一次页面切换只写 `routes` 槽（`set`），外框不再出现在帧里。**这是唯一被改写的操作**：页面自己的 `create` 落成 `set("routes", …)`，其余操作（顺手播种的槽）原样跟在后面。
-- 槽名 `routes` 是框架保留的（`protocol.ROUTES_SLOT`），但读取器是**应用写的**——外框是应用的视图，框架只往这个名字里写。所以「槽名归供应基础视图的一方」没有破例：声明在这里，写入在那里。
-- 外框没给就是单页应用：页面每帧替换 layout root（`demo_app` 是这一形态），`routes` 这个槽名不出现。
-- 页面在外框模式下**必须产出结构**（一个节点，或自己的 `create`）：没有结构就抛错，否则槽里还留着上一页，客户端看起来一切正常，直到有人点一下。
+- 槽名 `routes` 是框架保留的（`protocol.ROUTES_SLOT`），但读取器由**提供外框的那一方**写——外框是应用的视图（没给时是框架的默认视图），框架只往这个名字里写。所以「槽名归供应基础视图的一方」没有破例：声明在这里，写入在那里。
+- 外框没给，框架给默认的那一个（`reflux/app.py` 的 `default_shell`）：一个撑满视口的 `case` 加一个读 `routes` 的 `placeholder`。于是「外框」不是一个可选模式，而是页面到达客户端的唯一落点——单页应用（`demo_app`）只是外框里没有导航而已，`routes` 这个槽名一样出现。
+- 页面**必须产出结构**（一个节点，或自己的 `create`）：没有结构就抛错，否则槽里还留着上一页，客户端看起来一切正常，直到有人点一下。
 - 客户端陈旧触发的重同步会**连外框一起重发**（清掉「外框已画」的标记再画），丢帧的客户端可能正是没收到那条 `create` 的那一个。
 
 **路由切换就是客户端 runtime 请求一次新结构**（`reflux:nav` → 匹配 → `create`，回来的那帧里还带新的路径标记）：结构是低频的，这条不违背「服务端不画界面」。深链也一样靠 hello 带路径，代价说白：没有服务端渲染，深链要多等一次连接往返才出界面——是延迟，不是错误（**这一次往返的毫秒数未测量**，见 `docs/PERF.md` 末节；要和服务端渲染的形态并列才有结论）。
@@ -582,4 +582,4 @@ def on_disconnect(device, frame):
 
 ## 词汇
 
-规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`bind`（accrete 的绑定表：读槽 / 上行落点 / 表单字段，见「组件形状」）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的八个操作：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`ctx`（一次投递的上下文：`app`、`device`、那一帧（或那次 `match`）——处理器拿到的是它；`ctx.emit` 说话、`ctx.slot` 拿槽、`ctx.turn()` 把几次写合成一帧、`ctx.page(*content)` 画页面、`ctx.devices()` 看这场、`ctx.go`／`ctx.draw()` 动页面）、`Slot`／`Slots`（一条具名数据槽的对象：名字＋`set`／`append`／`patch`／`remove` 四个动词；`ctx.slot` 是这一档槽的表）、`device`（一台设备＝一条连接；持地址、`data` 与推送目标，不是用户——`ctx.device` 拿到它）、`data`（`device.data`，业务挂在连接上的东西，框架不读）、`emit`（`device.emit(*ops)` 把 accrete 的操作作为一帧送出；`draw` 是造帧的那个函数，不送）、`uplink`／上行 `dest`（控件往上送的那一帧的落点，处理器的注册键）、`handler`（处理器）、`frame`（上行帧 `{dest, id?, data}`）、`channel`（一条 WS 连接）、`挂载表`／`mounts`（`App.mounts`：路径 → 路由，socket 也是其中一条，`CHANNEL` 那一项）、`Request`／`Response`（挂载的路由拿到与答回的只读形状）、`app`（页面钩子＋挂载表＋上行落点注册表）、`wire`（出帧层：accrete 的八个操作，一帧就是这些操作的数组）、`SDK` 的构造器（`reflux/sdk/builders.py`）、`外框`／`shell`（`App(shell=…)` 给的那一层：标题、导航、和那个 `routes` 读槽；有它页面写进槽，没它页面替换 layout root）、`routes` 槽（`protocol.ROUTES_SLOT`，外框模式下页面的家；读取器由外框声明）、`宿主事件`（`connect`／`location`／`disconnect`——注册与别的名字一样，但没有线上地址，客户端发不进来）。`spec`、`fire`／`payload`、`ui`／`ops`、以及 `Message`（`ev`／`sender`／`created`——它现在是**宿主**的信封，不在线上）是退场形态的词——只在历史节与 Why Not 里出现。别处不再另造同义词。
+规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`bind`（accrete 的绑定表：读槽 / 上行落点 / 表单字段，见「组件形状」）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的八个操作：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`ctx`（一次投递的上下文：`app`、`device`、那一帧（或那次 `match`）——处理器拿到的是它；`ctx.emit` 说话、`ctx.slot` 拿槽、`ctx.turn()` 把几次写合成一帧、`ctx.page(*content)` 画页面、`ctx.devices()` 看这场、`ctx.go`／`ctx.draw()` 动页面）、`Slot`／`Slots`（一条具名数据槽的对象：名字＋`set`／`append`／`patch`／`remove` 四个动词；`ctx.slot` 是这一档槽的表）、`device`（一台设备＝一条连接；持地址、`data` 与推送目标，不是用户——`ctx.device` 拿到它）、`data`（`device.data`，业务挂在连接上的东西，框架不读）、`emit`（`device.emit(*ops)` 把 accrete 的操作作为一帧送出；`draw` 是造帧的那个函数，不送）、`uplink`／上行 `dest`（控件往上送的那一帧的落点，处理器的注册键）、`handler`（处理器）、`frame`（上行帧 `{dest, id?, data}`）、`channel`（一条 WS 连接）、`挂载表`／`mounts`（`App.mounts`：路径 → 路由，socket 也是其中一条，`CHANNEL` 那一项）、`Request`／`Response`（挂载的路由拿到与答回的只读形状）、`app`（页面钩子＋挂载表＋上行落点注册表）、`wire`（出帧层：accrete 的八个操作，一帧就是这些操作的数组）、`SDK` 的构造器（`reflux/sdk/builders.py`）、`外框`／`shell`（`App(shell=…)` 给的那一层：标题、导航、和那个 `routes` 读槽；没给时是框架的默认外框——撑满视口的 `routes`，所以页面一律写进槽）、`routes` 槽（`protocol.ROUTES_SLOT`，页面的家；读取器由外框声明——应用写的，或默认外框那一个）、`宿主事件`（`connect`／`location`／`disconnect`——注册与别的名字一样，但没有线上地址，客户端发不进来）。`spec`、`fire`／`payload`、`ui`／`ops`、以及 `Message`（`ev`／`sender`／`created`——它现在是**宿主**的信封，不在线上）是退场形态的词——只在历史节与 Why Not 里出现。别处不再另造同义词。

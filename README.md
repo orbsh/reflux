@@ -274,8 +274,9 @@ def dashboard(ctx, match):
 ```
 
 - **The shell is drawn once.** The first frame is `create(shell)` plus the page in the `routes` slot;
-  every page turn after that writes only that slot, so the header is never sent twice. Without a shell
-  the page replaces the layout root — `demo_app` is that single-page shape.
+  every page turn after that writes only that slot, so the header is never sent twice. Declare no shell
+  and the framework supplies one — a single full-screen `routes` — so a page lands in that slot either
+  way and `demo_app` is only a smaller frame, not a second shape.
 - **A chart is a node with a spec.** `b.chart(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
   the module that draws it is a file, and `app.mount("/assets/g2chart", path)` is how a page gets the
   files its modules need. A 3D viewport is the same idea with `b.canvas(url=…, value=…)`.

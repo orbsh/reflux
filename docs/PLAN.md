@@ -1017,3 +1017,11 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - **实测**：`uv build --wheel` 产出 `reflux-0.0.0-py3-none-any.whl`（3.0 MB，36 文件）；把本地 bundle 挪走再构建 → hook 联网拉取成功、wheel 里带全 9 个 www 文件；装进干净 venv（`uv venv` + `uv pip install`）后 `make_app().serve_forever(8123)`：`/` 200（`<base href="/">`）、`versions.json` 200、四件资产逐件 200 且 sha256 全对、`reflux.js`/`reflux.css` 200；`reflux --help` 可用。
 
 **验证**：**264 例 OK**；gate_dashboard / chat / ingest / t2 / t6 / t10 全过；ruff 只剩生成 SDK 的 F405 与 `gate_t9` 既有的 F841。
+
+**2026-11-06（用户：「没有定义 shell 的话，就是默认的，全屏一个 routes 就行了」）**：外框成为页面的唯一落点，不再是可选模式。
+
+- `reflux/app.py` 新增 `default_shell(ctx)`：`case(id="shell")` 撑满视口（`grid-template-rows: 1fr`、`height: 100vh`），里面一个 `placeholder(source=ctx.slot(ROUTES_SLOT), id="routes")`。`App.__init__` 的 `shell` 参数仍收 `None`，落成它——`self.shell` 不再可空，`_draw` 里「没有外框就整页替换 layout root」的分支删掉。
+- 现在的帧形只有一种：连接首帧 `create(shell)`＋`set("routes", 页面)`，之后每次换页 `set("routes", …)`。代价说清：不声明外框的应用多一层节点，并且页面只发 `set`/`append`、不产结构现在是异常（`into_routes` 的 `ValueError` 对所有人成立，以前无外框时这种帧能过）。
+- 迁移：`tests/test_app.py` 新增两个读帧助手 `page_op`／`page_of`，所有「首帧就是页面」的断言改成 `["create", "set"]` 并取槽里那一页；`test_shell_and_events.py` 里「没有外框就替换根」那条改成断言默认外框的形状与槽名；`test_devices_and_mounts.py` 的 `go` 帧改判 `set(routes, …)`、两处「首帧一条」改成两条。README 与 `docs/DESIGN.md`（「外框与 `routes` 槽」一节、词汇表两条）同改。
+
+**验证**：`python3 -m unittest discover -s tests -t .` → **264 例 OK**；`python3 -m examples.app.walkthrough --auto` 全过；`gate_ingest`、`gate_t10` 全过。
