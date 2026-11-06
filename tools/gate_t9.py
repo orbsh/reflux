@@ -4,8 +4,9 @@
 `reflux/demo_app.py` is the only application in this repo written the way an application is written
 (SDK builders + `wire` + the route table), and until this gate nothing drove it: it was `gate_t7`'s
 device fixture and nothing more. So the question T9 asks is not about a mechanism — every mechanism
-has its own gate — but about the whole: four advertised interactions, two declared routes, and the
-framework's built-in 404 on the same page.
+has its own gate — but about the whole: the four advertised interactions, two declared routes, the
+framework's built-in 404, and authentication end to end (a gated landing point, the venue's login
+verb, a token that survives a RELOAD, and a logout that revokes).
 
 Navigation is asserted as the **mirror**, not as an anchor: accrete has no URL-bearing type, so the
 demo moves between pages with a one-button form, and the producer answers with a new structure that
@@ -138,20 +139,70 @@ def main() -> int:
             )
         )
 
-        # 4 — one submit carries every field of the form, in the renderer's own shape.
-        type_into(cdp, 1, "ada")
-        type_into(cdp, 2, "secret")
-        click_label(cdp, "保存")
-        submitted = wait_for(lambda: "已提交" in body(cdp) and "ada" in body(cdp))
+        # 4 — a gated landing point, clicked by a visitor: the framework opens the login surface
+        #     instead of reaching the handler. The app never learns the attempt happened.
+        click_label(cdp, "私密")
+        refused = wait_for(lambda: seen(cdp, "演示登录") and "机密内容" not in body(cdp))
         checks.append(
             (
-                "one submit carries every field",
-                bool(submitted) and "secret" in body(cdp),
-                f"submitted={'已提交' in body(cdp)} fields={'ada' in body(cdp) and 'secret' in body(cdp)}",
+                "a gated event from a visitor opens the login surface",
+                bool(refused),
+                f"surface={'演示登录' in body(cdp)} secret={'机密内容' in body(cdp)}",
             )
         )
 
-        # 5 — navigation is a submit, and the address bar follows the marker (the mirror).
+        # 5 — the login form is the framework's VERB: every field arrives in the renderer's own
+        #     shape and the answer is a token plus the signed-in line, drawn into the `auth` region.
+        type_into(cdp, 1, "ada")
+        type_into(cdp, 2, "pw")
+        click_label(cdp, "登录")
+        signed_in = wait_for(lambda: "已登录 user-ada" in body(cdp))
+        checks.append(
+            (
+                "the login form reaches the venue's verb and binds the connection",
+                bool(signed_in),
+                f"signed_in={'已登录 user-ada' in body(cdp)}",
+            )
+        )
+
+        # 6 — the same click now lands: the gate asked a declaration, and the declaration is satisfied.
+        click_label(cdp, "私密")
+        secret = wait_for(lambda: "机密内容" in body(cdp))
+        checks.append(
+            ("the same event lands once a user is bound", bool(secret), f"secret={'机密内容' in body(cdp)}")
+        )
+
+        # 7 — a refresh is a NEW connection, and it is still the same person: that is the whole
+        #     reason the token exists. The browser keeps it; hello hands it back.
+        before_reload = len(frames(app, "reflux:hello"))
+        cdp.call("Page.navigate", url=base_url + "/")
+        reloaded = wait_for(
+            lambda: len(frames(app, "reflux:hello")) > before_reload and seen(cdp, "演示")
+        )
+        click_label(cdp, "私密")
+        again = wait_for(lambda: "机密内容" in body(cdp))
+        checks.append(
+            (
+                "a reload is the same user (the token survives the socket)",
+                bool(reloaded) and bool(again),
+                f"reloaded={bool(reloaded)} secret_after_reload={'机密内容' in body(cdp)}",
+            )
+        )
+
+        # 8 — revoking is one row going away, and the browser hears it as an EMPTY marker.
+        click_label(cdp, "退出")
+        wait_for(lambda: "已登录 user-ada" not in body(cdp))
+        click_label(cdp, "私密")
+        revoked = wait_for(lambda: seen(cdp, "演示登录") and "机密内容" not in body(cdp))
+        checks.append(
+            (
+                "a logout revokes: the next gated click asks again",
+                bool(revoked),
+                f"surface={'演示登录' in body(cdp)} secret={'机密内容' in body(cdp)}",
+            )
+        )
+
+        # 9 — navigation is a submit, and the address bar follows the marker (the mirror).
         before_nav = len(frames(app, "reflux:nav"))
         click_label(cdp, "关于")
         moved = wait_for(lambda: seen(cdp, "关于") and cdp.eval("location.pathname") == "/about")
@@ -163,7 +214,7 @@ def main() -> int:
             )
         )
 
-        # 6 — and back the other way, the same mechanism.
+        # 10 — and back the other way, the same mechanism.
         click_label(cdp, "回到演示")
         back_home = wait_for(lambda: seen(cdp, "演示") and cdp.eval("location.pathname") == "/")
         checks.append(
@@ -174,7 +225,7 @@ def main() -> int:
             )
         )
 
-        # 7 — the browser's own back is one `reflux:nav`, and the producer answers it.
+        # 11 — the browser's own back is one `reflux:nav`, and the producer answers it.
         before_back = len(frames(app, "reflux:nav"))
         cdp.eval("history.back()")
         navs = wait_for(lambda: frames(app, "reflux:nav")[before_nav:] or None)
@@ -190,7 +241,7 @@ def main() -> int:
             )
         )
 
-        # 8 — nothing matched is the framework's own page, and the bar stays where the client is.
+        # 12 — nothing matched is the framework's own page, and the bar stays where the client is.
         cdp.call("Page.navigate", url=base_url + "/nope")
         not_found = wait_for(lambda: seen(cdp, "404") and seen(cdp, "/nope"))
         checks.append(

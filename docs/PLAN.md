@@ -29,7 +29,7 @@
 | T6 导航（链接拦截、popstate、hello 带路径、page 钩子、内置 404、页面路径交给壳） | ✅ 2026-10-16 | `python3 tools/gate_t6.py` |
 | T7 会话与心跳（会话即连接、断线/判死回收、心跳线程、计数） | ✅ 2026-10-16 | `python3 tools/gate_t7.py` ＋ 全套 |
 | T8 故障注入（坏 JSON／未注册名／缺 event／处理器抛异常／批量上限／重复行 id／慢客户端；每条的降级都计数且会话存活） | ✅ 2026-10-16 | `python3 tools/gate_t8.py` ＋ 全套 |
-| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ✅ 2026-10-20 | `python3 tools/gate_t9.py`（10 条，真浏览器 drive `demo_app`）＋ 全套 |
+| T9 Python SDK（类型由 accrete 的 schema 生成；demo 应用跑通三类交互；导航按镜像机制测） | ✅ 2026-10-20（auth 段 2026-11-06） | `python3 tools/gate_t9.py`（14 条，真浏览器 drive `demo_app`）＋ 全套 |
 | T10 第二个语言的 SDK（最小；同一份 schema → 另一语言） | ✅ 2026-10-20 | `python3 tools/gate_t10.py`（7 条：六帧字节对拍＋互不相同）＋ `cargo build` ＋ 全套 |
 | T11 测量 | ✅ 2026-10-20 | `python3 tools/measure.py`（四段）＋ 数字在 `docs/PERF.md` |
 | M1 先决：SDK 生成（schema 快照 + profile → `reflux/sdk/`；后处理修形；离线门） | ✅ 2026-10-17 | `python3 tools/gen_sdk.py --check` ＋ `python3 -m unittest tests.test_sdk_generated`（12 例） |
@@ -1025,3 +1025,16 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 迁移：`tests/test_app.py` 新增两个读帧助手 `page_op`／`page_of`，所有「首帧就是页面」的断言改成 `["create", "set"]` 并取槽里那一页；`test_shell_and_events.py` 里「没有外框就替换根」那条改成断言默认外框的形状与槽名；`test_devices_and_mounts.py` 的 `go` 帧改判 `set(routes, …)`、两处「首帧一条」改成两条。README 与 `docs/DESIGN.md`（「外框与 `routes` 槽」一节、词汇表两条）同改。
 
 **验证**：`python3 -m unittest discover -s tests -t .` → **264 例 OK**；`python3 -m examples.app.walkthrough --auto` 全过；`gate_ingest`、`gate_t10` 全过。
+
+**2026-11-06（用户：「认证这种可以直接集成到框架里（不在装饰器里声明就相当于没有），视图和验证也做成 hooks」＋「用户刷新后还是一个，把 token 加上」）**：认证归框架，证明与界面是两个 hook。
+
+- `reflux/auth.py`：`Auth(verify, view=None, store=None, idle_window=30 天)` 与 `Tokens`（32 字节不透明串；`mint` / `touch` 查找即刷新、闲置即删 / `drop`）。`verify(ctx, credentials, mode)` 是唯一必须写的可调用，`mode` 是 `login`/`signup`；`view(ctx, state)` 不写就用框架自带那屏；`store` 三个可调用让 token 表活过重启（不接就是内存）。
+- 门写在声明上：`@app.on(name, auth=True)` / `dests.register(name, handler, auth=True)`，注册表存 `(handler, gated)`——一个名字一次查找同时答「谁应答」和「要不要用户」。门在 `App.handle` 的 `check_uplink` 之后、`dispatch` 之前：匿名连接的 gated 帧到不了处理器，**框架自己把登录面画进 `auth` 槽**（prism 需要 `ui:auth.required` 是因为它的场馆画不了图；这里的 `view` 就是框架的 hook）。
+- 三个动词 `reflux:login` / `reflux:signup` / `reflux:logout` 走 `Registry.builtin`，带保留前缀，应用注册同名即启动错；`App(auth=None)` 时它们**不存在**（那一帧按未注册拒掉）。
+- token 的载体由结构定：下行是动作列表、runtime 看不见帧，它只认保留 id 的节点 → 第三枚标记 `reflux:token`（`markers.py` ＋ `sdks/rust/src/markers.rs` ＋ `reflux.css` 三处）；上行是它能产出的 JSON → `hello.data.token`（没有就不写这个字段，两条逐字断言 hello 的门不受影响）。
+- `App.log` 入站打码：`login`/`signup` 的 `data` 与 `hello` 的 token 都成 `«redacted»`（出站那一半带 token 是投递本身）。
+- 参考应用：登录表单改绑 `reflux:login`（`on_submit` 整段删除，应用不再读密码），新增 gated 落点 `vault.secret` ＋ `退出`，并示范「槽会活过 create」的收尾（`may_see_secret` 记一笔，匿名重画时清）。
+- 跨语言：`frames.rs` 的「form submit」换成「login surface」——登录答复现在带随机 token，那一帧不再可逐字节比对。
+- 文档：`docs/DESIGN.md`「设备与身份」整节重写（旧句「没有跨连接的身份凭证」「刷新回到初始是正常表现」退场），skill 的 `references/connection-identity.md` 同步翻案并保留「握手准入 / cookie」被否的理由。
+
+**验证**：`python3 -m unittest discover -s tests -t .` → **275 例 OK**（新增 `tests/test_auth.py` 11 例）；门全过（`gen_sdk --check`、t0、t2、t3、t4、t6、t7、t8、t9 14/14、t10 8/8、ingest、chat、dashboard）。

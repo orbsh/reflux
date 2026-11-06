@@ -35,9 +35,20 @@ whatever else the app mounts.
 
 from . import sdk, wire
 from .app import App, Context, Device
+from .auth import Auth, Tokens
 from .slots import Slot, Slots
 from .dests import Registry, RegistryError
-from .protocol import HOST_EVENTS, MAX_OPS_PER_FRAME, RESERVED_PREFIX, ROUTES_SLOT
+from .protocol import (
+    AUTH_SLOT,
+    AUTH_VERBS,
+    HOST_EVENTS,
+    LOGIN,
+    LOGOUT,
+    MAX_OPS_PER_FRAME,
+    RESERVED_PREFIX,
+    ROUTES_SLOT,
+    SIGNUP,
+)
 from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
 from .sdk import builders
 from .sdk._parse import dump, parse
@@ -48,6 +59,8 @@ __version__ = "0.0.0"
 
 __all__ = [
     "App",
+    "Auth",
+    "Tokens",
     "Device",
     "CHANNEL",
     "Context",
@@ -72,5 +85,10 @@ __all__ = [
     "RESERVED_PREFIX",
     "ROUTES_SLOT",
     "HOST_EVENTS",
+    "AUTH_SLOT",
+    "AUTH_VERBS",
+    "LOGIN",
+    "SIGNUP",
+    "LOGOUT",
     *builders.__all__,
 ]

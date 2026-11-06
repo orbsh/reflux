@@ -32,7 +32,10 @@ class Registry:
         """`context` builds one delivery (`Context(app, device, frame)`) — the app supplies it, so the
         registry never has to know what a context is, only that a handler is handed one."""
         self._context = context or (lambda device, frame=None: device)
-        self._handlers: dict[str, Handler] = {}
+        # name -> (handler, gated). The gate is a property of the DECLARATION, so it is stored
+        # exactly where the name is: one lookup answers both "who answers this" and "does it need
+        # a user", and there is no second table that could disagree with the first.
+        self._handlers: dict[str, tuple[Handler, bool]] = {}
         self._builtin: set[str] = set()
         self.calls = 0
         self.refused = 0
@@ -41,27 +44,33 @@ class Registry:
     # --- registration (startup: loud, never a silent overwrite) ---------------------------
 
     @overload
-    def register(self, name: str) -> Callable[[Handler], Handler]: ...
+    def register(self, name: str, *, auth: bool = False) -> Callable[[Handler], Handler]: ...
 
     @overload
-    def register(self, name: str, handler: Handler) -> Handler: ...
+    def register(self, name: str, handler: Handler, *, auth: bool = False) -> Handler: ...
 
     def register(
-        self, name: str, handler: Handler | None = None
+        self, name: str, handler: Handler | None = None, *, auth: bool = False
     ) -> Callable[[Handler], Handler] | Handler:
-        """``@events.register("name")`` or ``events.register("name", handler)``."""
+        """``@events.register("name")`` or ``events.register("name", handler)``.
+
+        `auth=True` says this landing point is served only to a device with a user bound to it —
+        declared HERE, on the same statement that names the event, because a requirement kept in a
+        second table keyed by the same name is a rule free to drift from its subject. Absent is the
+        default and means public: an app that never says `auth=True` has no gate at all.
+        """
 
         def add(fn: Handler) -> Handler:
-            self._add(name, fn, builtin=False)
+            self._add(name, fn, builtin=False, gated=auth)
             return fn
 
         return add if handler is None else add(handler)
 
-    def builtin(self, name: str, handler: Handler) -> Handler:
+    def builtin(self, name: str, handler: Handler, *, auth: bool = False) -> Handler:
         """Register one of the framework's own names (``reflux:hello``)."""
-        return self._add(name, handler, builtin=True)
+        return self._add(name, handler, builtin=True, gated=auth)
 
-    def _add(self, name: str, handler: Handler, *, builtin: bool) -> Handler:
+    def _add(self, name: str, handler: Handler, *, builtin: bool, gated: bool = False) -> Handler:
         if not isinstance(name, str) or not name:
             raise RegistryError("an event name must be a non-empty string")
         if not callable(handler):
@@ -73,7 +82,7 @@ class Registry:
             )
         if name in self._handlers:
             raise RegistryError(f"{name!r} is already registered")
-        self._handlers[name] = handler
+        self._handlers[name] = (handler, gated)
         if builtin:
             self._builtin.add(name)
         return handler
@@ -97,11 +106,21 @@ class Registry:
         """
         rows: list[tuple[str, str, str]] = []
         for name in sorted(self._handlers):
-            handler = self._handlers[name]
+            handler, gated = self._handlers[name]
             module = getattr(handler, "__module__", None) or type(handler).__module__
             qualname = getattr(handler, "__qualname__", None) or type(handler).__qualname__
-            rows.append((name, f"{module}.{qualname}", "builtin" if name in self._builtin else "app"))
+            kind = "builtin" if name in self._builtin else "app"
+            rows.append((name, f"{module}.{qualname}", kind))
         return rows
+
+    def gated(self, name: str) -> bool:
+        """Does this landing point need a bound user? False for a name nobody registered.
+
+        An unknown name is the registry's ordinary refusal (`dispatch` answers it), never a gate:
+        a name with no declaration cannot be made protected by the absence of one.
+        """
+        row = self._handlers.get(name)
+        return bool(row and row[1])
 
     def dispatch(self, device: Any, frame: Any) -> bool:
         """Hand one uplink frame to its handler, as a context. False when it was refused."""
@@ -111,8 +130,8 @@ class Registry:
             self.log.append(f"malformed frame from {ctx.id}: {frame!r}")
             return False
         name = frame["dest"]
-        handler = self._handlers.get(name)
-        if handler is None:
+        row = self._handlers.get(name)
+        if row is None:
             self.refused += 1
             self.log.append(f"unregistered event {name!r} from {ctx.id} on {ctx.path}")
             return False
@@ -133,7 +152,7 @@ class Registry:
         """One handler, one accounting — the only place a handler's exception is caught."""
         self.calls += 1
         try:
-            self._handlers[name](ctx, frame)
+            self._handlers[name][0](ctx, frame)
         except Exception:  # a handler's defect stays a log line; the device survives
             self.refused += 1
             self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")

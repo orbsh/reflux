@@ -7,14 +7,14 @@
 //! server, because producing the frame is the SDK's whole job.
 
 use reflux_sdk::markers;
-use reflux_sdk::types::{button, case, form, input, rack, text, JsType, TextVariant};
+use reflux_sdk::types::{button, case, form, input, placeholder, rack, text, JsType, TextVariant};
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::Value;
 use std::io::Write;
 
 const ECHO: &str = "echo";
 const ROWS: &str = "rows";
-const SUBMITTED: &str = "submitted";
+const SECRET: &str = "secret";
 
 /// A one-button form — the vocabulary's only clickable, and the demo's way between pages.
 fn nav_form(label: &str, event: &str) -> Value {
@@ -52,13 +52,27 @@ fn home() -> Value {
                 &[
                     input(None, None, Some("user"), None, None, Some("f-user")),
                     input(None, None, Some("pass"), None, Some(JsType::Password), Some("f-pass")),
-                    button(Some("保存"), None, None),
+                    button(Some("登录"), None, None),
                 ],
                 None,
-                Some("login.submit"),
+                Some("reflux:login"),
                 None, None,
                 Some("login")),
-            text(None, None, Some(SUBMITTED), None, None, Some("submitted"), None),
+            // The reserved region the framework draws the login surface into.
+            placeholder(&[], None, Some("auth"), Some("auth-region")),
+            form(
+                &[button(Some("私密"), None, None)],
+                None,
+                Some("vault.secret"),
+                None, None,
+                Some("vault")),
+            text(None, None, Some(SECRET), None, None, Some("secret"), None),
+            form(
+                &[button(Some("退出"), None, None)],
+                None,
+                Some("reflux:logout"),
+                None, None,
+                Some("logout")),
             nav_form("关于", "go.about"),
             text(
                 Some(
@@ -113,13 +127,50 @@ fn main() {
         ("add row", draw(&[append(ROWS, row_node("row-4", "第 4 行"), 0)])),
         ("remove row", draw(&[remove(ROWS, "row-1")])),
         (
-            "form submit",
+            // The refused login surface — the app's `view` seam, the same node Python draws.
+            "login surface",
             draw(&[set(
-                SUBMITTED,
-                text(
-                    Some("已提交 {\"pass\": \"secret\", \"user\": \"ada\"}"),
-                    None,
-                    None,
+                "auth",
+                case(
+                    &[
+                        text(
+                            Some("演示登录"),
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            Some(TextVariant::Heading1),
+                        ),
+                        text(
+                            Some("用户或密码不对"),
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            Some(TextVariant::Muted),
+                        ),
+                        form(
+                            &[
+                                input(None, None, Some("user"), None, None, Some("auth-user")),
+                                input(
+                                    None,
+                                    None,
+                                    Some("pass"),
+                                    None,
+                                    Some(JsType::Password),
+                                    Some("auth-pass"),
+                                ),
+                                button(Some("确认登录"), None, None),
+                            ],
+                            None,
+                            Some("reflux:login"),
+                            None,
+                            None,
+                            Some("auth-form"),
+                        ),
+                    ],
                     None,
                     None,
                     None,

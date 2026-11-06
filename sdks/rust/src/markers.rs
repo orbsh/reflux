@@ -1,4 +1,4 @@
-//! The page markers: the two reserved ids the client runtime reads out of the DOM.
+//! The page markers: the reserved ids the client runtime reads out of the DOM.
 //!
 //! `www/static/reflux.js` mirrors `reflux:path` into the address bar and `reflux:title` into the
 //! document's title. Both are ordinary nodes — a `placeholder` whose id is the reserved name — so
@@ -15,6 +15,7 @@ use serde_json::Value;
 
 pub const PATH_ID: &str = "reflux:path";
 pub const TITLE_ID: &str = "reflux:title";
+pub const TOKEN_ID: &str = "reflux:token";
 pub const PAGE_ID: &str = "page-root";
 
 /// The address the page is showing. The runtime copies it into the address bar.
@@ -34,6 +35,17 @@ pub fn title_marker(title: &str) -> Value {
         None,
         None,
         Some(TITLE_ID),
+    )
+}
+
+/// The client's credential, said once per issue — the runtime keeps it and hands it back on hello.
+/// An empty marker is a statement too: it is how a logout reaches the browser's storage.
+pub fn token_marker(token: &str) -> Value {
+    placeholder(
+        &[text(Some(token), None, None, None, None, None, None)],
+        None,
+        None,
+        Some(TOKEN_ID),
     )
 }
 

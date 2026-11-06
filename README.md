@@ -332,7 +332,7 @@ python3 tools/gate_t4.py                       # typing, clicking, form submits
 python3 tools/gate_t6.py                       # address bar, history, deep links
 python3 tools/gate_t7.py                       # devices: reload and death
 python3 tools/gate_t8.py                       # what a bad frame does (and does not) do
-python3 tools/gate_t9.py                       # the reference app, driven end to end
+python3 tools/gate_t9.py                       # the reference app end to end, auth included
 python3 tools/gate_t10.py                      # Rust vs Python frames (needs cargo)
 python3 tools/gate_dashboard.py                # the dashboard, its modules, and the chat page
 python3 tools/measure.py                       # bytes, DOM changes, first paint, CPU

@@ -10,7 +10,7 @@ key order, with the same values.
 
 Five turns, the reference app's own shapes:
 
-  echo · add row · remove row · form submit · page turn (structure + two seeded rows)
+  echo · add row · remove row · login surface · page turn (structure + two seeded rows)
 
 Those are the same five `tools/measure.py` weighs, so the byte counts in `docs/PERF.md` double as the
 expected sizes here.
@@ -54,9 +54,11 @@ def python_turns() -> list[tuple[str, dict]]:
         ),
         ("remove row", wire.draw(wire.remove("rows", "row-1"))),
         (
-            "form submit",
-            wire.draw(
-wire.set("submitted", b.text('已提交 {"pass": "secret", "user": "ada"}'))),
+            # The refused login surface: a real frame the app produces (its `view` seam), and a
+            # deterministic one — which the old "form submit" turn is not any more, since a login
+            # answer now carries a freshly minted token.
+            "login surface",
+            wire.draw(wire.set("auth", demo.demo_view(_ctx(), "refused"))),
         ),
         (
             "page turn",

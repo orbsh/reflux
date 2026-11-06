@@ -16,7 +16,17 @@ Hand-written, and read from one place each: `app` / `dests` take the prefix and 
 
 from __future__ import annotations
 
-__all__ = ["HOST_EVENTS", "MAX_OPS_PER_FRAME", "RESERVED_PREFIX", "ROUTES_SLOT"]
+__all__ = [
+    "AUTH_SLOT",
+    "AUTH_VERBS",
+    "HOST_EVENTS",
+    "LOGIN",
+    "LOGOUT",
+    "MAX_OPS_PER_FRAME",
+    "RESERVED_PREFIX",
+    "ROUTES_SLOT",
+    "SIGNUP",
+]
 
 # How many operations one `draw` frame may carry. The producer refuses to build a frame over it
 # (`wire.draw`) and the server refuses to put one on a socket (`ingest.check_frame`): the same rule
@@ -40,3 +50,17 @@ ROUTES_SLOT = "routes"
 # addressed to one of them is refused: a client cannot fake its own connect, and cannot navigate
 # without the browser having done it first.
 HOST_EVENTS = ("connect", "location", "disconnect")
+
+# The slot the login surface is drawn into. `auth` is the one application-facing name the platform
+# reserves: a page declares it as a `placeholder` region, the framework (or the app's own `Auth.view`)
+# writes the screen into it. The name is a slot, not a verb, because the surface is a place in the page.
+AUTH_SLOT = "auth"
+
+# The framework's own uplink verbs — authentication the venue owns, not the application's business.
+# They carry the reserved prefix like `reflux:hello`, so an application registering one is a startup
+# error and no app can shadow the door: `Registry.builtin` is the only way in. They exist only when
+# the app declared `auth=`, which is the same rule as everything else here — no declaration, no door.
+LOGIN = f"{RESERVED_PREFIX}login"
+SIGNUP = f"{RESERVED_PREFIX}signup"
+LOGOUT = f"{RESERVED_PREFIX}logout"
+AUTH_VERBS = (LOGIN, SIGNUP, LOGOUT)

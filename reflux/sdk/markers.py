@@ -22,10 +22,20 @@ from ..protocol import RESERVED_PREFIX
 from . import builders as b
 from .types import Accrete
 
-__all__ = ["PATH_ID", "TITLE_ID", "PAGE_ID", "path_marker", "title_marker", "page"]
+__all__ = [
+    "PAGE_ID",
+    "PATH_ID",
+    "TITLE_ID",
+    "TOKEN_ID",
+    "page",
+    "path_marker",
+    "title_marker",
+    "token_marker",
+]
 
 PATH_ID = f"{RESERVED_PREFIX}path"
 TITLE_ID = f"{RESERVED_PREFIX}title"
+TOKEN_ID = f"{RESERVED_PREFIX}token"
 PAGE_ID = "page-root"
 
 
@@ -37,6 +47,17 @@ def path_marker(path: str) -> Accrete:
 def title_marker(title: str) -> Accrete:
     """The page's title. The runtime copies it into `document.title`."""
     return b.placeholder(b.text(title), id=TITLE_ID)
+
+
+def token_marker(token: str) -> Accrete:
+    """The client's credential, said once per issue. The runtime keeps it and hands it back on hello.
+
+    It is a marker for a structural reason, not a stylistic one: the downlink is an action list and
+    the runtime never sees actions — the only things it reads are the reserved-id nodes it mirrors.
+    An EMPTY marker is a statement too ("this connection has no credential any more"), and it is how
+    a logout reaches the browser's storage; leaving the node out says nothing at all.
+    """
+    return b.placeholder(b.text(token), id=TOKEN_ID)
 
 
 def page(path: str, title: str, *children: Accrete, id: str = PAGE_ID) -> Accrete:

@@ -7,7 +7,13 @@ Four things, one per shape a page needs to be an application:
 - **an echo** — an `input` uplinks its buffer on Enter, a `text` reads the slot the handler writes;
 - **a list** — rows live in the `rows` slot and a `rack` shows it; each row's remove button carries
   the row's own identity up, and `remove` takes it back by identity;
-- **a form** — one submit carries every field it holds, in the shape the renderer itself produces;
+- **a form** — one submit carries every field it holds, in the shape the renderer itself produces —
+  and it is the LOGIN form, because credentials are the framework's business: the destination is
+  `reflux:login`, the app writes only `verify` and `view`, and no password is ever read by this
+  module;
+- **a gated landing point** — `vault.secret` is declared `auth=True`, so an anonymous click opens
+  the login surface instead of reaching the handler, and the same click lands once signed in
+  (`退出` is the way back out);
 - **two routes** — `/` and `/about`, reached by the address bar, a deep link, back/forward, or the
   page's own navigation forms.
 
@@ -29,10 +35,11 @@ because the page's own shape is the runtime's contract, not an application's pri
 from __future__ import annotations
 
 import argparse
-import json
 from typing import Protocol
 
 from .app import App, Context
+from .auth import Auth
+from .protocol import AUTH_SLOT, LOGIN, LOGOUT
 from .routes import route
 from .sdk import builders as b
 from .sdk.types import Accrete, JsType
@@ -48,7 +55,8 @@ class DemoSlots(Protocol):
 
     echo: Slot  # what the input last carried
     rows: Slot  # the list the rack reads
-    submitted: Slot  # the last form's fields, as one line of JSON
+    secret: Slot  # only a signed-in click writes it; every anonymous draw clears it
+    # (the login form's answer is the framework's: it lands in the reserved `auth` region)
 
 # Where a navigation form sends the client. The frame's `event` is the target's name.
 GO_HOME, GO_ABOUT = Slot("go.home"), Slot("go.about")
@@ -86,6 +94,12 @@ class Demo:
         `ctx.emit(...)`, and neither of them is a return.
         """
         ctx.page(*self.home(ctx))
+        # A slot outlives a `create`, so the secret would outlive a LOGOUT too — the page is redrawn
+        # when the connection unbinds. Clearing is therefore part of the draw, and only when there
+        # is something to clear (`may_see_secret` is the app's own memory of having written it), so
+        # an ordinary first draw sends nothing extra.
+        if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
+            slots_of(ctx).secret.set(b.text(""))
         if not ctx.data.get("rows_seeded"):
             ctx.data["rows_seeded"] = True
             for row in self.rows:
@@ -104,14 +118,20 @@ class Demo:
             b.text(source=slots.echo, id="echo"),
             b.form(b.button("加一行"), dest=ctx.slot.row.add, id="add-row"),
             b.rack(source=slots.rows, id="rows"),
+            # The credential form speaks the framework's verb: this app never sees the password,
+            # and the answer (a token, a signed-in line) is drawn into the reserved `auth` region.
             b.form(
                 b.input(field="user", id="f-user"),
                 b.input(field="pass", kind=JsType.password, id="f-pass"),
-                b.button("保存"),
-                dest=ctx.slot.login.submit,
+                b.button("登录"),
+                dest=ctx.slot(LOGIN),
                 id="login",
             ),
-            b.text(source=slots.submitted, id="submitted"),
+            b.placeholder(source=ctx.slot(AUTH_SLOT), id="auth-region"),
+            # Behind a declaration: a click here from a visitor never reaches the handler.
+            b.form(b.button("私密"), dest=ctx.slot("vault.secret"), id="vault"),
+            b.text(source=slots.secret, id="secret"),
+            b.form(b.button("退出"), dest=ctx.slot(LOGOUT), id="logout"),
             nav_form("关于", GO_ABOUT),
             b.text(
                 "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构"
@@ -145,13 +165,10 @@ class Demo:
         self.rows = [row for row in self.rows if row["id"] != row_id]
         slots_of(ctx).rows.remove(row_id)
 
-    def on_submit(self, ctx, frame) -> None:
-        fields = frame["data"] if isinstance(frame["data"], dict) else {}
-        self.submitted = {
-            name: entry.get("data") for name, entry in fields.items() if isinstance(entry, dict)
-        }
-        summary = json.dumps(self.submitted, ensure_ascii=False, sort_keys=True)
-        slots_of(ctx).submitted.set(b.text(f"已提交 {summary}"))
+    def on_secret(self, ctx, frame) -> None:
+        """Only a signed-in click gets here: the gate answered the rest before this handler ran."""
+        ctx.data["may_see_secret"] = True
+        slots_of(ctx).secret.set(b.text("机密内容"))
 
     def on_go(self, ctx, frame) -> None:
         """A submit that moves the client: the new structure and the new path marker."""
@@ -159,6 +176,36 @@ class Demo:
 
 
 demo = Demo()  # the routes are module-level declarations, so they attach to one application
+
+
+def demo_view(ctx, state):
+    """The demo's own login surface — the `view` seam, with the field names its page also uses."""
+    lines = [b.text("演示登录", variant="heading-1")]
+    if state == "refused":
+        lines.append(b.text("用户或密码不对", variant="muted"))
+    return b.case(
+        *lines,
+        b.form(
+            b.input(field="user", id="auth-user"),
+            b.input(field="pass", kind=JsType.password, id="auth-pass"),
+            b.button("确认登录"),
+            dest=ctx.slot(LOGIN),
+            id="auth-form",
+        ),
+    )
+
+
+def demo_verify(ctx, credentials, mode):
+    """The demo's verifier: one account, in memory, and the framework does the rest.
+
+    This is the entire authentication a deployment writes — `mode` is `login` or `signup`, so an
+    app that creates accounts decides that here. The password is checked and dropped; nothing in
+    this module stores it, logs it, or draws it.
+    """
+    del ctx, mode  # the demo has no roles and no second kind of account
+    if credentials.get("user") == "ada" and credentials.get("pass") == "pw":
+        return "user-ada"
+    return None
 
 
 @route("/", title="演示")
@@ -174,11 +221,11 @@ def about_page(ctx, match):
 def make_app() -> App:
     """The demo's app: the routes declared above (a side effect of importing this module) and
     this app's event handlers."""
-    app = App()
+    app = App(auth=Auth(verify=demo_verify, view=demo_view))
     app.on(app.slot.name.change, demo.on_name)
     app.on(app.slot.row.add, demo.on_add)
     app.on(app.slot.row["remove"], demo.on_remove)  # `remove` is a verb: the name goes by subscript
-    app.on(app.slot.login.submit, demo.on_submit)
+    app.on(app.slot("vault.secret"), demo.on_secret, auth=True)
     for name in GO:
         app.on(app.slot(name), demo.on_go)
     return app

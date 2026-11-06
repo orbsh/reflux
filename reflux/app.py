@@ -36,13 +36,14 @@ second dialect and no translation layer: everything that leaves here is checked 
 and reaches one renderer.
 
 A device is one connection — created when it opens, reclaimed when it closes or when it stops
-answering. Nothing crosses connections: the socket is the state, and a refresh is a new device
-holding nothing but the location its hello carried. One user may hold several devices, and whether
-they share anything is the business's logic: the framework gives each connection a `data` bag and
-never reads it. Identity, when a deployment needs it, arrives as an ordinary event on the live
-socket (`login`), not as a credential checked before it. Devices hold their location, that bag, and
-where their frames go — not the interface's state, which lives in the page tree; a hundred devices
-are a hundred small records.
+answering. A connection is admitted anonymously; identifying one is an ordinary act on the live
+socket, never a check before it. Two things the framework does own once an app declares `auth=`:
+the three verbs (`reflux:login`, `reflux:signup`, `reflux:logout`), and a token — because a refresh
+is a new device and "logged in" has to survive that. The token is said down as the `reflux:token`
+marker, kept by the client runtime, and handed back in `hello`; the table is the venue's, so a
+revocation is one row going away. Devices hold their location, that bag (`data`, where the framework
+writes `user` / `token` and an app only reads), and where their frames go — not the interface's
+state, which lives in the page tree; a hundred devices are a hundred small records.
 
 The HTTP side is a mount table with the channel in it: `App.mounts` starts as `{"/ws": CHANNEL}`, so
 the socket is a route like any other. `@app.mount("/health")` (or `app.mount("/health", handler)`) adds the
@@ -59,6 +60,7 @@ import json
 import secrets
 import threading
 import time
+import traceback
 from dataclasses import dataclass, field
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -66,13 +68,22 @@ from typing import Any, Callable
 from urllib.parse import parse_qs
 
 from . import ingest, wire
+from .auth import Auth, Tokens, credentials_of
 from .channel import EVICTED, JUDGED_DEAD, WS_PATH, Channel, ChannelClosed
 from .dests import Registry
-from .protocol import RESERVED_PREFIX, ROUTES_SLOT
+from .protocol import (
+    AUTH_SLOT,
+    AUTH_VERBS,
+    LOGIN,
+    LOGOUT,
+    RESERVED_PREFIX,
+    ROUTES_SLOT,
+    SIGNUP,
+)
 from .routes import DEFAULT, Match, Routes
 from .sdk import builders as b
 from .sdk import markers
-from .sdk.markers import PAGE_ID
+from .sdk.markers import PAGE_ID, token_marker
 from .sdk.types import Accrete
 from .slots import Slot, Slots
 from .server import CHANNEL, make_server
@@ -436,6 +447,7 @@ class App:
         dead_after: float = 30.0,
         outbox: int = 256,
         shell: Callable[[Context], Any] | None = None,
+        auth: Auth | None = None,
     ) -> None:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
@@ -472,19 +484,133 @@ class App:
         self._watchdog: threading.Thread | None = None
         self.dests.builtin(f"{RESERVED_PREFIX}hello", self._on_hello)
         self.dests.builtin(f"{RESERVED_PREFIX}nav", self._on_nav)
+        # Authentication, when the app declared it. `auth=None` is a legal deployment: no gate, and
+        # the three verbs do not exist at all (a frame naming one is refused as unregistered, which
+        # is the honest answer — there is no door, not a locked one).
+        self.auth = auth
+        self.tokens = (
+            Tokens(idle_window=auth.idle_window, store=auth.store) if auth is not None else None
+        )
+        if auth is not None:
+            self.dests.builtin(LOGIN, self._login)
+            self.dests.builtin(SIGNUP, self._signup)
+            self.dests.builtin(LOGOUT, self._logout)
 
     # --- the framework's own protocol -----------------------------------------------------
 
     def _on_hello(self, ctx: Context, frame: dict) -> None:
-        """The client says where it stands; the first frame answers, then `connect` is raised."""
+        """The client says where it stands; the first frame answers, then `connect` is raised.
+
+        A `token` in the hello is the same person coming back on a new socket — a refresh, a
+        reconnect — and it is adopted BEFORE the page is drawn, so the first frame already knows who
+        is asking. An unknown or idle token is not an error: the connection simply stays anonymous,
+        which is what a visitor with a stale credential should get.
+        """
         device = ctx.device
         device.path, device.query = location_of(frame)
+        # The token rides INSIDE hello's payload (the frame's own fields are fixed by the boundary:
+        # `dest` / `id` / `data`), which is also where the client runtime puts it.
+        payload = frame.get("data")
+        self._adopt(device, payload.get("token") if isinstance(payload, dict) else None)
         self._draw(device)
         if not device.connected:
             device.connected = True
             # After the frame is queued: a handler that draws more lands on top of a page the
             # client already has, never under one it is about to lose.
             self.dests.announce("connect", device, frame)
+
+    def _adopt(self, device: Device, token: Any) -> None:
+        """Bind this connection to the user a token names, or leave it anonymous."""
+        if self.tokens is None or not isinstance(token, str) or not token:
+            return
+        user = self.tokens.touch(token)
+        if user is None:
+            device.data.pop("user", None)
+            device.data.pop("token", None)
+            return
+        device.data["user"] = user
+        device.data["token"] = token
+
+    # --- authentication: the three verbs the venue owns ------------------------------------
+
+    def _login(self, ctx: Context, frame: dict) -> None:
+        """The framework's `login` verb: prove the credential, then bind, mint and answer."""
+        self._attempt(ctx, frame, "login")
+
+    def _signup(self, ctx: Context, frame: dict) -> None:
+        """The same act, said as `signup` — the mode reaches `verify`, which decides what to do."""
+        self._attempt(ctx, frame, "signup")
+
+    def _attempt(self, ctx: Context, frame: dict, mode: str) -> None:
+        device = ctx.device
+        if self.auth is None or self.tokens is None:
+            return
+        credentials = credentials_of(frame)
+        try:
+            user = self.auth.verify(ctx, credentials, mode)
+        except Exception:
+            # A deployment's verifier is a deployment's risk: a raise is a refusal here, and the
+            # device survives it (the same rule every handler follows). The log carries the why.
+            self.dests.log.append(f"auth verify raised for {device.id}:\n{traceback.format_exc()}")
+            user = None
+        if not user:
+            self._open_auth(device, "refused")
+            return
+        previous = device.data.get("token")
+        if isinstance(previous, str):
+            self.tokens.drop(previous)  # a login on this connection rotates its credential
+        token = self.tokens.mint(str(user))
+        device.data["user"] = str(user)
+        device.data["token"] = token
+        # The token goes out as a marker the runtime keeps; the line says who is now bound. Then the
+        # page is drawn again, because a page may answer differently for a user than for a visitor.
+        ctx.slot(AUTH_SLOT).set(
+            b.case(token_marker(token), b.text(f"已登录 {user}", variant="muted"))
+        )
+        self._draw(device)
+
+    def _logout(self, ctx: Context, frame: dict) -> None:
+        """Forget the credential: the row goes, the connection unbinds, the surface comes back."""
+        device = ctx.device
+        if self.auth is None:
+            return
+        token = device.data.pop("token", None)
+        if self.tokens is not None and isinstance(token, str):
+            self.tokens.drop(token)
+        device.data.pop("user", None)
+        # An EMPTY marker is how the browser's storage hears about it — leaving the node out would
+        # say nothing, and the next hello would present a dead token.
+        ctx.slot(AUTH_SLOT).set(b.case(token_marker(""), self.auth.screen(ctx, "login")))
+        self._draw(device)
+
+    def _refuse_gated(self, device: Device, frame: dict) -> bool:
+        """True when this frame was refused: its landing point needs a user and this device has none.
+
+        The gate asks the DECLARATION (the registry row that already had to be looked up to dispatch
+        at all) and runs before any handler, so a gated event from an anonymous connection never
+        reaches the application — the app cannot tell that someone tried, which is why the framework
+        opens the login surface itself rather than asking the app to.
+        """
+        if self.auth is None:
+            return False
+        name = frame.get("dest")
+        if not isinstance(name, str) or not self.dests.gated(name):
+            return False
+        if device.data.get("user"):
+            return False
+        self.stats["refused"] += 1
+        self.dests.log.append(
+            f"refused gated event {name!r} from {device.id} on {device.path}: no user bound"
+        )
+        self._open_auth(device, "login")
+        return True
+
+    def _open_auth(self, device: Device, state: str) -> None:
+        """Draw the login surface into the reserved slot: the app's view, or the framework's own."""
+        if self.auth is None:
+            return
+        ctx = self.context(device)
+        ctx.slot(AUTH_SLOT).set(self.auth.screen(ctx, state))
 
     def _on_nav(self, ctx: Context, frame: dict) -> None:
         """The page asked for another path — back or forward: the only navigation this wire has.
@@ -513,7 +639,9 @@ class App:
         declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
         return declared
 
-    def on(self, name: "str | Slot", handler: Callable | None = None) -> Callable:
+    def on(
+        self, name: "str | Slot", handler: Callable | None = None, *, auth: bool = False
+    ) -> Callable:
         """Declare a handler for one upstream dest: `@app.on(app.slot.go.chat)` above it.
 
         The dest is a handle from the app's table, so a page saying `dest=ctx.slot.go.chat` and the
@@ -525,11 +653,15 @@ class App:
         you write at a handler with no page to its name. Both of the registry's shapes come through:
         `@app.on("x")` as a decorator, `app.on("x", handler)` when the table is built at runtime. The
         registry is still the table — `dests` stays public for the built-ins and for lookups.
+
+        `auth=True` is the gate, declared on the same statement that names the event: this landing
+        point is served only to a device with a user bound. Absent is public, which is why an app
+        that never says it has no authentication at all — not a permissive one, none.
         """
         if isinstance(name, Slot):
             name.declare()
             name = name.name
-        return self.dests.register(name, handler)
+        return self.dests.register(name, handler, auth=auth)
 
     @property
     def slot(self) -> Slots:
@@ -780,6 +912,8 @@ class App:
                         f"refused uplink from {device.id} on {device.path}: {bad}"
                     )
                     continue
+                if self._refuse_gated(device, frame):
+                    continue
                 self.dests.dispatch(device, frame)
         except ChannelClosed as exc:
             self.dests.log.append(f"device {device.id} closed: {exc}")
@@ -835,7 +969,28 @@ class App:
                 self.stats["resync"] += 1
 
     def _record(self, direction: str, frame: Any) -> None:
-        self.log.append((direction, frame))
+        """Keep the frame — minus anything that must not sit in a process log.
+
+        Two kinds do: a password (the `login` / `signup` payload) and the credential (`hello`'s
+        `token`, or the marker frame that carries a new one). The log is read by gates, probes and
+        whatever an operator points at it, and a table of plaintext passwords there would undo the
+        whole point of a verifier that is not one. Redaction copies: the live frame is untouched.
+        """
+        self.log.append((direction, self._redacted(direction, frame)))
+
+    @staticmethod
+    def _redacted(direction: str, frame: Any) -> Any:
+        if direction != "recv" or not isinstance(frame, dict):
+            return frame
+        name = frame.get("dest")
+        if name == f"{RESERVED_PREFIX}hello":
+            payload = frame.get("data")
+            if isinstance(payload, dict) and "token" in payload:
+                return {**frame, "data": {**payload, "token": "«redacted»"}}
+            return frame
+        if name in AUTH_VERBS:
+            return {**frame, "data": "«redacted»"}
+        return frame
 
     def _write(self, channel: Channel, frame: list[dict]) -> bool:
         """One frame onto the socket. False when the client cannot take it — then it is its own."""
