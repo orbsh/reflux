@@ -4,8 +4,8 @@ Three things live here because they are the same subject: what a page turn becom
 supplies a frame around its pages, what the address bar hands the backend (`path` + `query`), and
 which names the host raises rather than the wire — `connect`, `location`, `disconnect`.
 
-An app with no shell is the single-page shape and is asserted in `test_app.py` (a page replaces the
-layout root); nothing here changes that.
+An app that declares no shell is the same road with the framework's own frame around the page — a
+single full-screen `routes` — and is asserted here too: there is one shape, not two.
 """
 
 from __future__ import annotations
@@ -114,15 +114,22 @@ class TestShell(unittest.TestCase):
         with self.assertRaises(ValueError):
             into_routes([wire.set("status", b.text("就绪"))])
 
-    def test_without_a_shell_the_page_still_replaces_the_root(self):
+    def test_an_app_without_a_shell_draws_into_the_default_one(self):
+        """No shell declared is a smaller frame, not a second road: the page still lands in `routes`."""
         table = Routes()
         table.add("/", page_for)
         app = App(routes=table)
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in ops(device)], ["create"])
+        first = ops(device)
+        self.assertEqual([op["action"] for op in first], ["create", "set"])
+        default = first[0]["data"]
+        self.assertEqual(default["id"], "shell")
+        self.assertEqual([child["type"] for child in default["children"]], ["placeholder"])
+        self.assertEqual(default["children"][0]["id"], ROUTES_SLOT)
+        self.assertEqual(first[1]["slot"], ROUTES_SLOT)
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in ops(device)], ["create"])  # a whole page, every turn
+        self.assertEqual([op["action"] for op in ops(device)], ["set"])  # the frame stays
 
     def test_a_resync_re_creates_the_shell_the_stale_client_may_have_missed(self):
         app = app_with_shell("/")

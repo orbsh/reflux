@@ -25,10 +25,11 @@ boundary refuses them and `dests.announce` is how they are raised.
 
 A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
 default the route table answers; an app with a single page sets `app.page` instead of declaring
-routes. An app with a **shell** — a frame around every page, its navigation and its header — sets
-`App(shell=…)` and puts a reader of the `routes` slot where pages belong: the first frame then
-carries `create(shell)` plus the page in that slot, and a later page turn replaces only the slot.
-No shell, no routes slot: the page replaces the layout root (the single-page-app case).
+routes. Every app has a **shell** — the frame around every page, its navigation and its header — and
+declares its own with `App(shell=…)`: a reader of the `routes` slot where pages belong. The first
+frame then carries `create(shell)` plus the page in that slot, and a later page turn replaces only
+the slot. An app that declares none gets the default one, a single full-screen `routes`: one way for
+a page to reach the client, not a second shape for the app with nothing around its page.
 
 Frames are built by `wire` — accrete's eight actions, the renderer's own vocabulary. There is no
 second dialect and no translation layer: everything that leaves here is checked at `Device.send`
@@ -102,6 +103,21 @@ def not_found(path: str) -> Accrete:
     )
 
 
+def default_shell(ctx: Context) -> Accrete:
+    """The frame an app gets when it declares none: one full-screen `routes` slot.
+
+    Declaring a shell is how an app keeps its navigation out of every page turn; not declaring one
+    is not a different protocol, only a different frame. So the default is the smallest one that
+    still holds a page — a `case` that owns the viewport height and one reader of `routes` — and a
+    page reaches the client the same way in both apps: `set("routes", …)`.
+    """
+    return b.case(
+        b.placeholder(source=ctx.slot(ROUTES_SLOT), id=ROUTES_SLOT),
+        grid={"grid-template-rows": "1fr", "height": "100vh"},
+        id="shell",
+    )
+
+
 def query_of(raw: Any) -> dict[str, list[str]]:
     """A query string as a mapping of its repeated values, or {} when there is nothing to read.
 
@@ -132,11 +148,11 @@ def location_of(frame: Any) -> tuple[str, dict[str, list[str]]]:
 def into_routes(operations: list[dict]) -> list[dict]:
     """A page's own operations, with its structure written into the `routes` slot instead of the root.
 
-    A page in shell mode owes a structure — a node (which `Device.draw` wrapped in `create`) or a
-    `create` of its own. That single operation becomes `set(routes, …)`; everything else (the slot
-    seeds a view sends along) passes through in order, so "structure first, data after" still reads
-    the same way in the frame. No structure at all is a producer defect and says so here: the slot
-    would keep the previous page and nothing would look wrong until someone clicked.
+    A page owes a structure — a node (which `Device.draw` wrapped in `create`) or a `create` of its
+    own. That single operation becomes `set(routes, …)`; everything else (the slot seeds a view
+    sends along) passes through in order, so "structure first, data after" still reads the same way
+    in the frame. No structure at all is a producer defect and says so here: the slot would keep
+    the previous page and nothing would look wrong until someone clicked.
     """
     out: list[dict] = []
     landed = False
@@ -218,9 +234,9 @@ class Device:
     def draw(self) -> None:
         """Draw the page this device stands on — one frame, the app's route for its own path.
 
-        With a shell the frame is `create(shell)` (once per connection) followed by the page written
-        into the `routes` slot, so a page turn after that replaces one slot and leaves the frame
-        around it alone. Without one the page replaces the layout root: the single-page-app shape.
+        The frame is `create(shell)` (once per connection) followed by the page written into the
+        `routes` slot, so a page turn after that replaces one slot and leaves the frame around it
+        alone. An app that declared no shell draws into the default one: a full-screen `routes`.
 
         An app that declares neither a page hook nor any route draws nothing at all — that is the
         gates that drive the plane themselves; the page keeps whatever it has. A device with no app
@@ -419,7 +435,7 @@ class App:
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
         outbox: int = 256,
-        shell: Callable[[Device], Any] | None = None,
+        shell: Callable[[Context], Any] | None = None,
     ) -> None:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
@@ -430,10 +446,10 @@ class App:
         # page(device, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
         self.page: Callable[[Device, str], Any] | None = None
-        # shell(device) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
-        # Set it and a page turn replaces that one slot; leave it None and the page replaces the
-        # layout root — the single-page-app shape.
-        self.shell: Callable[[Device], Any] | None = shell
+        # shell(ctx) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
+        # A page turn replaces that one slot; an app that declares none gets `default_shell`, so
+        # there is no second shape for the app with nothing around its page.
+        self.shell: Callable[[Context], Any] = shell if shell is not None else default_shell
         # Live devices, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a device that is not its own.
         self.devices: dict[Any, Device] = {}
@@ -554,9 +570,6 @@ class App:
         if drawn is None:  # nothing drew for this address: the app's own 404, not a blank page
             drawn = not_found(device.path)
         operations = drawn if isinstance(drawn, list) else [wire.create(drawn)]
-        if self.shell is None:
-            device.emit(*operations)
-            return
         frame: list[dict] = []
         if not device.shell_drawn:
             device.shell_drawn = True

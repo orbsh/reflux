@@ -28,9 +28,10 @@ MAX_OPS_PER_FRAME = 1024
 # names come in through `Registry.builtin`.
 RESERVED_PREFIX = "reflux:"
 
-# The data slot a routed page is written into when the app supplies a shell (the frame around its
-# pages). The shell is the app's own view, so it declares the reader; the framework only writes the
-# name. Without a shell there is no routes slot and the page replaces the layout root.
+# The data slot a routed page is written into: the reader is the shell, the frame around every page.
+# That frame is the app's own view when it declares one, otherwise the framework's default — a single
+# full-screen `routes` — so either way the page lands in this slot and the framework only writes the
+# name.
 ROUTES_SLOT = "routes"
 
 # Events the **host** raises: `connect` when the client's hello lands, `location` when it navigates

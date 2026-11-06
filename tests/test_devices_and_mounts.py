@@ -182,7 +182,7 @@ class TestTheTable(unittest.TestCase):
         with Served(app) as served:
             with Socket(served.port, path="/socket") as ws:
                 hello(app, ws)
-                self.assertEqual(len(ws.recv()), 1)  # one frame: the page
+                self.assertEqual(len(ws.recv()), 2)  # the default frame, then the page in its slot
             with self.assertRaises(ConnectionError):
                 Socket(served.port, path="/ws")  # no longer an upgrade
 
@@ -213,8 +213,11 @@ class TestGo(unittest.TestCase):
         self.assertEqual(device.path, "/chat")
         self.assertEqual(device.query, {"tag": ["a"]})
         self.assertEqual(
-            [op.get("action") for op in frame], ["create"], "a page without a shell replaces the root"
+            [op.get("action") for op in frame],
+            ["set"],
+            "a page turn writes the routes slot — the frame around it stays",
         )
+        self.assertEqual(frame[0]["slot"], "routes")
         self.assertIn("page/chat", json.dumps(frame, ensure_ascii=False))
 
     def test_a_bare_path_clears_the_query_of_the_last_one(self):
@@ -274,7 +277,7 @@ class TestDirectoryMounts(unittest.TestCase):
         with Served(app) as served:
             with Socket(served.port) as ws:
                 hello(app, ws)
-                self.assertEqual(len(ws.recv()), 1)
+                self.assertEqual(len(ws.recv()), 2)  # the default frame and the page, not the file route
             self.assertEqual(served.get("/assets/mod/module.js")[0], 200)
 
     def test_mounting_a_directory_twice_is_loud(self):

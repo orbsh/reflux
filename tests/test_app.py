@@ -11,6 +11,7 @@ from __future__ import annotations
 import unittest
 
 import reflux.demo_app as demo
+from reflux import ROUTES_SLOT
 from reflux.app import App, not_found
 from reflux.routes import Routes
 from reflux.sdk import builders as b
@@ -27,6 +28,16 @@ def page_for(ctx, match):
 def drawn(device: FakeDevice) -> list[dict]:
     """The operations of the last frame the app sent."""
     return device.frames[-1]
+
+
+def page_op(device: FakeDevice) -> dict:
+    """The page in the last frame: the `set` on `routes` (the frame around it is not resent)."""
+    return next(op for op in drawn(device) if op["action"] == "set" and op["slot"] == ROUTES_SLOT)
+
+
+def page_of(device: FakeDevice) -> dict:
+    """The page's node as the client got it — the slot the shell declared, not the root."""
+    return page_op(device)["data"]
 
 
 def shown(node: dict) -> str:
@@ -50,7 +61,9 @@ class TestPageResolution(unittest.TestCase):
         self.assertEqual(device.path, "/a")
         self.assertEqual(len(device.frames), 1)
         self.assertTrue(isinstance(device.frames[0], list), "一帧就是动作列表")
-        root = drawn(device)[0]["data"]
+        # The default frame and the page in it, one frame: no shell declared is not a second road.
+        self.assertEqual([op["action"] for op in drawn(device)], ["create", "set"])
+        root = page_of(device)
         self.assertEqual(root["type"], "case")  # a page: the two markers, then the content
         self.assertEqual([kid.get("id") for kid in root["children"][:2]], ["reflux:path", "reflux:title"])
         self.assertEqual(shown(root), "page:/a")
@@ -62,13 +75,13 @@ class TestPageResolution(unittest.TestCase):
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/b"}})
         self.assertEqual(device.path, "/b")
         self.assertEqual(len(device.frames), 2)
-        self.assertEqual(shown(drawn(device)[0]["data"]), "page:/b")
+        self.assertEqual(shown(page_of(device)), "page:/b")
 
     def test_an_unknown_path_without_a_fallback_draws_the_builtin_404(self) -> None:
         app = self.app("/a")
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/nope"}})
-        children = drawn(device)[0]["data"]["children"]
+        children = page_of(device)["children"]
         self.assertEqual(shown(children[0]), "404")
         self.assertIn("/nope", shown(children[1]))
         self.assertEqual(device.path, "/nope")  # where the client stands, not a redirect
@@ -77,7 +90,7 @@ class TestPageResolution(unittest.TestCase):
         app = self.app("/a", "/{rest:path}")
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/nope/deep"}})
-        self.assertEqual(shown(drawn(device)[0]["data"]), "page:/nope/deep")
+        self.assertEqual(shown(page_of(device)), "page:/nope/deep")
 
     def test_the_builtin_404_is_a_valid_structure(self) -> None:
         node = dump(not_found("/x"))
@@ -96,8 +109,8 @@ class TestPageResolution(unittest.TestCase):
         app.page = single
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/whatever"}})
-        op = drawn(device)[0]
-        self.assertEqual(op["action"], "create")
+        op = page_op(device)
+        self.assertEqual(op["slot"], ROUTES_SLOT)
         self.assertEqual(shown(op["data"]), "single:/whatever")
 
     def test_an_app_with_neither_page_nor_routes_draws_nothing(self) -> None:
@@ -139,18 +152,18 @@ class TestTheDemoApp(unittest.TestCase):
         self.assertEqual({op["slot"] for frame in seeds for op in frame}, {"rows"})
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
-        """A slot outlives a `create`, so the seed is once per device — not once per page turn."""
+        """A slot outlives a page turn, so the seed is once per device — not once per turn."""
         app = demo.make_app()
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}})
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})
-        self.assertEqual([op["action"] for op in drawn(device)], ["create"])
+        self.assertEqual([op["action"] for op in drawn(device)], ["set"])
 
     def test_the_demo_page_carries_the_two_markers(self) -> None:
         app = demo.make_app()
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/about"}})
-        root = drawn(device)[0]["data"]
+        root = page_of(device)
         markers = {
             child["id"]: child["children"][0]["bind"]["value"]["default"]
             for child in root["children"]
@@ -162,7 +175,8 @@ class TestTheDemoApp(unittest.TestCase):
         app = demo.make_app()
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/about"}})
-        self.assertEqual([op["action"] for op in drawn(device)], ["create"])
+        # This page seeds no slots, so the turn is the frame (a first visit draws it too) and the page.
+        self.assertEqual([op["action"] for op in drawn(device)], ["create", "set"])
 
     def test_a_navigation_submit_answers_with_the_new_page_and_path(self) -> None:
         app = demo.make_app()
@@ -172,7 +186,7 @@ class TestTheDemoApp(unittest.TestCase):
             device, {"dest": "go.about", "id": "nav-go.about", "data": {}}
         )
         self.assertEqual(device.path, "/about")
-        root = drawn(device)[0]["data"]
+        root = page_of(device)
         path_marker = next(child for child in root["children"] if child.get("id") == "reflux:path")
         self.assertEqual(path_marker["children"][0]["bind"]["value"]["default"], "/about")
 
