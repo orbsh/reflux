@@ -1060,3 +1060,11 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 文档：DESIGN 的组件词表（28 项、22 个角色 class、两个新面的说明）、HANDOFF 与 PLAN 的夹具计数。
 
 **验证**：275 例 OK；`gen_sdk --check` 同步；t3 **19/19**（22 个角色 class、画布 520×260）、t4 **10/10**（drop 帧与按 `accept` 的拒收）。
+
+**2026-11-18（续二）：参考应用把拖拽用起来——一行可以拖进归档落点。**
+
+- 参考应用的列表多了两条腿：每行的文本包一层 `grab`（`kind="row"`，货物 `payload={"id": "row-N"}`），rack 下面加一个 `dock`（`accept=["row"]`，事件名 `row.archive`）和一行回显槽。落到落点上，dock 上行 `{kind, payload}`，`on_archive` 按 payload 里的 id 解决那一行、从 `rows` 槽里 `remove` 掉、写一句「已归档：…」。
+- 形状上的硬约束（这次撞出来的）：**一棵树里一个 id**，而槽的 `remove` 寻址的是槽顶那个节点，✕ 按钮的上行又带着自己表单的 id。两条腿都指同一行，所以 `form` 仍是行的顶节点（`id=row-N`），`grab` 放在它里面且**没有 id**——货物的身份走 `payload`。先写成 grab 在顶上、form 在里（两个 row-1）时，wire 的闭合检查当场拒收；把 grab 放外面、form 不带 id 时，`remove("row-N")` 找不到顶节点，行留在页面上（实测 2→2）。
+- 事件表多一个名字（`row.archive`），两处断言跟着从 11 条改成 12 条。
+
+**验证**：275 例 OK；真浏览器冒烟（临时脚本，不入仓）：两行起始、拖第一行进 dock、行数 2 → 1、页面出现「已归档：第一行」、零 console 错误；t3 19/19、t4 10/10、t9、chat、dashboard 全过。
