@@ -92,6 +92,24 @@ def type_into(cdp: Cdp, index: int, text: str, *, enter: bool = True) -> None:
         press_enter(cdp)
 
 
+# A drag is the browser's gesture: `dragstart` on the source writes the cargo into the renderer's
+# page-level session, and the drop on the landing point is what emits (ADR 0019). Synthetic events
+# carry a real DataTransfer — `dragstart` writes a label into it, and Firefox refuses a drag without.
+DRAG_FIRST_ROW = """(() => {
+  const grab = document.querySelector('.rack .grab');
+  const dock = document.querySelector('.dock');
+  if (!grab || !dock) return 'missing';
+  const dt = new DataTransfer();
+  const fire = (el, type) => el.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: dt}));
+  fire(grab, 'dragstart');
+  fire(dock, 'dragenter');
+  fire(dock, 'dragover');
+  fire(dock, 'drop');
+  fire(grab, 'dragend');
+  return 'ok';
+})()"""
+
+
 def click_label(cdp: Cdp, label: str, *, nth: int = 0) -> None:
     """Click the button that says `label` (a button's label is its own value) — no index guessing."""
     cdp.click_js(
@@ -139,7 +157,21 @@ def main() -> int:
             )
         )
 
-        # 4 — a gated landing point, clicked by a visitor: the framework opens the login surface
+        # 4 — the other way out of a row: drag it onto the dock. The gesture itself reports nothing;
+        #     the landing point uplinks `{kind, payload}` and the handler resolves the row's id.
+        before = len(frames(app, "row.archive"))
+        cdp.eval(DRAG_FIRST_ROW)
+        archived = wait_for(lambda: seen(cdp, "已归档") and rows(cdp) == 1)
+        checks.append(
+            (
+                "a row dragged onto the dock is archived by the landing point's frame",
+                bool(archived) and len(frames(app, "row.archive")) == before + 1,
+                f"rows={rows(cdp)} frames+{len(frames(app, 'row.archive')) - before} "
+                f"line={'已归档' in body(cdp)}",
+            )
+        )
+
+        # 5 — a gated landing point, clicked by a visitor: the framework opens the login surface
         #     instead of reaching the handler. The app never learns the attempt happened.
         click_label(cdp, "私密")
         refused = wait_for(lambda: seen(cdp, "演示登录") and "机密内容" not in body(cdp))
@@ -151,7 +183,7 @@ def main() -> int:
             )
         )
 
-        # 5 — the login form is the framework's VERB: every field arrives in the renderer's own
+        # 6 — the login form is the framework's VERB: every field arrives in the renderer's own
         #     shape and the answer is a token plus the signed-in line, drawn into the `auth` region.
         type_into(cdp, 1, "ada")
         type_into(cdp, 2, "pw")
@@ -165,14 +197,14 @@ def main() -> int:
             )
         )
 
-        # 6 — the same click now lands: the gate asked a declaration, and the declaration is satisfied.
+        # 7 — the same click now lands: the gate asked a declaration, and the declaration is satisfied.
         click_label(cdp, "私密")
         secret = wait_for(lambda: "机密内容" in body(cdp))
         checks.append(
             ("the same event lands once a user is bound", bool(secret), f"secret={'机密内容' in body(cdp)}")
         )
 
-        # 7 — a refresh is a NEW connection, and it is still the same person: that is the whole
+        # 8 — a refresh is a NEW connection, and it is still the same person: that is the whole
         #     reason the token exists. The browser keeps it; hello hands it back.
         before_reload = len(frames(app, "reflux:hello"))
         cdp.call("Page.navigate", url=base_url + "/")
@@ -189,7 +221,7 @@ def main() -> int:
             )
         )
 
-        # 8 — revoking is one row going away, and the browser hears it as an EMPTY marker.
+        # 9 — revoking is one row going away, and the browser hears it as an EMPTY marker.
         click_label(cdp, "退出")
         wait_for(lambda: "已登录 user-ada" not in body(cdp))
         click_label(cdp, "私密")
@@ -202,7 +234,7 @@ def main() -> int:
             )
         )
 
-        # 9 — navigation is a submit, and the address bar follows the marker (the mirror).
+        # 10 — navigation is a submit, and the address bar follows the marker (the mirror).
         before_nav = len(frames(app, "reflux:nav"))
         click_label(cdp, "关于")
         moved = wait_for(lambda: seen(cdp, "关于") and cdp.eval("location.pathname") == "/about")
@@ -214,7 +246,7 @@ def main() -> int:
             )
         )
 
-        # 10 — and back the other way, the same mechanism.
+        # 11 — and back the other way, the same mechanism.
         click_label(cdp, "回到演示")
         back_home = wait_for(lambda: seen(cdp, "演示") and cdp.eval("location.pathname") == "/")
         checks.append(
@@ -225,7 +257,7 @@ def main() -> int:
             )
         )
 
-        # 11 — the browser's own back is one `reflux:nav`, and the producer answers it.
+        # 12 — the browser's own back is one `reflux:nav`, and the producer answers it.
         before_back = len(frames(app, "reflux:nav"))
         cdp.eval("history.back()")
         navs = wait_for(lambda: frames(app, "reflux:nav")[before_nav:] or None)
@@ -241,7 +273,7 @@ def main() -> int:
             )
         )
 
-        # 12 — nothing matched is the framework's own page, and the bar stays where the client is.
+        # 13 — nothing matched is the framework's own page, and the bar stays where the client is.
         cdp.call("Page.navigate", url=base_url + "/nope")
         not_found = wait_for(lambda: seen(cdp, "404") and seen(cdp, "/nope"))
         checks.append(
