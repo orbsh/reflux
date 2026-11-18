@@ -6,7 +6,10 @@ Four things, one per shape a page needs to be an application:
 
 - **an echo** — an `input` uplinks its buffer on Enter, a `text` reads the slot the handler writes;
 - **a list** — rows live in the `rows` slot and a `rack` shows it; each row's remove button carries
-  the row's own identity up, and `remove` takes it back by identity;
+  the row's own identity up, and `remove` takes it back by identity. A row is also a `grab`: drag it
+  onto the `dock` below the rack and the landing point uplinks `{kind, payload}` — the payload is
+  the row's id, so the archive handler resolves it the way the drag never could (the gesture itself
+  reports nothing: only the landing point does);
 - **a form** — one submit carries every field it holds, in the shape the renderer itself produces —
   and it is the LOGIN form, because credentials are the framework's business: the destination is
   `reflux:login`, the app writes only `verify` and `view`, and no password is ever read by this
@@ -55,6 +58,7 @@ class DemoSlots(Protocol):
 
     echo: Slot  # what the input last carried
     rows: Slot  # the list the rack reads
+    archived: Slot  # what the last drop archived — a text slot, written by the dock's handler
     secret: Slot  # only a signed-in click writes it; every anonymous draw clears it
     # (the login form's answer is the framework's: it lands in the reserved `auth` region)
 
@@ -69,9 +73,21 @@ def nav_form(label: str, dest: Slot) -> Accrete:
 
 
 def row_node(row: dict, ctx: Context) -> Accrete:
-    """One row: its text, and the form whose submit carries the row's own id up."""
+    """One row: draggable cargo, and the form whose submit carries the row's own id up.
+
+    The two ways out of a row are different mechanisms on purpose: the button is an uplink on the
+    form's id, a drag is silent until a landing point says where it went (ADR 0019). The form stays
+    the row's top node — a slot's `remove` addresses the node it holds, and the ✕ frame carries the
+    same id — so the cargo's identity rides `payload`, and the grab itself has none. One id per tree
+    is the wire's rule; a second copy of `row-1` on the grab is refused before it leaves.
+    """
     # `remove` is a verb on a slot, so this name is written with the subscript.
-    return b.form(b.text(row["text"]), b.button("删"), dest=ctx.slot.row["remove"], id=row["id"])
+    return b.form(
+        b.grab(b.text(row["text"]), kind="row", payload={"id": row["id"]}),
+        b.button("删"),
+        dest=ctx.slot.row["remove"],
+        id=row["id"],
+    )
 
 
 class Demo:
@@ -118,6 +134,10 @@ class Demo:
             b.text(source=slots.echo, id="echo"),
             b.form(b.button("加一行"), dest=ctx.slot.row.add, id="add-row"),
             b.rack(source=slots.rows, id="rows"),
+            # The landing point names its event and what it accepts; `accept` is a closed set, so a
+            # grab of any other kind is refused without a frame.
+            b.dock(b.text("拖一行到这里归档"), accept=["row"], dest=ctx.slot("row.archive"), id="archive"),
+            b.text(source=slots.archived, id="archived"),
             # The credential form speaks the framework's verb: this app never sees the password,
             # and the answer (a token, a signed-in line) is drawn into the reserved `auth` region.
             b.form(
@@ -164,6 +184,16 @@ class Demo:
         row_id = frame.get("id")  # the row's form carried its identity up
         self.rows = [row for row in self.rows if row["id"] != row_id]
         slots_of(ctx).rows.remove(row_id)
+
+    def on_archive(self, ctx, frame) -> None:
+        """A drop: the landing point sends the cargo's `{kind, payload}`; the app resolves the id."""
+        row_id = ((frame.get("data") or {}).get("payload") or {}).get("id")
+        row = next((r for r in self.rows if r["id"] == row_id), None)
+        if row is None:
+            return
+        self.rows = [r for r in self.rows if r["id"] != row_id]
+        slots_of(ctx).rows.remove(row_id)
+        slots_of(ctx).archived.set(b.text(f"已归档：{row['text']}"))
 
     def on_secret(self, ctx, frame) -> None:
         """Only a signed-in click gets here: the gate answered the rest before this handler ran."""
@@ -225,6 +255,7 @@ def make_app() -> App:
     app.on(app.slot.name.change, demo.on_name)
     app.on(app.slot.row.add, demo.on_add)
     app.on(app.slot.row["remove"], demo.on_remove)  # `remove` is a verb: the name goes by subscript
+    app.on(app.slot("row.archive"), demo.on_archive)
     app.on(app.slot("vault.secret"), demo.on_secret, auth=True)
     for name in GO:
         app.on(app.slot(name), demo.on_go)

@@ -138,6 +138,7 @@ class TestTheDemoApp(unittest.TestCase):
                 "reflux:nav",
                 "reflux:signup",
                 "row.add",
+                "row.archive",
                 "row.remove",
                 "vault.secret",
             ],
