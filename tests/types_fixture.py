@@ -32,6 +32,33 @@ NODES: dict[str, dict] = {
     # other one, and it is what puts a reserved id on the DOM.
     "frame": {"type": "frame", "children": [text("frame")]},
     "canvas": {"type": "canvas", "url": "/module.js"},
+    # The native graph (ADR 0018/0029): its renderer is in the wasm, so there is no module host, no
+    # role class and no DOM id — the gate proves it by the canvas it mounts (nothing else in this
+    # tree can make one). Payload is the snapshot `{nodes, links}`; the node needs a real box or the
+    # drawing buffer is 0x0.
+    "forcegraph": {
+        "type": "forcegraph",
+        "attrs": {"height": "260px"},
+        "bind": {
+            "value": {
+                "kind": "default",
+                "default": {
+                    "nodes": [{"id": "a", "name": "a"}, {"id": "b", "name": "b"}],
+                    "links": [{"source": "a", "target": "b"}],
+                },
+            }
+        },
+    },
+    # The drag pair (ADR 0019): the source carries the cargo, the landing point owns the event name
+    # and what it accepts. A drop is one uplink frame on the dock's own id.
+    "grab": {"type": "grab", "id": "t3-grab", "kind": "note", "payload": {"n": 1}, "children": [text("grab")]},
+    "dock": {
+        "type": "dock",
+        "id": "t3-dock",
+        "attrs": {"accept": ["note"]},
+        "bind": {"value": {"kind": "dest", "dest": "gate.dock"}},
+        "children": [text("dock")],
+    },
     "float": {"type": "float", "children": [text("float")]},
     "layer": {"type": "layer", "children": [text("layer")]},
     "portal": {"type": "portal", "attrs": {"to": "#main"}, "children": [text("portal")]},

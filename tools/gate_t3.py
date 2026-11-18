@@ -40,6 +40,8 @@ PAGE = "/"
 # asserted by behaviour (see the docstring), so they are not here.
 ROLE: dict[str, str] = {
     "frame": ".frame",
+    "grab": ".grab",
+    "dock": ".dock",
     "float": ".float",
     "layer": ".layer",
     "popup": ".popup",
@@ -79,6 +81,10 @@ PROBE = """(() => {
     rack: all('.rack *').map((r) => r.innerText.trim()).filter(Boolean),
     pages: q('.pages') ? q('.pages').innerText.trim() : null,
     buttons: all('.button').length,
+    graph: (() => {
+      const c = q('canvas');
+      return c ? {w: c.width, h: c.height} : null;
+    })(),
     style: (() => {
       const cs = (sel, prop) => { const el = q(sel); return el ? getComputedStyle(el)[prop] : null; };
       return {
@@ -193,6 +199,17 @@ def main() -> int:
         )
         checks.append(("a portal mounts its children into the named target", "portal" in body, "portal" if "portal" in body else "missing"))
         checks.append(("a leaf paints its bound value", "text" in body, f"text={'text' in body}"))
+        # The graph is the one exposed type with no role class and no DOM id: its renderer is in the
+        # wasm, so the proof is the canvas it mounts — nothing else in this tree can make one — plus
+        # a drawing buffer that is not 0x0.
+        graph = seen.get("graph") or {}
+        checks.append(
+            (
+                "the native graph mounts a canvas with a real drawing buffer",
+                bool(graph) and graph.get("w", 0) > 0 and graph.get("h", 0) > 0,
+                f"canvas={graph}",
+            )
+        )
 
         checks.append(("image carries its src", seen.get("src") == "/static/logo.svg", f"src={seen.get('src')!r}"))
         checks.append(("path draws its d", seen.get("d") == "M0 0 L1 1", f"d={seen.get('d')!r}"))

@@ -29,7 +29,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
-from reflux import wire  # noqa: E402
+from reflux import Slot, wire  # noqa: E402
 from reflux.app import App  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
 
@@ -64,6 +64,11 @@ def tree() -> Any:
                 {"type": "button", "bind": {"value": {"kind": "submit"}}},
             ],
         },
+        # 3: the drag pair (ADR 0019) — the source carries the cargo, the landing point owns the
+        # event name and what it accepts. A second source carries a kind the dock refuses.
+        b.grab(b.text("cargo", id="cargo-text"), kind="note", payload={"n": 1}, id="cargo-1"),
+        b.dock(b.text("drop here"), accept=["note"], dest=Slot("gate.dock"), id="dock-1"),
+        b.grab(b.text("refused cargo", id="other-text"), kind="other", id="cargo-2"),
     )
 
 
@@ -86,6 +91,26 @@ def focus(cdp: Cdp, index: int) -> None:
     cdp.eval(f"document.querySelectorAll('input')[{index}].focus()")
 
 
+# A drag is the browser's gesture: `dragstart` on the source writes the cargo into the renderer's
+# page-level session, and the drop on the landing point is what emits. Synthetic DragEvents carry a
+# real DataTransfer, which is what `dragstart` writes a label into; the cargo itself never travels
+# through it (the session does).
+DRAG = """((sourceIndex) => {
+  const grabs = document.querySelectorAll('.grab');
+  const dock = document.querySelector('.dock');
+  const grab = grabs[sourceIndex];
+  if (!grab || !dock) return 'missing';
+  const dt = new DataTransfer();
+  const fire = (el, type) => el.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: dt}));
+  fire(grab, 'dragstart');
+  fire(dock, 'dragenter');
+  fire(dock, 'dragover');
+  fire(dock, 'drop');
+  fire(grab, 'dragend');
+  return 'ok';
+})"""
+
+
 def wait_for(predicate, timeout: float = 3.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -99,7 +124,7 @@ def main() -> int:
     app = App()
     checks: list[tuple[str, bool, str]] = []
 
-    for event in ("gate.name", "gate.anon", "gate.form"):
+    for event in ("gate.name", "gate.anon", "gate.form", "gate.dock"):
         app.on(event, lambda ctx, frame: SEEN.append(frame))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
@@ -207,6 +232,37 @@ def main() -> int:
             (
                 "the form's confirm resets after a submit",
                 len(SEEN) == before + 1,
+                f"frames +{len(SEEN) - before}",
+            )
+        )
+
+        # 8 — a drop uplinks on the landing point: the dock's event name, the dock's own id, and
+        # the cargo's {id, kind, payload} as data (one field name per thing, ADR 0019).
+        before = len(SEEN)
+        cdp.eval(f"{DRAG}(0)")
+        wait_for(lambda: len(SEEN) == before + 1)
+        drop = SEEN[-1] if len(SEEN) > before else {}
+        checks.append(
+            (
+                "a drop uplinks {event, id, data} from the landing point",
+                drop
+                == {
+                    "dest": "gate.dock",
+                    "id": "dock-1",
+                    "data": {"id": "cargo-1", "kind": "note", "payload": {"n": 1}},
+                },
+                json.dumps(drop, ensure_ascii=False),
+            )
+        )
+
+        # 9 — a landing point that names what it accepts refuses the rest: the wrong kind is silent.
+        before = len(SEEN)
+        cdp.eval(f"{DRAG}(1)")
+        time.sleep(0.4)
+        checks.append(
+            (
+                "a dock refuses cargo its accept list does not name",
+                len(SEEN) == before,
                 f"frames +{len(SEEN) - before}",
             )
         )

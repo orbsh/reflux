@@ -7,7 +7,7 @@ from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
 
-__all__ = ["button", "canvas", "float", "fold", "form", "frame", "group", "image", "input", "layer", "pages", "path", "popup", "portal", "rack", "select", "svg", "table", "tbody", "td", "text", "textarea", "th", "thead", "tr"]
+__all__ = ["button", "canvas", "dock", "float", "fold", "forcegraph", "form", "frame", "grab", "group", "image", "input", "layer", "pages", "path", "popup", "portal", "rack", "select", "svg", "table", "tbody", "td", "text", "textarea", "th", "thead", "tr"]
 
 def frame(
     *children: Accrete,
@@ -37,6 +37,21 @@ def canvas(
     attrs = drop_none(height=height, width=width)
     bind = drop_none(value=bind_value(default=value, source=source))
     return parse(drop_none(type='canvas', attrs=attrs, bind=bind, id=id, options=options, url=url), Canvas)
+
+
+def forcegraph(
+    value: Any = None,
+    *,
+    height: str | None = None,
+    width: str | None = None,
+    style: ForceGraphStyle = None,
+    source: Any = None,
+    id: str | None = None,
+) -> ForceGraph:
+    """Build a `forcegraph` node (the wire type `forcegraph`)."""
+    attrs = drop_none(height=height, width=width)
+    bind = drop_none(value=bind_value(default=value, source=source))
+    return parse(drop_none(type='forcegraph', attrs=attrs, bind=bind, id=id, style=style), ForceGraph)
 
 
 def float(
@@ -327,3 +342,30 @@ def textarea(
     attrs = drop_none(horizontal=horizontal)
     bind = drop_none(value=bind_value(default=value, source=source, dest=dest), placeholder=bind_entry('placeholder', default=placeholder))
     return parse(drop_none(type='textarea', attrs=attrs, bind=bind, id=id), TextArea)
+
+
+def grab(
+    *children: Accrete,
+    kind: str | None = None,
+    payload: Any = None,
+    id: str | None = None,
+) -> Grab:
+    """Build a `grab` node (the wire type `grab`)."""
+    attrs = None
+    bind = None
+    return parse(drop_none(type='grab', attrs=attrs, bind=bind, id=id, children=list(children) or None, kind=kind, payload=payload), Grab)
+
+
+def dock(
+    *children: Accrete,
+    accept: list[str] | None = None,
+    expand: DockExpand = None,
+    dest: Any = None,
+    local: Any = None,
+    path: str | None = None,
+    id: str | None = None,
+) -> Dock:
+    """Build a `dock` node (the wire type `dock`)."""
+    attrs = drop_none(accept=accept, expand=expand)
+    bind = drop_none(value=bind_value(dest=dest, local=local, path=path))
+    return parse(drop_none(type='dock', attrs=attrs, bind=bind, id=id, children=list(children) or None), Dock)

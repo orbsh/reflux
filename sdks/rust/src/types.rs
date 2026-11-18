@@ -190,6 +190,46 @@ pub fn canvas(value: Option<&str>, height: Option<&str>, width: Option<&str>, op
     Value::Object(node)
 }
 
+/// Build a `forcegraph` node (the wire type `forcegraph`).
+pub fn forcegraph(value: Option<&str>, height: Option<&str>, width: Option<&str>, style: Option<Value>, source: Option<&str>, id: Option<&str>) -> Value {
+    let mut attrs = Map::new();
+    if let Some(v) = height {
+        put(&mut attrs, "height", s(v));
+    }
+    if let Some(v) = width {
+        put(&mut attrs, "width", s(v));
+    }
+    let mut bind = Map::new();
+    {
+        let given = [value.is_some(), source.is_some()].into_iter().filter(|v| *v).count();
+        assert!(given <= 1, "forcegraph: bind[value] takes one 落点 at a time, got {}", given);
+    }
+    if let Some(v) = value {
+        let mut fields: Vec<(&str, Value)> = vec![("default", s(v))];
+        fields.push(("kind", s("default")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind"]));
+    } else if let Some(v) = source {
+        let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
+        fields.push(("kind", s("source")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "source"]));
+    }
+    let mut node = Map::new();
+    if !attrs.is_empty() {
+        put(&mut node, "attrs", Value::Object(attrs));
+    }
+    if !bind.is_empty() {
+        put(&mut node, "bind", Value::Object(bind));
+    }
+    if let Some(v) = id {
+        put(&mut node, "id", s(v));
+    }
+    if let Some(v) = style {
+        put(&mut node, "style", v.clone());
+    }
+    put(&mut node, "type", s("forcegraph"));
+    Value::Object(node)
+}
+
 /// Build a `float` node (the wire type `float`).
 pub fn float(children: &[Value], left: Option<&str>, right: Option<&str>, top: Option<&str>, bottom: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
@@ -828,5 +868,70 @@ pub fn textarea(horizontal: Option<bool>, value: Option<&str>, source: Option<&s
         put(&mut node, "id", s(v));
     }
     put(&mut node, "type", s("textarea"));
+    Value::Object(node)
+}
+
+/// Build a `grab` node (the wire type `grab`).
+pub fn grab(children: &[Value], kind: Option<&str>, payload: Option<Value>, id: Option<&str>) -> Value {
+    let mut node = Map::new();
+    if !children.is_empty() {
+        put(&mut node, "children", array(children));
+    }
+    if let Some(v) = id {
+        put(&mut node, "id", s(v));
+    }
+    if let Some(v) = kind {
+        put(&mut node, "kind", s(v));
+    }
+    if let Some(v) = payload {
+        put(&mut node, "payload", v.clone());
+    }
+    put(&mut node, "type", s("grab"));
+    Value::Object(node)
+}
+
+/// Build a `dock` node (the wire type `dock`).
+pub fn dock(children: &[Value], accept: Option<Value>, expand: Option<Value>, dest: Option<&str>, local: Option<&str>, path: Option<&str>, id: Option<&str>) -> Value {
+    let mut attrs = Map::new();
+    if let Some(v) = accept {
+        put(&mut attrs, "accept", v.clone());
+    }
+    if let Some(v) = expand {
+        put(&mut attrs, "expand", v.clone());
+    }
+    let mut bind = Map::new();
+    {
+        let given = [dest.is_some(), local.is_some()].into_iter().filter(|v| *v).count();
+        assert!(given <= 1, "dock: bind[value] takes one 落点 at a time, got {}", given);
+    }
+    if path.is_some() {
+        assert!(local.is_some(), "dock: path needs a local 落点 to ride on");
+    }
+    if let Some(v) = dest {
+        let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
+        fields.push(("kind", s("dest")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "dest", "kind"]));
+    } else if let Some(v) = local {
+        let mut fields: Vec<(&str, Value)> = vec![("slot", s(v))];
+        if let Some(p) = path {
+            fields.push(("path", s(p)));
+        }
+        fields.push(("kind", s("local")));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "name", "path", "report", "slot"]));
+    }
+    let mut node = Map::new();
+    if !attrs.is_empty() {
+        put(&mut node, "attrs", Value::Object(attrs));
+    }
+    if !bind.is_empty() {
+        put(&mut node, "bind", Value::Object(bind));
+    }
+    if !children.is_empty() {
+        put(&mut node, "children", array(children));
+    }
+    if let Some(v) = id {
+        put(&mut node, "id", s(v));
+    }
+    put(&mut node, "type", s("dock"));
     Value::Object(node)
 }
