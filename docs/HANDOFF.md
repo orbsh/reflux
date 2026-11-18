@@ -43,7 +43,7 @@ python3 tools/gate_t4.py                         # 8 条：输入/表单上行�
 python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历史 / 后退 / 深链 / 无标记
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
-python3 tools/gate_t9.py                         # 10 条：参考应用（回声／列表／表单／两页导航／404）
+python3 tools/gate_t9.py                         # 15 条：参考应用（回声／列表增删／拖拽归档／登录与 token／两页导航／404）
 python3 tools/gate_t10.py                        # 8 条：Rust SDK 的七帧与 Python 逐字节相等（要 cargo）
 python3 tools/gate_chat.py                       # 12 条：示例应用的后端（9 条真 socket + 3 条真浏览器）
 python3 -m examples.chat.app --port 8100  # 手工起示例应用（AI 对话）
@@ -139,7 +139,7 @@ reflux/sdk/_parse.py           手写：parse／dump 边界（dump 补 by_alias�
 reflux/sdk/markers.py          手写：两个保留 id 与 page()（`reflux:path`／`reflux:title`），不进词表
 reflux/app.py                  根挂载 + /static/ + /ws + 注册表 + 一页钩子；draw_page 走 wire
 reflux/server.py               伺服：挂载表（前缀 → 目录）、无缓存、深链交 index.html、/ws 升级
-reflux/demo_app.py             参考应用：回声／列表增删／表单一次提交／两条路由（T9 的种子）
+reflux/demo_app.py             参考应用：回声／列表增删／拖拽归档／表单一次提交／两条路由（T9 的种子）
 reflux/demo.py                 只伺服 www/，不声明页面
 examples/chat/app.py           示例应用：一页对话 + 流式 worker + 单飞/停止/应用层两道门
 examples/chat/model.py         模型缝：Scripted（离线确定性）／OpenAI（SSE，未对真端点验证）
