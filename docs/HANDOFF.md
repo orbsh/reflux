@@ -161,7 +161,7 @@ tools/gen_rust.py              Rust emitter：词表 → sdks/rust/src/types.rs
 tools/gate_t10.py              T10 的门：七帧字节对拍（要 cargo；首次 build 需 crates.io）
 sdks/rust/                     第二语言的 SDK：生成的 src/types.rs + 手写的 src/{wire,markers}.rs 与 src/bin/frames.rs
 tools/gate_t0.py … gate_t10.py   十道门（t2/t3/t4/t6/t9/t10 用浏览器或 cargo，t7 真浏览器 + 离线，t8 页面侧，ingest 真 socket）
-tests/types_fixture.py         25 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
+tests/types_fixture.py         28 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
 tests/test_cli_events.py       `reflux uplinks` 的表、目标解析的四种拒绝、以及「页面能发的意图都有处理器」
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交

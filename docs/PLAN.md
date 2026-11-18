@@ -52,10 +52,10 @@ reflux/wire.py                    出帧层：accrete 的八个 action——一�
 reflux/ingest.py                  入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
 reflux/sdk/closed.py              闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
 tools/gate_ingest.py              入站门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
-tools/gate_t3.py                  T3 门：词表整树（20 个角色 class + 行为断言 + 令牌 computed style）
+tools/gate_t3.py                  T3 门：词表整树（22 个角色 class + 行为断言 + 令牌 computed style）
 tools/gate_t4.py                  T4 门：输入/表单上行、id 认领、无 payload 通路（真按键、真点击）
 tools/gate_t8.py                  T8 门：页面侧三条坏帧后果（帧级两条归 gate_ingest）
-tests/types_fixture.py            25 个暴露类型各一个最小合法节点（T3′ 与离线测试共用的唯一一份）
+tests/types_fixture.py            28 个暴露类型各一个最小合法节点（T3′ 与离线测试共用的唯一一份）
 tests/test_types_drawable.py      词表完整性：夹具 == profile 暴露集，每个节点过闭集与取值域
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
@@ -1050,3 +1050,13 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 文档：DESIGN 的组件词表（29 个根变体、应用面 25 项、令牌表、外框样例）、README 的 chart 片段与 275 例、HANDOFF 的标记规则／没做的清单／七帧／25 个夹具类型、`schema/README.md` 的 sha 与计数。
 
 **验证**：`python3 -m unittest discover -s tests -t .` → **275 例 OK**；`gen_sdk --check` 同步；`sync_schema` in sync；门全过（t0 7/7、t2 12/12、t3 18/18、t4 8/8、t6 8/8、t7 4/4、t8 5/5、t9 14/14、t10 8/8、ingest 12/12、chat 12/12、dashboard 18/18）。
+
+**2026-11-18（续，「继续推进」）：三个新类型进应用面——关系图与拖拽对。**
+
+- profile：`forcegraph`（positional `value`，`bind.value` 收 `default`／`source`）、`grab`（children）、`dock`（children，`bind.value` 收 `dest`／`local`）从 `expose: false` 转正，应用面 25 → 28。生成器随之给出三个构造器：`forcegraph(value, style=, width=, height=, source=, id=)`、`grab(*children, kind=, payload=, id=)`、`dock(*children, accept=, expand=, dest=, local=, path=, id=)`。
+- 夹具：三个最小合法节点。`forcegraph` 的载荷是 `{nodes, links}` 快照，只给 `height: 260px`——`class` 在它身上不合法（profile 只在声明过变体的类型上放 `class`），所以 gate 不能按角色 class 找它；`grab` 带 `kind`／`payload`，`dock` 写 `accept` 与 `dest`。
+- T3：角色表加 `.grab`／`.dock`（22 个），图形另立一条——页面上出现一个非零尺寸的画布（实测 520×260），这棵树上没有别的东西能产出画布。
+- T4：两条新的交互断言。合成的 DragEvent 序列（`dragstart` → `dragenter`／`dragover`／`drop`）之后，落点上行 `{dest: "gate.dock", id: "dock-1", data: {id, kind, payload}}`；`accept` 没写到的 kind 拖到同一个落点静默（+0 帧）。
+- 文档：DESIGN 的组件词表（28 项、22 个角色 class、两个新面的说明）、HANDOFF 与 PLAN 的夹具计数。
+
+**验证**：275 例 OK；`gen_sdk --check` 同步；t3 **19/19**（22 个角色 class、画布 520×260）、t4 **10/10**（drop 帧与按 `accept` 的拒收）。
