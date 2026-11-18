@@ -10,7 +10,7 @@
 - **封闭性与跨字段语义归 reflux**（生成的 SDK + 服务端入站校验 + 门）。accrete 刻意不拒未知字段（旧帧兼容），静默丢弃是那边的既定行为，不去改它——代价是绕过 SDK 手写 JSON 的生产者没有封闭性，这条写明。
 - **帧定义只有一套**：下行是 fluxen 的 `Content` 数组（一帧就是动作列表，没有信封），上行是 `Outflow`。`reflux:hello` 与 `reflux:nav` 都走上行的 `Outflow`（它的 `data` 是自由的），回答是一次动作列表——渲染器那条 socket 只解数组，所以「第二类下行帧」不是一个字段的事（要框架自己的下行通道就是另一条腿，今天不需要）。2026-10-29 前的 `Message{ev, sender, content}` 已归宿主，见文末那条。
 - 不作判据（已裁决，不再论证）：资产体积与跨边界开销；「JS 门槛低、便于外部参与」——实测不成立。
-- **词表用 accrete 的既有词表，不往外长**（2026-10-17）：新类型与枚举属性都不加进 accrete；profile 是 reflux 侧一份可读数据——选哪些类型进应用面、哪个属性值是默认、变体落成哪些 class 令牌。现有 21 项与那 30 个根变体不是包含关系（同名 8 项），那 13 项逐条落法在 `DESIGN.md` 的「组件词表」。
+- **词表用 accrete 的既有词表，不往外长**（2026-10-17）：新类型与枚举属性都不加进 accrete；profile 是 reflux 侧一份可读数据——选哪些类型进应用面、哪个属性值是默认、变体落成哪些 class 令牌。应用面 25 项与那 29 个根变体不是包含关系（同名 8 项），退场前那 13 项的逐条落法在 `DESIGN.md` 的「组件词表」。
 - **操作集取 accrete 的八个，逐字，四个平面各有各的寻址**（2026-10-17）：`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`，不留翻译层；旧四个与它们的转换、以及代价（按 id 锚定的插入没了、结构数组里插一格要重写那一段、`title` 没有线上落点）写在 `DESIGN.md` 的「操作」。`payload`（声明带哪几件本地态）随之退场——送什么由组件自己定。
 - **导航：link 退场，URL 与标题归客户端 runtime**（2026-10-17）：accrete 没有带 URL 的类型，也没有 click 发射面（能上行的只有 input／textarea／select 与 form 的 submit）；「点一下就做事」只剩 canvas 的模块通道。URL 与标题由 runtime 从树里的两个保留 id（`reflux:path`／`reflux:title`）镜像——代价是地址栏与标题成了生产者声明的投影，漏写就停在旧值（进失败模式表，门对着它断言）。
 - 迁移的缝已清零：词表 profile、SDK 生成、操作集与帧归属、页内导航都已裁完（见上两条与下表）；M1 可开。
@@ -52,10 +52,10 @@ reflux/wire.py                    出帧层：accrete 的八个 action——一�
 reflux/ingest.py                  入站校验：Session.send 的出帧门 + App.handle 的入站门，整帧拒收＋计数
 reflux/sdk/closed.py              闭集：从生成的模型算允许的键（取 alias），减 profile 的 hidden_attrs
 tools/gate_ingest.py              入站门：真 socket、门自己当生产者，两个方向各一组拒收（无 chromium）
-tools/gate_t3.py                  T3 门：词表整树（21 个角色 class + 行为断言 + 令牌 computed style）
+tools/gate_t3.py                  T3 门：词表整树（20 个角色 class + 行为断言 + 令牌 computed style）
 tools/gate_t4.py                  T4 门：输入/表单上行、id 认领、无 payload 通路（真按键、真点击）
 tools/gate_t8.py                  T8 门：页面侧三条坏帧后果（帧级两条归 gate_ingest）
-tests/types_fixture.py            29 个暴露类型各一个最小合法节点（T3′ 与离线测试共用的唯一一份）
+tests/types_fixture.py            25 个暴露类型各一个最小合法节点（T3′ 与离线测试共用的唯一一份）
 tests/test_types_drawable.py      词表完整性：夹具 == profile 暴露集，每个节点过闭集与取值域
 reflux/server.py / demo.py        伺服（挂载表：前缀 → 目录；无缓存、同源）＋ /ws 升级
 reflux/channel.py                 WS 端点：升级 + 文本帧编解码（stdlib）
@@ -1038,3 +1038,15 @@ chat` 与 T10（8/8）全绿——**用 CI 编出来的那份 wasm 跑的真浏�
 - 文档：`docs/DESIGN.md`「设备与身份」整节重写（旧句「没有跨连接的身份凭证」「刷新回到初始是正常表现」退场），skill 的 `references/connection-identity.md` 同步翻案并保留「握手准入 / cookie」被否的理由。
 
 **验证**：`python3 -m unittest discover -s tests -t .` → **275 例 OK**（新增 `tests/test_auth.py` 11 例）；门全过（`gen_sdk --check`、t0、t2、t3、t4、t6、t7、t8、t9 14/14、t10 8/8、ingest、chat、dashboard）。
+
+**2026-11-18（用户：「提交，然后更新 reflux」）：reflux 跟上 fluxen 当前词表——frame 合并、可视化种类退成 canvas、三个新类型记账不暴露。**
+
+- 快照：`tools/sync_schema.py --write` 接受 fluxen `1f736ed` 的导出，40 574 B / 30 arms / 48 defs → 54 906 B / 29 arms / 59 defs。消失的是 `case`、`placeholder`、`chart`、`diagram`、`editor`；出现的是 `frame`、`forcegraph`、`grab`、`dock`；`canvas` 多 `options`，`rack` 的 attrs 多 `horizontal` 与 `view`。
+- profile：`case` → `frame`（`bind.value` 收 `source`：绑了就读槽、否则画 children，ADR 0027），`chart`／`diagram`／`editor` 三条删除（它们现在是 `canvas` + url 的实例），`forcegraph`／`grab`／`dock` 以 `expose: false` 记账并写明 why——每个都要配夹具节点与 T3 的浏览器用例，单独一轮。
+- 生成器：新枚举 `LinkShape`／`Theme` 在 codegen 里是 `RootModel` 形状、数值约束用 `conint`，导入行原来没有这两个名字（生成物一 import 就 `NameError`）。`TYPES_IMPORTS` 补上后重出 Python 与 Rust 两个 SDK。
+- 清扫（框架、参考应用、测试、门、手写 Rust）：`b.case(` → `b.frame(`、`b.placeholder(` → `b.frame(`、`b.chart(` → `b.canvas(`；`markers.rs` 的三枚标记与 `frames.rs` 的 `frame`／`rack` 调用按新签名补齐（`frame` 多了 `source`／`variant` 位，`rack` 多了 `horizontal`／`view`）。`tests/types_fixture.py` 的 case／placeholder／chart／diagram／editor 五条并成 `frame` 一条，`ASSET_BACKED` 从四个收成 `canvas`（暴露集因此是 25 个）。`gate_t3` 的角色表 case+placeholder → frame（20 个）；`gate_dashboard` 的图表改按 `url == CHART_MODULE` 找 canvas（`chart` 不再是类型）。
+- fluxen 侧一行：`frame_` 把节点 `id` 落到 DOM 的 `id` 属性（`placeholder` 并进 `frame` 时丢了这条，而 ADR 0027 的迁移表写的是「行为不变」）。reflux 的三枚标记靠 `getElementById` 读，缺了它地址栏、标题、token 会全部静默失效——这条是读渲染器源码确认的（`frame_` 只把 id 推 class 列表，`placeholder` 当年两个分支都 `.id()`），不是浏览器实测。
+- 重钉：`vendor/pin.json` `5ec9b4d` → `1f736ed`，4 件 3 004 176 B → 3 097 392 B（wasm 2 979 971 B；本机构建，无 `wasm-opt`）。CI 的 release 还没出，`fetch` 这条路径未验证。
+- 文档：DESIGN 的组件词表（29 个根变体、应用面 25 项、令牌表、外框样例）、README 的 chart 片段与 275 例、HANDOFF 的标记规则／没做的清单／七帧／25 个夹具类型、`schema/README.md` 的 sha 与计数。
+
+**验证**：`python3 -m unittest discover -s tests -t .` → **275 例 OK**；`gen_sdk --check` 同步；`sync_schema` in sync；门全过（t0 7/7、t2 12/12、t3 18/18、t4 8/8、t6 8/8、t7 4/4、t8 5/5、t9 14/14、t10 8/8、ingest 12/12、chat 12/12、dashboard 18/18）。

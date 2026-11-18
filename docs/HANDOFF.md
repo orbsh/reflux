@@ -11,15 +11,15 @@
   `static/` 就不挂）。深链与刷新都由根挂载的 `index.html` 接住，页面自己再向生产者要结构。
 - 帧只有一个方言：`reflux/wire.py`（accrete 的八个 action，**一帧就是这份数组**——没有信封）。`ops`／`ui`／
   `node` 随壳删除，**没有翻译层**。
-- fluxen：`main` @ 5ec9b4d（ADR 0022 下行叫 `slot`、ADR 0023 上行叫 `dest`；信封归宿主）。`crates/ui_core/src/lib.rs`
+- fluxen：`main` @ 1f736ed（ADR 0022 下行叫 `slot`、ADR 0023 上行叫 `dest`；信封归宿主）。`crates/ui_core/src/lib.rs`
   的入口仍多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
-- 渲染器包是 fluxen `5ec9b4d` 的 **release** 构建（`examples/renderer`，`trunk build --release`），落在
+- 渲染器包是 fluxen `1f736ed` 的构建（`examples/renderer`，`trunk build --release`），落在
   `www/static/vendor/fluxen/`——**这份包不入版本控制**（gitignore），仓里只有 `vendor/pin.json` 与装它的
-  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）。落地的数字来自
-  CI 那次构建：`ui_leptos-4fffe41885540d62.js` + `ui_leptos-4fffe41885540d62_bg.wasm`（2 892 210 B）+ 两个
-  css，4 件共 3 004 176 B（本机没有 `wasm-opt`，所以没有压缩后的数字）；本机用 nix 的工具链编同一份源码
-  得到的是 2 995 260 B——trunk／rustc 版本不同，字节就不同，**以 release 那份为准**，`versions.json`
-  （rev + 逐文件 sha256/大小）随包生成。发布那边是 CI：`.github/workflows/renderer.yml`
+  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）。落地的数字是**本机**
+  这次构建的：`ui_leptos-bc0037ed3212b5d6.js`（89 919 B）+ `ui_leptos-dae870ed053d41d5_bg.wasm`（2 979 971 B）
+  + 两个 css（2 469 + 25 033 B），4 件共 3 097 392 B（本机没有 `wasm-opt`，所以没有压缩后的数字）。
+  `versions.json`（rev + 逐文件 sha256/大小）随包生成；trunk／rustc 版本不同字节就不同，CI 为这个 rev 出包后
+  以 release 那份为准——**fetch 这条路要等第一次 release 才算验过**。发布那边是 CI：`.github/workflows/renderer.yml`
   每次推 main 都看 pin——该 tag 还没发就用那个 fluxen 修订构建，产出
   `dist-release/fluxen-renderer-<rev>.tar.gz` + `SHA256SUMS` 挂到本仓的 release；已发则只装下来跑一遍测试。
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
@@ -69,7 +69,7 @@ T11 的数字在 `docs/PERF.md`，T10 的判据在 `tools/gate_t10.py`——都�
 上下文、流未结束时再发被拒并说明、空/超长在应用层拒、模型出错变一条气泡。模型是一条缝（`Model.reply`），默认
 `Scripted` 离线确定性，`OpenAI` 走 SSE——**后者没有对真端点跑过**。
 
-下一件没有排定的条目。可选的两条：给 `canvas`／`chart`／`editor`／`diagram` 补真浏览器门（要先决定部署件从哪来），
+下一件没有排定的条目。可选的两条：给 `canvas` 补一条真浏览器门（要先决定部署件从哪来；`chart`／`editor`／`diagram` 现在都是它的实例），
 或者按 DESIGN「开放问题」里没结的几条做一次裁决。示例自身能继续长的地方（持久化、工具调用、token 计量）是它
 README 里明说的「不做」，要做等于另开一轮。
 
@@ -96,8 +96,9 @@ README 里明说的「不做」，要做等于另开一轮。
   `ui_leptos`。
 - **`button` 只在 `form` 里渲染**，且一次点击就是一帧 form submit——所以「点一下做事」的组件一律包一层 form，
   行身份靠 form 自己的 id 上行（`demo_app.row_node`）。
-- **两个标记必须是 `placeholder`**：`text`／`case` 把 id 塞进 class 列表，只有 `placeholder` 一类
-  （`rack`/`pages`/`layer`/`fold`/`diagram`/`canvas`）才 `.id()`。gate 里读 DOM 也因此按 class 取。
+- **两个标记必须是 `frame`**：`text` 只把 id 塞进 class 列表，`frame` 还把它落到 DOM 的 `id` 属性上
+  （`placeholder` 并进来时带过来的行为，ADR 0027）；`rack`/`pages`/`layer`/`fold`/`canvas` 虽然也 `.id()`，
+  但各自带语义，标记不该借用。gate 里按 id-as-class 取节点的那几处（`text`）照旧。
 - **挂载前缀的唯一来源是页面的 `<base href>`**（现在是 `/`）：标记写应用路径，地址栏写挂载后的路径，换算只在
   `reflux.js` 的 `toApp`／`toBrowser`。换前缀＝改 `<base>` + 挂载表，页面与 runtime 不动。
 - **资源一律源站绝对路径**（`/static/…`）：相对路径会被深链解析到深链目录底下（实测白屏 + `Unexpected token '<'`）。
@@ -118,7 +119,7 @@ README 里明说的「不做」，要做等于另开一轮。
 
 ## 五、明确没做的（别当成已存在）
 
-- `canvas`／`chart`／`editor`／`diagram` 四个类型没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单）。
+- `canvas` 没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单；`chart`／`editor`／`diagram` 已是它的实例，一并归在这里）。
 - 这三件是**已落地**的，列在这里是为了说明它们不在「未做」里：标记糖（`reflux.sdk.markers` + `sdks/rust/src/markers.rs`
   手写同一份约定，不进 vocabulary）、`reflux uplinks` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
   注册表属于宿主）、`text` 的 `local` 落点与它的 `path` 随行键（`gate_t2` 的 vals 平面检查已从手写 dict 换成构造器）。
@@ -157,10 +158,10 @@ tools/gate_ingest.py          入站门（真 socket，无 chromium）
 tools/measure.py               T11 的测量（帧字节 / DOM 变更 / 首屏 / 服务端 CPU）；数字落 docs/PERF.md
 tools/vocabulary.py            词表模型：schema + profile + 类型层的字段序，两个 emitter 共用
 tools/gen_rust.py              Rust emitter：词表 → sdks/rust/src/types.rs
-tools/gate_t10.py              T10 的门：六帧字节对拍（要 cargo；首次 build 需 crates.io）
+tools/gate_t10.py              T10 的门：七帧字节对拍（要 cargo；首次 build 需 crates.io）
 sdks/rust/                     第二语言的 SDK：生成的 src/types.rs + 手写的 src/{wire,markers}.rs 与 src/bin/frames.rs
 tools/gate_t0.py … gate_t10.py   十道门（t2/t3/t4/t6/t9/t10 用浏览器或 cargo，t7 真浏览器 + 离线，t8 页面侧，ingest 真 socket）
-tests/types_fixture.py         29 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
+tests/types_fixture.py         25 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
 tests/test_cli_events.py       `reflux uplinks` 的表、目标解析的四种拒绝、以及「页面能发的意图都有处理器」
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交

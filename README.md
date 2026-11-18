@@ -277,9 +277,10 @@ def dashboard(ctx, match):
   every page turn after that writes only that slot, so the header is never sent twice. Declare no shell
   and the framework supplies one — a single full-screen `routes` — so a page lands in that slot either
   way and `demo_app` is only a smaller frame, not a second shape.
-- **A chart is a node with a spec.** `b.chart(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
+- **A chart is a canvas with a spec.** `b.canvas(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
   the module that draws it is a file, and `app.mount("/assets/g2chart", path)` is how a page gets the
-  files its modules need. A 3D viewport is the same idea with `b.canvas(url=…, value=…)`.
+  files its modules need. A 3D viewport is the same node with another url — accrete has one module
+  host, and which renderer it mounts lives in the url.
 - **The address carries what the backend needs.** `hello` brings `path` and `query`, so `/chat` and
   `/?filter=…` open the right thing on the first frame; the URL belongs to the browser.
 - **A page turn is one call.** `device.go("/chat")` moves that device's address and draws the page the
@@ -323,7 +324,7 @@ A module that is not on disk draws a line saying where the page looked, not an e
 ## Verify
 
 ```
-python3 -m unittest discover -s tests -t .     # 229 tests, no browser
+python3 -m unittest discover -s tests -t .     # 275 tests, no browser
 python3 tools/gate_ingest.py                   # the two boundaries, over a real socket
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
