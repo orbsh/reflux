@@ -48,7 +48,7 @@ def field(name: str, *, id: str) -> dict:
 
 
 def tree() -> Any:
-    return b.case(
+    return b.frame(
         # 0: an event-emitting input with its own identity
         {"type": "input", "id": "name-in", "bind": {"value": {"kind": "dest", "dest": "gate.name", "type": "text"}}},
         # 1: the same, with no id — an empty id is not an id

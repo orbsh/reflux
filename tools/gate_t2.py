@@ -47,7 +47,7 @@ def local_text(slot: str, *, id: str):
 
 
 def tree():
-    return b.case(
+    return b.frame(
         b.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
         b.rack(source=Slot("rows"), id="rows"),          # the list slot (append / remove)
         local_text("chan", id="local-echo"),       # the vals plane (inject)
@@ -67,7 +67,7 @@ def wait(predicate, timeout: float = 10.0):
 
 
 def text_of(cdp: Cdp, cls: str) -> str:
-    """A `text` node found by its id-as-class (`text`/`case` put the id into the class list)."""
+    """A `text` node found by its id-as-class (`text`/`frame` put the id into the class list)."""
     return (
         cdp.eval(
             f"(document.getElementsByClassName({json.dumps(cls)})[0]||{{}}).innerText"

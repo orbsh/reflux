@@ -42,7 +42,7 @@ def page_of(device: FakeDevice) -> dict:
 
 def shown(node: dict) -> str:
     """The text the page's content carries — `ctx.page` writes the two markers ahead of it."""
-    if node.get("type") == "case" and (node.get("children") or [{}])[0].get("id") == "reflux:path":
+    if node.get("type") == "frame" and (node.get("children") or [{}])[0].get("id") == "reflux:path":
         node = node["children"][2]
     return node["bind"]["value"]["default"]
 
@@ -64,7 +64,7 @@ class TestPageResolution(unittest.TestCase):
         # The default frame and the page in it, one frame: no shell declared is not a second road.
         self.assertEqual([op["action"] for op in drawn(device)], ["create", "set"])
         root = page_of(device)
-        self.assertEqual(root["type"], "case")  # a page: the two markers, then the content
+        self.assertEqual(root["type"], "frame")  # a page: the two markers, then the content
         self.assertEqual([kid.get("id") for kid in root["children"][:2]], ["reflux:path", "reflux:title"])
         self.assertEqual(shown(root), "page:/a")
 
@@ -94,7 +94,7 @@ class TestPageResolution(unittest.TestCase):
 
     def test_the_builtin_404_is_a_valid_structure(self) -> None:
         node = dump(not_found("/x"))
-        self.assertEqual(node["type"], "case")
+        self.assertEqual(node["type"], "frame")
         self.assertEqual([child["type"] for child in node["children"]], ["text", "text"])
         # the profile's token lane is how the framework's own page gets its look
         self.assertEqual(node["children"][0]["attrs"]["class"], ["rx-heading-1"])
@@ -170,7 +170,7 @@ class TestTheDemoApp(unittest.TestCase):
         markers = {
             child["id"]: child["children"][0]["bind"]["value"]["default"]
             for child in root["children"]
-            if child["type"] == "placeholder"
+            if child["type"] == "frame"
         }
         self.assertEqual(markers, {"reflux:path": "/about", "reflux:title": "关于"})
 

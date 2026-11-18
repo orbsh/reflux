@@ -6,11 +6,10 @@ fails there rather than quietly shrinking what the gate draws.
 
 Two marks, both facts rather than taste:
 
-- `ASSET_BACKED` — `canvas` / `chart` / `editor` mount an external ES module (`mount_module(url)`),
-  and `diagram` fetches `/assets/mermaid.min.js` on render. Their capability is a deployment
-  artifact, not vocabulary, so the live gate draws everything else and these four stay on the
-  offline table (a stub module would prove the stub, not the type). The page really does 404 the
-  mermaid asset today — measured, not assumed.
+- `ASSET_BACKED` — `canvas` mounts an external ES module (`mount_module(url)`). Its capability is a
+  deployment artifact, not vocabulary, so the live gate draws everything else and this one stays on
+  the offline table (a stub module would prove the stub, not the type). The framework's own old
+  kinds (`chart`/`editor`/`diagram`) are canvases with a url now — accrete has one module host.
 - `STATIC` — nodes whose value is a URL/asset rather than text; harmless to draw, but nothing to
   assert about them beyond "it did not error".
 """
@@ -19,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-ASSET_BACKED = frozenset({"canvas", "chart", "editor", "diagram"})
+ASSET_BACKED = frozenset({"canvas"})
 
 
 def text(value: str, **rest: Any) -> dict:
@@ -28,12 +27,11 @@ def text(value: str, **rest: Any) -> dict:
 
 
 NODES: dict[str, dict] = {
-    "case": {"type": "case", "children": [text("case")]},
-    "placeholder": {"type": "placeholder", "children": [text("placeholder")]},
-    "chart": {"type": "chart", "bind": {"value": {"kind": "default", "default": {"spec": {"type": "interval"}}}}},
-    "diagram": {"type": "diagram", "bind": {"value": {"kind": "default", "default": "graph TD"}}},
+    # One node, two states (ADR 0027): `children` is the static shape, a `source` binding is the
+    # region a slot fills. The fixture takes the static form; the shell's `routes` reader is the
+    # other one, and it is what puts a reserved id on the DOM.
+    "frame": {"type": "frame", "children": [text("frame")]},
     "canvas": {"type": "canvas", "url": "/module.js"},
-    "editor": {"type": "editor", "url": "/module.js"},
     "float": {"type": "float", "children": [text("float")]},
     "layer": {"type": "layer", "children": [text("layer")]},
     "portal": {"type": "portal", "attrs": {"to": "#main"}, "children": [text("portal")]},

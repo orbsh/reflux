@@ -68,7 +68,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         app = App(routes=Routes())
 
         def frame(ctx, match, page):
-            return b.case(page)
+            return b.frame(page)
 
         @app.route("/framed", layout=frame)
         def framed(ctx, match):

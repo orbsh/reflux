@@ -37,7 +37,7 @@ def show(label: str, frames: list[list[dict]]) -> None:
 
 
 def node_kinds(frame: list[dict]) -> dict[str, int]:
-    """What the frame's tree is made of: chart nodes, canvas nodes, racks, forms."""
+    """What the frame's tree is made of: canvas nodes (charts included), racks, forms."""
     counts: dict[str, int] = {}
 
     def walk(node):

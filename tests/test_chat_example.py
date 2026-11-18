@@ -241,7 +241,7 @@ class Frames(unittest.TestCase):
         ctx = context(device)
         self.assertIsNone(chat.page(ctx, match))  # a page handler says nothing by returning
         page = ctx.take_page()
-        self.assertEqual(page.type, "case")  # it drew a page instead
+        self.assertEqual(page.type, "frame")  # it drew a page instead
         self.assertEqual(len(device.frames), 1)  # the seed left as a send, once
         self.assertEqual(device.frames[0][0]["action"], "set")
         self.assertEqual(device.frames[0][0]["slot"], "status")

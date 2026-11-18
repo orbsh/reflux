@@ -4,7 +4,7 @@
 
 Three things a page of this shape has to get right, and this file is the smallest case of each:
 
-1. **A chart is a node whose value is a plain spec.** `b.chart(value=…, url=…)` carries a G2 grammar
+1. **A chart is a canvas pointed at the chart module.** `b.canvas(value=…, url=…)` carries a G2 grammar
    spec and names the module that draws it; the module is a file this app mounts (`CHART_DIR` below).
    No slot, no frame — the chart is part of the page like any other node.
 2. **A module host is a canvas.** `b.canvas(url=…, value=…)` gives a 3D viewer a box and a payload;
@@ -119,8 +119,8 @@ def charts(series: list[int]) -> list[Accrete]:
             )
         ]
     return [
-        b.case(b.chart(value=line_spec(series), url=CHART_MODULE, id="trend"), grid={"grid-template-rows": "260px"}, id="band-trend"),
-        b.case(b.chart(value=radar_spec(rows()), url=CHART_MODULE, id="radar"), grid={"grid-template-rows": "320px"}, id="band-radar"),
+        b.frame(b.canvas(value=line_spec(series), url=CHART_MODULE, id="trend"), grid={"grid-template-rows": "260px"}, id="band-trend"),
+        b.frame(b.canvas(value=radar_spec(rows()), url=CHART_MODULE, id="radar"), grid={"grid-template-rows": "320px"}, id="band-radar"),
     ]
 
 
@@ -132,13 +132,13 @@ def summary(series: list[int]) -> str:
 def dashboard(ctx: Context, match: Match) -> None:
     """The page: a heading, the week's numbers, the charts, the viewport, and a way to redraw it.
 
-    Everything hangs off one `case` with a gap — the page owns its own spacing, because the shell
+    Everything hangs off one `frame` with a gap — the page owns its own spacing, because the shell
     above only says where the page goes, not what it looks like inside. The address and the title are
     the declaration's, so `ctx.page` alone carries them.
     """
     series = [random.randint(20, 120) for _ in DAYS]
     ctx.page(
-        b.case(
+        b.frame(
             b.text("概览", variant="heading-1"),
             b.text(summary(series), variant="muted", id="summary"),
             *charts(series),

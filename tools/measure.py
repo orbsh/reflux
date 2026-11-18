@@ -141,7 +141,7 @@ def section_mutations() -> None:
         )
         turn(
             "whole tree: `create`",
-            wire.draw(wire.create(b.case(b.text("rebuilt-page", id="probe")))),
+            wire.draw(wire.create(b.frame(b.text("rebuilt-page", id="probe")))),
             "rebuilt-page",
         )
 

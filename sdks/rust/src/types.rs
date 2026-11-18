@@ -44,16 +44,16 @@ fn ordered(fields: &[(&str, Value)], order: &[&str]) -> Value {
     Value::Object(map)
 }
 
-/// The closed set of variant names the profile declares for `case`.
+/// The closed set of variant names the profile declares for `frame`.
 ///
 /// Each name is the profile's, and the class string behind it is the profile's too. This is
 /// the only way a class reaches the wire.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CaseVariant {
+pub enum FrameVariant {
     Card,
 }
 
-impl CaseVariant {
+impl FrameVariant {
     pub fn token(self) -> &'static str {
         match self {
             Self::Card => "rx-card",
@@ -112,8 +112,8 @@ impl JsType {
     }
 }
 
-/// Build a `case` node (the wire type `case`).
-pub fn case(children: &[Value], grid: Option<Value>, horizontal: Option<bool>, id: Option<&str>, variant: Option<CaseVariant>) -> Value {
+/// Build a `frame` node (the wire type `frame`).
+pub fn frame(children: &[Value], grid: Option<Value>, horizontal: Option<bool>, source: Option<&str>, id: Option<&str>, variant: Option<FrameVariant>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = variant {
         put(&mut attrs, "class", array(&[s(v.token())]));
@@ -121,26 +121,6 @@ pub fn case(children: &[Value], grid: Option<Value>, horizontal: Option<bool>, i
     if let Some(v) = grid {
         put(&mut attrs, "grid", v.clone());
     }
-    if let Some(v) = horizontal {
-        put(&mut attrs, "horizontal", Value::Bool(v));
-    }
-    let mut node = Map::new();
-    if !attrs.is_empty() {
-        put(&mut node, "attrs", Value::Object(attrs));
-    }
-    if !children.is_empty() {
-        put(&mut node, "children", array(children));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    put(&mut node, "type", s("case"));
-    Value::Object(node)
-}
-
-/// Build a `placeholder` node (the wire type `placeholder`).
-pub fn placeholder(children: &[Value], horizontal: Option<bool>, source: Option<&str>, id: Option<&str>) -> Value {
-    let mut attrs = Map::new();
     if let Some(v) = horizontal {
         put(&mut attrs, "horizontal", Value::Bool(v));
     }
@@ -163,73 +143,12 @@ pub fn placeholder(children: &[Value], horizontal: Option<bool>, source: Option<
     if let Some(v) = id {
         put(&mut node, "id", s(v));
     }
-    put(&mut node, "type", s("placeholder"));
-    Value::Object(node)
-}
-
-/// Build a `chart` node (the wire type `chart`).
-pub fn chart(value: Option<&str>, horizontal: Option<bool>, url: Option<&str>, source: Option<&str>, id: Option<&str>) -> Value {
-    let mut attrs = Map::new();
-    if let Some(v) = horizontal {
-        put(&mut attrs, "horizontal", Value::Bool(v));
-    }
-    let mut bind = Map::new();
-    {
-        let given = [value.is_some(), source.is_some()].into_iter().filter(|v| *v).count();
-        assert!(given <= 1, "chart: bind[value] takes one 落点 at a time, got {}", given);
-    }
-    if let Some(v) = value {
-        let mut fields: Vec<(&str, Value)> = vec![("default", s(v))];
-        fields.push(("kind", s("default")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind"]));
-    } else if let Some(v) = source {
-        let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
-        fields.push(("kind", s("source")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "source"]));
-    }
-    let mut node = Map::new();
-    if !attrs.is_empty() {
-        put(&mut node, "attrs", Value::Object(attrs));
-    }
-    if !bind.is_empty() {
-        put(&mut node, "bind", Value::Object(bind));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    put(&mut node, "url", s(url.unwrap_or("/assets/g2chart/index.js")));
-    put(&mut node, "type", s("chart"));
-    Value::Object(node)
-}
-
-/// Build a `diagram` node (the wire type `diagram`).
-pub fn diagram(value: Option<&str>, horizontal: Option<bool>, id: Option<&str>) -> Value {
-    let mut attrs = Map::new();
-    if let Some(v) = horizontal {
-        put(&mut attrs, "horizontal", Value::Bool(v));
-    }
-    let mut bind = Map::new();
-    if let Some(v) = value {
-        let mut fields: Vec<(&str, Value)> = vec![("default", s(v))];
-        fields.push(("kind", s("default")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind"]));
-    }
-    let mut node = Map::new();
-    if !attrs.is_empty() {
-        put(&mut node, "attrs", Value::Object(attrs));
-    }
-    if !bind.is_empty() {
-        put(&mut node, "bind", Value::Object(bind));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    put(&mut node, "type", s("diagram"));
+    put(&mut node, "type", s("frame"));
     Value::Object(node)
 }
 
 /// Build a `canvas` node (the wire type `canvas`).
-pub fn canvas(value: Option<&str>, height: Option<&str>, width: Option<&str>, url: Option<&str>, source: Option<&str>, id: Option<&str>) -> Value {
+pub fn canvas(value: Option<&str>, height: Option<&str>, width: Option<&str>, options: Option<Value>, url: Option<&str>, source: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = height {
         put(&mut attrs, "height", s(v));
@@ -261,48 +180,13 @@ pub fn canvas(value: Option<&str>, height: Option<&str>, width: Option<&str>, ur
     if let Some(v) = id {
         put(&mut node, "id", s(v));
     }
+    if let Some(v) = options {
+        put(&mut node, "options", v.clone());
+    }
     if let Some(v) = url {
         put(&mut node, "url", s(v));
     }
     put(&mut node, "type", s("canvas"));
-    Value::Object(node)
-}
-
-/// Build a `editor` node (the wire type `editor`).
-pub fn editor(value: Option<&str>, height: Option<&str>, width: Option<&str>, url: Option<&str>, source: Option<&str>, id: Option<&str>) -> Value {
-    let mut attrs = Map::new();
-    if let Some(v) = height {
-        put(&mut attrs, "height", s(v));
-    }
-    if let Some(v) = width {
-        put(&mut attrs, "width", s(v));
-    }
-    let mut bind = Map::new();
-    {
-        let given = [value.is_some(), source.is_some()].into_iter().filter(|v| *v).count();
-        assert!(given <= 1, "editor: bind[value] takes one 落点 at a time, got {}", given);
-    }
-    if let Some(v) = value {
-        let mut fields: Vec<(&str, Value)> = vec![("default", s(v))];
-        fields.push(("kind", s("default")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind"]));
-    } else if let Some(v) = source {
-        let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
-        fields.push(("kind", s("source")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "source"]));
-    }
-    let mut node = Map::new();
-    if !attrs.is_empty() {
-        put(&mut node, "attrs", Value::Object(attrs));
-    }
-    if !bind.is_empty() {
-        put(&mut node, "bind", Value::Object(bind));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    put(&mut node, "url", s(url.unwrap_or("/assets/editor/index.js")));
-    put(&mut node, "type", s("editor"));
     Value::Object(node)
 }
 
@@ -435,14 +319,14 @@ pub fn form(children: &[Value], instant: Option<bool>, dest: Option<&str>, local
     if let Some(v) = dest {
         let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
         fields.push(("kind", s("dest")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "dest", "kind"]));
     } else if let Some(v) = local {
         let mut fields: Vec<(&str, Value)> = vec![("slot", s(v))];
         if let Some(p) = path {
             fields.push(("path", s(p)));
         }
         fields.push(("kind", s("local")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "slot", "name"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "name", "path", "report", "slot"]));
     }
     let mut node = Map::new();
     if !attrs.is_empty() {
@@ -551,9 +435,15 @@ pub fn path(value: Option<&str>, horizontal: Option<bool>, id: Option<&str>) -> 
 }
 
 /// Build a `rack` node (the wire type `rack`).
-pub fn rack(scroll: Option<bool>, source: Option<&str>, item: Option<&[Value]>, id: Option<&str>) -> Value {
+pub fn rack(horizontal: Option<bool>, scroll: Option<bool>, view: Option<Value>, source: Option<&str>, item: Option<&[Value]>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
+    if let Some(v) = horizontal {
+        put(&mut attrs, "horizontal", Value::Bool(v));
+    }
     put(&mut attrs, "scroll", Value::Bool(scroll.unwrap_or(false)));
+    if let Some(v) = view {
+        put(&mut attrs, "view", v.clone());
+    }
     let mut bind = Map::new();
     if let Some(v) = source {
         let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
@@ -608,7 +498,7 @@ pub fn pages(horizontal: Option<bool>, display: Option<Value>, source: Option<&s
             fields.push(("path", s(p)));
         }
         fields.push(("kind", s("local")));
-        put(&mut bind, "select", ordered(&fields, &["default", "type", "kind", "path", "slot", "name"]));
+        put(&mut bind, "select", ordered(&fields, &["default", "type", "kind", "name", "path", "report", "slot"]));
     }
     let mut node = Map::new();
     if !attrs.is_empty() {
@@ -704,7 +594,7 @@ pub fn input(horizontal: Option<bool>, dest: Option<&str>, field: Option<&str>, 
     if let Some(v) = dest {
         let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
         fields.push(("kind", s("dest")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "dest", "kind"]));
     } else if let Some(v) = field {
         let mut fields: Vec<(&str, Value)> = vec![("field", s(v))];
         if let Some(p) = payload {
@@ -752,7 +642,7 @@ pub fn select(horizontal: Option<bool>, value: Option<&str>, source: Option<&str
     } else if let Some(v) = dest {
         let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
         fields.push(("kind", s("dest")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "dest", "kind"]));
     }
     if let Some(v) = options_source {
         let mut fields: Vec<(&str, Value)> = vec![("source", s(v))];
@@ -882,7 +772,7 @@ pub fn text(value: Option<&str>, format: Option<&str>, source: Option<&str>, loc
             fields.push(("path", s(p)));
         }
         fields.push(("kind", s("local")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "path", "slot", "name"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "name", "path", "report", "slot"]));
     }
     let mut node = Map::new();
     if !attrs.is_empty() {
@@ -920,7 +810,7 @@ pub fn textarea(horizontal: Option<bool>, value: Option<&str>, source: Option<&s
     } else if let Some(v) = dest {
         let mut fields: Vec<(&str, Value)> = vec![("dest", s(v))];
         fields.push(("kind", s("dest")));
-        put(&mut bind, "value", ordered(&fields, &["default", "type", "kind", "dest"]));
+        put(&mut bind, "value", ordered(&fields, &["default", "type", "dest", "kind"]));
     }
     if let Some(v) = placeholder {
         let mut fields: Vec<(&str, Value)> = vec![("default", s(v))];

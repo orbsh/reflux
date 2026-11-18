@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 """T3 gate — the profile's whole vocabulary draws, in one tree, and the DOM proves each type.
 
-The renderer implements all 30 accrete types, so what reflux owes is the closed set — every exposed
+The renderer implements all 29 accrete types, so what reflux owes is the closed set — every exposed
 type is a legal node and reaches the page. The set itself is proven offline
 (`tests/test_types_drawable.py`, one legal node per type, exactly the profile's list); this gate
 draws them all at once.
 
-How "each type drew" is measured: every component puts a **role class** on its element (`case`,
+How "each type drew" is measured: every component puts a **role class** on its element (`frame`,
 `rack`, `pages`, `txt`, `select`, …), read off the renderer. Four types have no class of their own
 and are asserted by behaviour instead — a `fold`'s header is its `item[0]` while its body stays
 collapsed, a `form` is the only place a `button` renders, and a `portal` mounts its children into
 the element its `attrs.to` names.
 
-Asset-backed types stay out on purpose (`canvas` / `chart` / `editor` mount an ES module, `diagram`
-fetches mermaid): their capability is a deployment artifact, not vocabulary. A stub module would
-prove the stub.
+The asset-backed type stays out on purpose (`canvas` mounts an ES module): its capability is a
+deployment artifact, not vocabulary. A stub module would prove the stub.
 
     python3 tools/gate_t3.py
 """
@@ -40,8 +39,7 @@ PAGE = "/"
 # The renderer's own role classes, one per type that has one. `fold`/`form`/`portal`/`button` are
 # asserted by behaviour (see the docstring), so they are not here.
 ROLE: dict[str, str] = {
-    "case": ".case",
-    "placeholder": ".placeholder",
+    "frame": ".frame",
     "float": ".float",
     "layer": ".layer",
     "popup": ".popup",
@@ -106,7 +104,7 @@ def tree() -> dict:
         for tag, node in NODES.items()
         if tag not in ASSET_BACKED and tag != "button"  # `button` is the form's child
     ]
-    return {"type": "case", "children": [*kids, {"type": "case", "children": [tokens()]}]}
+    return {"type": "frame", "children": [*kids, {"type": "frame", "children": [tokens()]}]}
 
 
 def tokens() -> dict:
@@ -116,7 +114,7 @@ def tokens() -> dict:
     that class is what these checks read back as computed style.
     """
     return dump(
-        b.case(
+        b.frame(
             b.text("Heading one", variant="heading-1"),
             b.text("Heading two", variant="heading-2"),
             b.text("Heading three", variant="heading-3"),
@@ -124,7 +122,7 @@ def tokens() -> dict:
             b.text("danger", variant="danger"),
             b.text("inline code", variant="code"),
             b.text("plain", id="t3-plain"),
-            b.case(b.text("card body"), variant="card"),
+            b.frame(b.text("card body"), variant="card"),
         )
     )
 

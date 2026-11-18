@@ -29,7 +29,7 @@ def page_for(ctx, match):
 
 def shell(ctx) -> object:
     """A frame with one nav line and the routes reader — the shape the slot is written into."""
-    return b.case(b.text("shell"), b.placeholder(source=ctx.slot(ROUTES_SLOT), id="routes"), id="shell")
+    return b.frame(b.text("shell"), b.frame(source=ctx.slot(ROUTES_SLOT), id="routes"), id="shell")
 
 
 def app_with_shell(*paths: str, page=None) -> App:
@@ -125,7 +125,7 @@ class TestShell(unittest.TestCase):
         self.assertEqual([op["action"] for op in first], ["create", "set"])
         default = first[0]["data"]
         self.assertEqual(default["id"], "shell")
-        self.assertEqual([child["type"] for child in default["children"]], ["placeholder"])
+        self.assertEqual([child["type"] for child in default["children"]], ["frame"])
         self.assertEqual(default["children"][0]["id"], ROUTES_SLOT)
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}})

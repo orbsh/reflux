@@ -1,6 +1,6 @@
 """reflux's Python SDK: accrete's wire types, generated from the schema, plus reflux's profile.
 
-    from reflux.sdk import case, text, input, form, JsType, parse, dump
+    from reflux.sdk import frame, text, input, form, JsType, parse, dump
     from reflux.sdk import markers
 
 - `types` / `builders` are generated (`python3 tools/gen_sdk.py`) — never edit them.
@@ -11,7 +11,7 @@
 - `parse` validates a node; `dump` turns a built node back into the wire's dict.
 
 The constructors are named after the wire's own `type` values, because the vocabulary has exactly
-one source: `case`, `text`, `input`, `rack`, … Nothing here invents a second name for a node.
+one source: `frame`, `text`, `input`, `rack`, … Nothing here invents a second name for a node.
 """
 
 from __future__ import annotations

@@ -52,7 +52,7 @@ ROUTES_SLOT = "routes"
 HOST_EVENTS = ("connect", "location", "disconnect")
 
 # The slot the login surface is drawn into. `auth` is the one application-facing name the platform
-# reserves: a page declares it as a `placeholder` region, the framework (or the app's own `Auth.view`)
+# reserves: a page declares it as a `frame` region, the framework (or the app's own `Auth.view`)
 # writes the screen into it. The name is a slot, not a verb, because the surface is a place in the page.
 AUTH_SLOT = "auth"
 

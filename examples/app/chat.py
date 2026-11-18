@@ -101,7 +101,7 @@ def state(ctx: Context) -> Chat:
 
 
 def row(*children: Accrete, id: str) -> Accrete:
-    return b.case(*children, id=id)
+    return b.frame(*children, id=id)
 
 
 @app.route("/chat", title="对话")
@@ -120,11 +120,11 @@ def page(ctx: Context, match: Match) -> None:
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
         slots.status.set(b.text("就绪"))
     ctx.page(
-        b.case(
+        b.frame(
             b.text("对话", variant="heading-1"),
             b.text(source=slots.status, variant="muted", id="status"),
             b.rack(source=slots.messages, scroll=True, id="messages"),
-            b.case(
+            b.frame(
                 b.form(b.input(field="text", id="composer"), b.button("发送"), dest=slots.chat.send, id="send"),
                 b.form(b.button("停止"), dest=slots.chat.stop, id="stop"),
                 grid={"grid-template-columns": "1fr auto", "gap": "8px"},

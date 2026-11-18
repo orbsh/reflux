@@ -73,7 +73,7 @@ wire.create(markers.page("/", "演示", *demo.demo.home(_ctx()))),
         (
             "local binding",
             wire.draw(
-wire.create(b.case(b.text(local="chan", path="/data", id="local-echo"), id="root"))),
+wire.create(b.frame(b.text(local="chan", path="/data", id="local-echo"), id="root"))),
         ),
     ]
 

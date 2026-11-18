@@ -24,7 +24,7 @@ whatever else the app mounts.
 
     @route("/blog/{slug}", title="文章")
     def post(device, match):
-        return b.case(b.text(match.params["slug"]))
+        return b.frame(b.text(match.params["slug"]))
 
     @app.mount("/health")
     def health(request):

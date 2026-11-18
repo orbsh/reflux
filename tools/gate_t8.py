@@ -31,7 +31,7 @@ PAGE = "/"
 
 
 def tree() -> Any:
-    return b.case(
+    return b.frame(
         {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.nowhere", "type": "text"}}},
         {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.boom", "type": "text"}}},
         # an emitter for the refused-frame case: bound to the `echo` data slot

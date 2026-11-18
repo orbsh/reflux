@@ -7,7 +7,7 @@
 //! server, because producing the frame is the SDK's whole job.
 
 use reflux_sdk::markers;
-use reflux_sdk::types::{button, case, form, input, placeholder, rack, text, JsType, TextVariant};
+use reflux_sdk::types::{button, form, frame, input, rack, text, JsType, TextVariant};
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::Value;
 use std::io::Write;
@@ -47,7 +47,7 @@ fn home() -> Value {
             input(None, Some("name.change"), None, None, None, Some("name-input")),
             text(None, None, Some(ECHO), None, None, Some("echo"), None),
             form(&[button(Some("加一行"), None, None)], None, Some("row.add"), None, None, Some("add-row")),
-            rack(None, Some(ROWS), None, Some("rows")),
+            rack(None, None, None, Some(ROWS), None, Some("rows")),
             form(
                 &[
                     input(None, None, Some("user"), None, None, Some("f-user")),
@@ -59,7 +59,7 @@ fn home() -> Value {
                 None, None,
                 Some("login")),
             // The reserved region the framework draws the login surface into.
-            placeholder(&[], None, Some("auth"), Some("auth-region")),
+            frame(&[], None, None, Some("auth"), Some("auth-region"), None),
             form(
                 &[button(Some("私密"), None, None)],
                 None,
@@ -131,7 +131,7 @@ fn main() {
             "login surface",
             draw(&[set(
                 "auth",
-                case(
+                frame(
                     &[
                         text(
                             Some("演示登录"),
@@ -175,6 +175,7 @@ fn main() {
                     None,
                     None,
                     None,
+                    None,
                 ),
             )]),
         ),
@@ -189,7 +190,7 @@ fn main() {
         ("about page", draw(&[create(about())])),
         (
             "local binding",
-            draw(&[create(case(
+            draw(&[create(frame(
                 &[text(
                     None,
                     None,
@@ -199,6 +200,7 @@ fn main() {
                     Some("local-echo"),
                     None,
                 )],
+                None,
                 None,
                 None,
                 Some("root"),

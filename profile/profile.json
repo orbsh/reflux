@@ -28,19 +28,12 @@
       "muted": "rx-muted",
       "danger": "rx-danger"
     },
-    "case": {
+    "frame": {
       "card": "rx-card"
     }
   },
   "types": {
-    "case": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "bind": {}
-    },
-    "placeholder": {
+    "frame": {
       "expose": true,
       "positional": "children",
       "children": true,
@@ -48,45 +41,10 @@
       "bind": {
         "value": [
           "source"
-        ]
-      }
-    },
-    "chart": {
-      "expose": true,
-      "positional": "value",
-      "children": false,
-      "item": false,
-      "bind": {
-        "value": [
-          "default",
-          "source"
-        ]
-      }
-    },
-    "diagram": {
-      "expose": true,
-      "positional": "value",
-      "children": false,
-      "item": false,
-      "bind": {
-        "value": [
-          "default"
         ]
       }
     },
     "canvas": {
-      "expose": true,
-      "positional": "value",
-      "children": false,
-      "item": false,
-      "bind": {
-        "value": [
-          "default",
-          "source"
-        ]
-      }
-    },
-    "editor": {
       "expose": true,
       "positional": "value",
       "children": false,
@@ -325,6 +283,30 @@
           "default"
         ]
       }
+    },
+    "forcegraph": {
+      "expose": false,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {},
+      "why": "new wire type, deferred: exposing it needs a fixture node and a T3 browser case of its own (the renderer already draws it)"
+    },
+    "grab": {
+      "expose": false,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {},
+      "why": "new wire type, deferred to the drag-and-drop round: it is one half of a pair whose dest side needs a gate"
+    },
+    "dock": {
+      "expose": false,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "bind": {},
+      "why": "new wire type, deferred to the drag-and-drop round (same pair as grab)"
     },
     "template": {
       "expose": false,

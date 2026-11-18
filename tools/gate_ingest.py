@@ -58,7 +58,7 @@ def send_all_events() -> None:
 
     @APP.on("gate.legal")
     def legal(ctx, frame):
-        ctx.device.send(wire.draw(wire.create(b.case(b.text("landed", id="ok")))))
+        ctx.device.send(wire.draw(wire.create(b.frame(b.text("landed", id="ok")))))
 
     @APP.on("gate.unknown-type")
     def unknown_type(ctx, frame):
@@ -150,7 +150,7 @@ def main() -> int:
     checks.append(
         (
             "a legal frame lands unchanged",
-            first == [wire.create(b.case(b.text("landed", id="ok")))],
+            first == [wire.create(b.frame(b.text("landed", id="ok")))],
             json.dumps(first, ensure_ascii=False)[:70] if first else "nothing arrived",
         )
     )

@@ -106,8 +106,9 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             )
 
             # 2 — the page really carries the charts and the viewport, not text that says so.
-            specs = kinds(first, "chart")
-            canvases = len(kinds(first, "canvas"))
+            # Charts are canvases with the chart module's url (ADR 0025 retired the `chart` kind).
+            specs = [n for n in kinds(first, "canvas") if n.get("url") == dashboard.CHART_MODULE]
+            canvases = len([n for n in kinds(first, "canvas") if n.get("url") == dashboard.VIEWER_MODULE])
             want_charts = 2 if dashboard.CHARTS else 0
             want_canvas = 1 if dashboard.VIEWER else 0
             checks.append(

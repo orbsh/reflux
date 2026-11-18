@@ -1,7 +1,7 @@
 """The page markers: the two reserved ids the client runtime reads out of the DOM.
 
 `www/static/reflux.js` mirrors `reflux:path` into the address bar and `reflux:title` into the
-document's title. Both are ordinary nodes — a `placeholder` whose id is the reserved name, holding
+document's title. Both are ordinary nodes — a `frame` whose id is the reserved name, holding
 the value as its only child — so producing them is a **convention**, not a wire type: accrete does
 not know the words `path` or `title`, and the vocabulary must not learn them.
 
@@ -41,12 +41,12 @@ PAGE_ID = "page-root"
 
 def path_marker(path: str) -> Accrete:
     """The address the page is showing. The runtime copies it into the address bar."""
-    return b.placeholder(b.text(path), id=PATH_ID)
+    return b.frame(b.text(path), id=PATH_ID)
 
 
 def title_marker(title: str) -> Accrete:
     """The page's title. The runtime copies it into `document.title`."""
-    return b.placeholder(b.text(title), id=TITLE_ID)
+    return b.frame(b.text(title), id=TITLE_ID)
 
 
 def token_marker(token: str) -> Accrete:
@@ -57,7 +57,7 @@ def token_marker(token: str) -> Accrete:
     An EMPTY marker is a statement too ("this connection has no credential any more"), and it is how
     a logout reaches the browser's storage; leaving the node out says nothing at all.
     """
-    return b.placeholder(b.text(token), id=TOKEN_ID)
+    return b.frame(b.text(token), id=TOKEN_ID)
 
 
 def page(path: str, title: str, *children: Accrete, id: str = PAGE_ID) -> Accrete:
@@ -66,4 +66,4 @@ def page(path: str, title: str, *children: Accrete, id: str = PAGE_ID) -> Accret
     Order matters only for reading the frame, not for the runtime: both markers are found by id.
     Marshal them first anyway — a page turn's frame then reads like the page it becomes.
     """
-    return b.case(path_marker(path), title_marker(title), *children, id=id)
+    return b.frame(path_marker(path), title_marker(title), *children, id=id)

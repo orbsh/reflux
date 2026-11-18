@@ -4,8 +4,8 @@
 
     cd ~/world/fluxen && cargo run -q -p stage -- schema
 
-- snapshot: 2026-10-17, sha256 `53bc5b49ae40d5c807b41da2240f3b11a10e10d8231e4725e9ea79b6a7ee31e0`, 40 574 B
-- shape: draft 2020-12, root `oneOf` of 30 arms (`{"properties": {"type": {"const": …}}, "$ref": "#/$defs/…"`), 48 `$defs`
+- snapshot: 2026-11-18, sha256 `b8759f68fb3649d2692b54bb3ae9dfe06a5c5bca8a5c81c24a4bd438b17c390c`, 54 906 B
+- shape: draft 2020-12, root `oneOf` of 29 arms (`{"properties": {"type": {"const": …}}, "$ref": "#/$defs/…"`), 59 `$defs`
 - the export is deterministic: two exports of the same tree hash equal (measured), so a drift gate compares bytes
 
 Why a snapshot instead of exporting at generation time: the SDK generator and the gates must not need

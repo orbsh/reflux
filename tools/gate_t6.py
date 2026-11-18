@@ -45,7 +45,7 @@ def page(path: str, title: str, *, label: str | None = None, markers: bool = Tru
     children = [b.text(shown, id="page-label")]
     if markers:
         return page_markers.page(path, title, *children)
-    return b.case(*children, id="page-root")
+    return b.frame(*children, id="page-root")
 
 
 def draw(device, node) -> None:

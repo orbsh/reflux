@@ -52,15 +52,15 @@ def shell(ctx: Context) -> Accrete:
     "fill the rest" (`height: 100%`) and mean it. A shell that does not do that leaves a chat page's
     message list with no height to scroll in.
     """
-    return b.case(
-        b.case(
+    return b.frame(
+        b.frame(
             b.form(b.button("概览"), dest=names.go.dashboard, id="nav-dashboard"),
             b.form(b.button("对话"), dest=names.go.chat, id="nav-chat"),
             b.text("reflux 示例", variant="muted"),
             id="nav",
             grid={"grid-template-columns": "auto auto 1fr", "gap": "8px", "align-items": "center"},
         ),
-        b.placeholder(source=names.routes, id="routes"),
+        b.frame(source=names.routes, id="routes"),
         id=SHELL_ID,
         grid={"grid-template-rows": "auto 1fr", "height": "100vh", "padding": "16px", "gap": "12px", "box-sizing": "border-box"},
     )

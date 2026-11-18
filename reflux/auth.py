@@ -140,7 +140,7 @@ def default_view(ctx: Any, state: str) -> Accrete:
     lines: list[Accrete] = [b.text("登录", variant="heading-1")]
     if state == "refused":
         lines.append(b.text("用户名或密码不对", variant="muted"))
-    return b.case(
+    return b.frame(
         *lines,
         b.form(
             b.input(field="username", id="auth-user"),

@@ -14,7 +14,7 @@
 Repairs applied to the codegen's output — each one is a measured defect of that output, not a taste:
 
   1. `type` tags and a discriminated root union. 18 of the 30 arms lost their `type` const, so
-     {"type": "float", …} validated as `Case` (measured); the other 12 were inlined anonymously
+     {"type": "float", …} validated as the wrong arm (measured, back then `Case`); the other 12 were inlined anonymously
      (`Accrete1..12`) while their named classes sat unreferenced. We tag every member and build the
      union over the 30 named classes.
   2. `bind: dict[str, Bind]`, with `Bind` discriminated on `kind`. The codegen flattened the map to
@@ -78,7 +78,7 @@ TYPES_IMPORTS = """from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel, conint
 
 """
 

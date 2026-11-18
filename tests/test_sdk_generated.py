@@ -8,7 +8,7 @@ Offline by design — no codegen, no cargo, no browser. Two commands make up thi
 What this file pins, and why each one is here rather than assumed:
 
 - every one of the wire's types parses into *its own* class. The codegen's raw output failed this for
-  18 of them ({"type": "float"} validated as `Case`), so the regression is a first-class check.
+  18 of them ({"type": "float"} validated as `Frame`), so the regression is a first-class check.
 - an unknown or missing `type` is refused, and so is an unknown `bind.kind`.
 - `bind` is a typed map (not `dict[str, Any]`) and `PositionAttr`'s flattened keys survive a round
   trip — both were silently dropped by the raw output.
@@ -92,8 +92,8 @@ class UnionTest(unittest.TestCase):
                 self.assertEqual(sdk.dump(node)["type"], const)
 
     def test_the_regression_the_codegen_had(self):
-        """{"type": "float"} used to validate as `Case`; the tag is what makes this true."""
-        for const in ("case", "float", "rack", "select", "layer"):
+        """{"type": "float"} used to validate as `Frame`; the tag is what makes this true."""
+        for const in ("frame", "float", "rack", "select", "layer"):
             with self.subTest(type=const):
                 node = sdk.parse({"type": const, "children": []})
                 self.assertEqual(type(node).__name__, const.capitalize() if const != "svg" else "Svg")
@@ -105,7 +105,7 @@ class UnionTest(unittest.TestCase):
                 contains(sample, sdk.dump(sdk.parse(sample)), const)
 
     def test_unknown_or_missing_type_is_refused(self):
-        for bad in ({"type": "nope"}, {"children": []}, {"type": "Case"}):
+        for bad in ({"type": "nope"}, {"children": []}, {"type": "Frame"}):
             with self.subTest(node=bad):
                 with self.assertRaises(pydantic.ValidationError):
                     sdk.parse(bad)
@@ -152,7 +152,7 @@ class ProfileTest(unittest.TestCase):
         """`variant=` is a name the profile declares; the class behind it is the profile's."""
         node = sdk.text("Title", variant="heading-2")
         self.assertEqual(sdk.dump(node)["attrs"], {"class": ["rx-heading-2"]})
-        self.assertEqual(sdk.dump(sdk.case(sdk.text("x"), variant="card"))["attrs"], {"class": ["rx-card"]})
+        self.assertEqual(sdk.dump(sdk.frame(sdk.text("x"), variant="card"))["attrs"], {"class": ["rx-card"]})
         with self.assertRaises(ValueError) as caught:
             sdk.text("x", variant="heading-9")
         self.assertIn("heading-1", str(caught.exception))  # the refusal lists the set
@@ -162,7 +162,7 @@ class ProfileTest(unittest.TestCase):
         self.assertIn("variant", inspect.signature(sdk.text).parameters)
         self.assertNotIn("variant", inspect.signature(sdk.image).parameters)
         # Every declared token belongs to a type the builders expose, and vice versa.
-        self.assertEqual(sorted(PROFILE["tokens"]), ["case", "text"])
+        self.assertEqual(sorted(PROFILE["tokens"]), ["frame", "text"])
         for tag, variants in PROFILE["tokens"].items():
             self.assertTrue(PROFILE["types"][tag]["expose"], tag)
             self.assertTrue(variants, tag)
@@ -224,9 +224,9 @@ class ProfileTest(unittest.TestCase):
             sdk.text(path="/data")  # path with no落点 at all
 
     def test_children_and_item_come_through(self):
-        node = sdk.case(sdk.text("a"), sdk.text("b"))
+        node = sdk.frame(sdk.text("a"), sdk.text("b"))
         self.assertEqual([n["type"] for n in sdk.dump(node)["children"]], ["text", "text"])
-        self.assertIsNone(sdk.dump(sdk.case()).get("children"))  # an empty container is noise, not a frame
+        self.assertIsNone(sdk.dump(sdk.frame()).get("children"))  # an empty container is noise, not a frame
         rack = sdk.rack(source=Slot("rows"), item=[sdk.text("row")])
         self.assertEqual(len(sdk.dump(rack)["item"]), 1)
 

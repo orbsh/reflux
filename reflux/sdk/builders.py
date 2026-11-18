@@ -7,57 +7,20 @@ from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
 
-__all__ = ["button", "canvas", "case", "chart", "diagram", "editor", "float", "fold", "form", "group", "image", "input", "layer", "pages", "path", "placeholder", "popup", "portal", "rack", "select", "svg", "table", "tbody", "td", "text", "textarea", "th", "thead", "tr"]
+__all__ = ["button", "canvas", "float", "fold", "form", "frame", "group", "image", "input", "layer", "pages", "path", "popup", "portal", "rack", "select", "svg", "table", "tbody", "td", "text", "textarea", "th", "thead", "tr"]
 
-def case(
+def frame(
     *children: Accrete,
     grid: dict[str, Any] | None = None,
     horizontal: bool | None = None,
+    source: Any = None,
     id: str | None = None,
     variant: str | None = None,
-) -> Case:
-    """Build a `case` node (the wire type `case`)."""
-    attrs = token_attrs(drop_none(grid=grid, horizontal=horizontal), variant, 'case')
-    bind = None
-    return parse(drop_none(type='case', attrs=attrs, bind=bind, id=id, children=list(children) or None), Case)
-
-
-def placeholder(
-    *children: Accrete,
-    horizontal: bool | None = None,
-    source: Any = None,
-    id: str | None = None,
-) -> Placeholder:
-    """Build a `placeholder` node (the wire type `placeholder`)."""
-    attrs = drop_none(horizontal=horizontal)
+) -> Frame:
+    """Build a `frame` node (the wire type `frame`)."""
+    attrs = token_attrs(drop_none(grid=grid, horizontal=horizontal), variant, 'frame')
     bind = drop_none(value=bind_value(source=source))
-    return parse(drop_none(type='placeholder', attrs=attrs, bind=bind, id=id, children=list(children) or None), Placeholder)
-
-
-def chart(
-    value: Any = None,
-    *,
-    horizontal: bool | None = None,
-    url: str = '/assets/g2chart/index.js',
-    source: Any = None,
-    id: str | None = None,
-) -> Chart:
-    """Build a `chart` node (the wire type `chart`)."""
-    attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value, source=source))
-    return parse(drop_none(type='chart', attrs=attrs, bind=bind, id=id, url=url), Chart)
-
-
-def diagram(
-    value: Any = None,
-    *,
-    horizontal: bool | None = None,
-    id: str | None = None,
-) -> Diagram:
-    """Build a `diagram` node (the wire type `diagram`)."""
-    attrs = drop_none(horizontal=horizontal)
-    bind = drop_none(value=bind_value(default=value))
-    return parse(drop_none(type='diagram', attrs=attrs, bind=bind, id=id), Diagram)
+    return parse(drop_none(type='frame', attrs=attrs, bind=bind, id=id, children=list(children) or None), Frame)
 
 
 def canvas(
@@ -65,6 +28,7 @@ def canvas(
     *,
     height: str | None = None,
     width: str | None = None,
+    options: Any = None,
     url: str = None,
     source: Any = None,
     id: str | None = None,
@@ -72,22 +36,7 @@ def canvas(
     """Build a `canvas` node (the wire type `canvas`)."""
     attrs = drop_none(height=height, width=width)
     bind = drop_none(value=bind_value(default=value, source=source))
-    return parse(drop_none(type='canvas', attrs=attrs, bind=bind, id=id, url=url), Canvas)
-
-
-def editor(
-    value: Any = None,
-    *,
-    height: str | None = None,
-    width: str | None = None,
-    url: str = '/assets/editor/index.js',
-    source: Any = None,
-    id: str | None = None,
-) -> Editor:
-    """Build a `editor` node (the wire type `editor`)."""
-    attrs = drop_none(height=height, width=width)
-    bind = drop_none(value=bind_value(default=value, source=source))
-    return parse(drop_none(type='editor', attrs=attrs, bind=bind, id=id, url=url), Editor)
+    return parse(drop_none(type='canvas', attrs=attrs, bind=bind, id=id, options=options, url=url), Canvas)
 
 
 def float(
@@ -203,13 +152,15 @@ def path(
 
 def rack(
     *,
+    horizontal: bool | None = None,
     scroll: bool = False,
+    view: RackView | None = None,
     source: Any = None,
     item: Any = None,
     id: str | None = None,
 ) -> Rack:
     """Build a `rack` node (the wire type `rack`)."""
-    attrs = drop_none(scroll=scroll)
+    attrs = drop_none(horizontal=horizontal, scroll=scroll, view=view)
     bind = drop_none(value=bind_value(source=source))
     return parse(drop_none(type='rack', attrs=attrs, bind=bind, id=id, item=list(item) if item else None), Rack)
 

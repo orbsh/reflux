@@ -85,7 +85,7 @@ class TestDuplicateIds(unittest.TestCase):
 
     def test_one_id_twice_in_a_tree_is_refused(self) -> None:
         with self.assertRaises(ValueError):
-            wire.create(b.case(b.text("a", id="row-1"), b.text("b", id="row-1")))
+            wire.create(b.frame(b.text("a", id="row-1"), b.text("b", id="row-1")))
 
     def test_the_same_check_reaches_a_row_template(self) -> None:
         with self.assertRaises(ValueError):
@@ -97,8 +97,8 @@ class TestDuplicateIds(unittest.TestCase):
             wire.set("rows", [{"id": "same"}, {"id": "same"}])  # type: ignore[arg-type]
 
     def test_unique_ids_pass_and_rows_without_ids_are_legal(self) -> None:
-        wire.create(b.case(b.text("a", id="row-1"), b.text("b", id="row-2")))
-        wire.create(b.case(b.text("a"), b.text("b")))  # 位置行：没有身份，合法
+        wire.create(b.frame(b.text("a", id="row-1"), b.text("b", id="row-2")))
+        wire.create(b.frame(b.text("a"), b.text("b")))  # 位置行：没有身份，合法
 
 
 class TestSlowClient(unittest.TestCase):

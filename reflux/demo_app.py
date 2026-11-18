@@ -127,7 +127,7 @@ class Demo:
                 dest=ctx.slot(LOGIN),
                 id="login",
             ),
-            b.placeholder(source=ctx.slot(AUTH_SLOT), id="auth-region"),
+            b.frame(source=ctx.slot(AUTH_SLOT), id="auth-region"),
             # Behind a declaration: a click here from a visitor never reaches the handler.
             b.form(b.button("私密"), dest=ctx.slot("vault.secret"), id="vault"),
             b.text(source=slots.secret, id="secret"),
@@ -183,7 +183,7 @@ def demo_view(ctx, state):
     lines = [b.text("演示登录", variant="heading-1")]
     if state == "refused":
         lines.append(b.text("用户或密码不对", variant="muted"))
-    return b.case(
+    return b.frame(
         *lines,
         b.form(
             b.input(field="user", id="auth-user"),

@@ -50,7 +50,7 @@ class TestTheFrame(unittest.TestCase):
     def test_a_legal_frame_passes_untouched(self) -> None:
         good = frame(
             wire.tmpl("t1", '{"type":"text"}'),
-            wire.create(b.case(b.text("hi", id="a"), b.rack(source=Slot("rows")))),
+            wire.create(b.frame(b.text("hi", id="a"), b.rack(source=Slot("rows")))),
             wire.append("rows", b.text("row", id="r1")),
             wire.inject("chan", {"v": 1}),
         )
@@ -173,7 +173,7 @@ class TestTheNode(unittest.TestCase):
         refused(self, frame(hand("create", {"type": "input", "kind": "nope"})), "frame[0] (create).data")
 
     def test_a_defect_deep_in_the_tree_names_its_path(self) -> None:
-        bad = {"type": "case", "children": [{"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}}, {"type": "nope"}]}
+        bad = {"type": "frame", "children": [{"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}}, {"type": "nope"}]}
         with self.assertRaises(Refused) as caught:
             ingest.check_frame(frame(hand("create", bad)))
         self.assertIn("children[1]", str(caught.exception))
