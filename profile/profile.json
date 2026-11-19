@@ -17,16 +17,19 @@
     "             `false`/absent means the renderer does not read or write that direction for this type,",
     "             so the builder offers no keyword for it — a channel a type does not accept is a frame",
     "             error on the wire, and an uncallable keyword on this side. Verified in ui_leptos.",
-    "values:      the node's own named second values (select.options, pages.select, input.placeholder):",
+    "values:      the node's own named second values (select.options, input.placeholder):",
     "             not channels — each is one named field of its type, and takes the same Bind-or-value.",
+    "selector:    a name the renderer addresses a node by, and pure data here: a `record`'s field is",
+    "             named by its child's `attrs.selector`, and a `tiles` header/column by theirs. That is",
+    "             why `selector` is a builder keyword — the wire would otherwise have no way to say a",
+    "             field's name. `class` stays hidden: the token lane is the only path to a class.",
     "submit:      a bundle's timing (ADR 0032) is a plain attribute, not a channel: `enter|button|change`,",
     "             a bare string or a list on the wire, absent = [enter]. The builder takes either spelling.",
     "tokens:      enum value -> class token, filled in when the styling layer lands (M1). Until then the",
     "             builders offer no class strings at all — the producer cannot reach a free class."
   ],
   "hidden_attrs": [
-    "class",
-    "selector"
+    "class"
   ],
   "kwarg_renames": {
     "type": "kind"
@@ -114,27 +117,23 @@
         "default": true
       }
     },
-    "rack": {
+    "tiles": {
       "expose": true,
-      "positional": null,
-      "children": false,
-      "item": true,
-      "channels": {
-        "source": true,
-        "sink": false,
-        "default": false
-      }
-    },
-    "pages": {
-      "expose": true,
-      "positional": null,
-      "children": false,
+      "positional": "children",
+      "children": true,
       "item": false,
       "channels": {
         "source": true,
         "sink": false,
         "default": false
       }
+    },
+    "record": {
+      "expose": true,
+      "positional": "children",
+      "children": true,
+      "item": false,
+      "channels": {}
     },
     "button": {
       "expose": true,
@@ -179,48 +178,6 @@
         "sink": true,
         "default": true
       }
-    },
-    "table": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "channels": {}
-    },
-    "thead": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "channels": {}
-    },
-    "tbody": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "channels": {}
-    },
-    "tr": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "channels": {}
-    },
-    "th": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "channels": {}
-    },
-    "td": {
-      "expose": true,
-      "positional": "children",
-      "children": true,
-      "item": false,
-      "channels": {}
     },
     "text": {
       "expose": true,

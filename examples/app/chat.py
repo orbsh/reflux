@@ -123,7 +123,7 @@ def page(ctx: Context, match: Match) -> None:
         b.frame(
             b.text("对话", variant="heading-1"),
             b.text(source=slots.status, variant="muted", id="status"),
-            b.rack(source=slots.messages, scroll=True, id="messages"),
+            b.tiles(source=slots.messages, id="messages"),
             b.frame(
                 b.bundle(
                     b.input(tag="text", id="composer"),

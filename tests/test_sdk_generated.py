@@ -14,8 +14,9 @@ What this file pins, and why each one is here rather than assumed:
   `scope` (ADR 0031 made the scope a closed set; an open one is what that ADR retires).
 - `source` / `sink` are typed `Bind`s (one plain model, not a free-form map) and `PanelAttr`'s
   flattened keys survive a round trip — both were silently dropped by the raw output.
-- the profile's keys are exactly the schema's 25 types, the builders expose exactly the profile's
-  exposed set, the hidden attributes are unreachable, and every builder's defaults are the schema's.
+- the profile's keys are exactly the schema's 18 types, the builders expose exactly the profile's
+  exposed set, the hidden attribute (`class`) is unreachable, and every builder's defaults are the
+  schema's.
 """
 
 from __future__ import annotations
@@ -95,7 +96,7 @@ class UnionTest(unittest.TestCase):
 
     def test_the_regression_the_codegen_had(self):
         """`{"type": "panel"}` used to land on a synthesised copy; the tag is what makes this true."""
-        for const, cls in (("frame", "Frame"), ("panel", "Panel"), ("rack", "Rack"),
+        for const, cls in (("frame", "Frame"), ("panel", "Panel"), ("tiles", "Tiles"),
                            ("select", "Select"), ("dock", "Dock"), ("svg", "Svg")):
             with self.subTest(type=const):
                 node = sdk.parse({"type": const, "children": []})
@@ -152,11 +153,12 @@ class ProfileTest(unittest.TestCase):
         for const in exposed:
             self.assertTrue(callable(getattr(sdk, const)), const)
 
-    def test_hidden_attrs_are_unreachable(self):
+    def test_the_hidden_attr_is_unreachable(self):
+        # `class` only reaches the wire through the token lane (`variant=`); there is no free string.
         with self.assertRaises(TypeError):
             sdk.text("x", class_=["free-form"])
-        with self.assertRaises(TypeError):
-            sdk.text("x", selector="#nope")
+        # `selector` is not hidden: ADR 0031 §4 makes it a record field's name, so it is data.
+        self.assertEqual(sdk.dump(sdk.text("x", selector="name"))["attrs"], {"selector": "name"})
 
     def test_the_token_lane_is_a_closed_set_of_names(self):
         """`variant=` is a name the profile declares; the class behind it is the profile's."""
@@ -229,7 +231,7 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(sdk.dump(sdk.button("提交", sink=Slot("submit")))["sink"],
                          {"scope": "remote", "slot": "submit"})
         # A channel a type does not accept is not a keyword of its builder — refused where it is built.
-        for call in (lambda: sdk.text(sink="x"), lambda: sdk.bundle(source="x"), lambda: sdk.table(sink="x")):
+        for call in (lambda: sdk.text(sink="x"), lambda: sdk.bundle(source="x"), lambda: sdk.tiles(sink="x")):
             with self.assertRaises(TypeError):
                 call()
 
@@ -269,12 +271,38 @@ class ProfileTest(unittest.TestCase):
         with self.assertRaises(pydantic.ValidationError):
             sdk.text(source=sdk.Bind(kind="local", slot="chan"))
 
-    def test_children_and_item_come_through(self):
+    def test_children_come_through(self):
         node = sdk.frame(sdk.text("a"), sdk.text("b"))
         self.assertEqual([n["type"] for n in sdk.dump(node)["children"]], ["text", "text"])
         self.assertIsNone(sdk.dump(sdk.frame()).get("children"))  # an empty container is noise, not a frame
-        rack = sdk.rack(source=Slot("rows"), item=[sdk.text("row")])
-        self.assertEqual(len(sdk.dump(rack)["item"]), 1)
+        grid = sdk.tiles(sdk.record(sdk.text("a", selector="name")), columns=[{"key": "name"}],
+                         source=Slot("rows"))
+        wire = sdk.dump(grid)
+        self.assertEqual([n["type"] for n in wire["children"]], ["record"])
+        self.assertEqual(wire["children"][0]["children"][0]["attrs"], {"selector": "name"})
+
+    def test_a_grid_is_tiles_with_typed_attrs(self):
+        """ADR 0031 §4: `columns` projects a record's fields, `stage`/`step`/`header` are their own shapes."""
+        node = sdk.tiles(
+            stage="all",
+            step={"timer": 4000},
+            header={"selector": "grid-head", "rows": 2},
+            columns=[{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
+        )
+        self.assertEqual(sdk.dump(node)["attrs"], {
+            "columns": [{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
+            "header": {"rows": 2, "selector": "grid-head"},
+            "stage": "all",
+            "step": {"timer": 4000},
+        })
+        # The stepper's other arm, and the closures: a bad stage or alignment is refused at construction.
+        self.assertEqual(sdk.dump(sdk.tiles(stage="one", step={"slot": "page"}))["attrs"],
+                         {"stage": "one", "step": {"slot": "page"}})
+        for bad in (lambda: sdk.tiles(stage="both"), lambda: sdk.tiles(step={"ticks": 1}),
+                    lambda: sdk.tiles(columns=[{"key": "a", "align": "middle"}]),
+                    lambda: sdk.tiles(header={"selector": "h", "rows": 3})):
+            with self.assertRaises(pydantic.ValidationError):
+                bad()
 
 
 def _refs(node: dict) -> list[str]:

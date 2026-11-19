@@ -11,7 +11,7 @@
 - `parse` validates a node; `dump` turns a built node back into the wire's dict.
 
 The constructors are named after the wire's own `type` values, because the vocabulary has exactly
-one source: `frame`, `text`, `input`, `rack`, … Nothing here invents a second name for a node.
+one source: `frame`, `text`, `input`, `tiles`, … Nothing here invents a second name for a node.
 """
 
 from __future__ import annotations

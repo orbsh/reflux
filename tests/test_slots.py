@@ -111,20 +111,20 @@ class TheAddressesInNodes(unittest.TestCase):
         self.assertEqual(dump(b.bundle(sink="chat.send"))["sink"], {"scope": "remote", "slot": "chat.send"})
 
     def test_a_read_with_no_constant_refuses_a_bare_string(self) -> None:
-        # A `rack` has no `default` in the profile: a bare value there is neither a constant nor a
+        # A `tiles` has no `default` in the profile: a bare value there is neither a constant nor a
         # name, so the builder refuses instead of guessing which one was meant.
-        for build in (lambda: b.rack(source="rows"), lambda: b.frame(source="rows")):
+        for build in (lambda: b.tiles(source="rows"), lambda: b.frame(source="rows")):
             with self.assertRaises(TypeError):
                 build()
 
     def test_the_message_says_where_the_handle_comes_from(self) -> None:
         with self.assertRaises(TypeError) as caught:
-            b.rack(source="rows")
+            b.tiles(source="rows")
         self.assertIn("ctx.slot('rows')", str(caught.exception))
 
     def test_a_slot_with_no_delivery_can_name_but_not_write(self) -> None:
         handle = Slot("rows")
-        self.assertEqual(b.rack(source=handle).source.slot, "rows")
+        self.assertEqual(b.tiles(source=handle).source.slot, "rows")
         with self.assertRaises(RuntimeError):
             handle.append(b.text("row"))
 

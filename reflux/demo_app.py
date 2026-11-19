@@ -5,9 +5,9 @@
 Four things, one per shape a page needs to be an application:
 
 - **an echo** — an `input` uplinks its buffer on Enter, a `text` reads the slot the handler writes;
-- **a list** — rows live in the `rows` slot and a `rack` shows it; each row's remove button carries
+- **a list** — rows live in the `rows` slot and a `tiles` shows it; each row's remove button carries
   the row's own identity up, and `remove` takes it back by identity. A row is also a `grab`: drag it
-  onto the `dock` below the rack and the landing point uplinks `{kind, payload}` — the payload is
+  onto the `dock` below the tiles and the landing point uplinks `{kind, payload}` — the payload is
   the row's id, so the archive handler resolves it the way the drag never could (the gesture itself
   reports nothing: only the landing point does);
 - **a bundle** — one submit carries every field it packs (`{tag: value, …}`, ADR 0032) — and it is
@@ -56,7 +56,7 @@ class DemoSlots(Protocol):
     """The reference app's slots, for the editor — the runtime only ever sees the names."""
 
     echo: Slot  # what the input last carried
-    rows: Slot  # the list the rack reads
+    rows: Slot  # the list the tiles node reads
     archived: Slot  # what the last drop archived — a text slot, written by the dock's handler
     secret: Slot  # only a signed-in click writes it; every anonymous draw clears it
     # (the login form's answer is the framework's: it lands in the reserved `auth` region)
@@ -138,7 +138,7 @@ class Demo:
             b.text(source=slots.echo, id="echo"),
             b.bundle(b.button("加一行", sink=ctx.slot.row.add), sink=ctx.slot.row.add,
                      submit=["button"], id="add-row"),
-            b.rack(source=slots.rows, id="rows"),
+            b.tiles(source=slots.rows, id="rows"),
             # The landing point names its event and what it accepts; `accept` is a closed set, so a
             # grab of any other kind is refused without a frame.
             b.dock(b.text("拖一行到这里归档"), accept=["row"], sink=ctx.slot("row.archive"), id="archive"),

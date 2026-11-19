@@ -36,7 +36,10 @@ PROFILE_PATH = ROOT / "profile" / "profile.json"
 TYPES_PATH = ROOT / "reflux" / "sdk" / "types.py"
 
 SHARED_FIELDS = {"type", "attrs", "source", "sink", "children", "item", "id"}
-HIDDEN_ATTRS = {"class", "selector"}
+# `class` is the token lane's alone: a producer reaches a class by name (`variant=`), never by
+# string. `selector` is *not* here — since ADR 0031 §4 it is the name of a `record`'s field, so it
+# is data a producer must be able to write.
+HIDDEN_ATTRS = {"class"}
 # The two directions, in flow order: in, then out (ADR 0031 §2).
 CHANNELS = ("source", "sink")
 
@@ -226,6 +229,64 @@ def is_string_set(fragment: dict, defs: dict) -> bool:
     return kinds[0] is not None and kinds[0] == kinds[1]
 
 
+def _string_domain(fragment: dict, defs: dict) -> bool:
+    """Is this a closed set of strings — an `enum`, or a `oneOf` of string consts (`DockExpand`)?"""
+    if _enum_of(fragment, defs) is not None:
+        return True
+    name = (fragment.get("$ref") or "").rsplit("/", 1)[-1]
+    target = defs.get(name) or {}
+    branches = target.get("anyOf") or target.get("oneOf") or []
+    return bool(branches) and all(b.get("type") == "string" and "const" in b for b in branches)
+
+
+def json_alt(fragment: dict, defs: dict) -> str | None:
+    """The wire's own JSON spelling of a keyword the type layer types as a model or an enum.
+
+    `stage: all`, `step: {timer: 4000}`, `header: {selector, rows}`, `columns: [{key}]` are what the
+    schema, the ADR's YAML and every hand-written frame say. The builder validates through pydantic,
+    which takes either the generated model or its JSON — so the annotation has to offer both, or a
+    type checker refuses the documented call. This is `SubmitSet`'s lesson (`submit: enter` next to
+    `submit: [enter]`) applied to the rest of the attribute surface; the Rust emitter has always
+    shipped these as `&str` / `Value` for the same reason.
+    """
+    if _string_domain(fragment, defs):
+        return "str"
+    for key in ("anyOf", "oneOf"):
+        if key in fragment:
+            # A nullable union is one shape with `None` beside it: widen the shape, not the union.
+            rest = [b for b in fragment[key] if b.get("type") != "null"]
+            return json_alt(rest[0], defs) if len(rest) == 1 else None
+    name = (fragment.get("$ref") or "").rsplit("/", 1)[-1]
+    target = defs.get(name) or {}
+    if fragment.get("properties") or target.get("properties"):
+        return "dict[str, Any]"
+    branches = target.get("anyOf") or target.get("oneOf") or []
+    if branches and all(json_alt(branch, defs) == "dict[str, Any]" for branch in branches):
+        return "dict[str, Any]"  # `Step`'s `{timer}` / `{slot}` arms
+    t = fragment.get("type")
+    if t == "array" or (isinstance(t, list) and "array" in t):
+        return json_alt(fragment.get("items") or {}, defs)
+    return None
+
+
+def with_alt(annotation_text: str, alt: str) -> str:
+    """`list[Column] | None` + `dict[str, Any]` → `list[Column | dict[str, Any]] | None`.
+
+    The alternative goes *inside* the list (a caller passes a list of dicts) and before the
+    nullability (which stays last, where a reader expects it).
+    """
+    suffix = " | None"
+    trailing = suffix if annotation_text.endswith(suffix) else ""
+    core = annotation_text[: -len(suffix)] if trailing else annotation_text
+    head = "list["
+    if core.startswith(head):
+        close = core.index("]")
+        core = f"{head}{core[len(head):close]} | {alt}]{core[close + 1:]}"
+    else:
+        core = f"{core} | {alt}"
+    return core + trailing
+
+
 def keyword_type(fragment: dict, defs: dict) -> tuple[str, str]:
     """(the keyword's annotation, the second language's kind) for a node or attrs field.
 
@@ -237,6 +298,9 @@ def keyword_type(fragment: dict, defs: dict) -> tuple[str, str]:
     if is_string_set(fragment, defs):
         return "list[str] | str | None", "strlist"
     annotation_text = annotation(fragment)
+    alt = json_alt(fragment, defs)
+    if alt is not None:
+        annotation_text = with_alt(annotation_text, alt)
     if literal(fragment) is None and "None" not in annotation_text:
         annotation_text = f"{annotation_text} | None"
     return annotation_text, rkind(fragment, defs)

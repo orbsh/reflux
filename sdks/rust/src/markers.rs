@@ -21,7 +21,8 @@ pub const PAGE_ID: &str = "page-root";
 /// The address the page is showing. The runtime copies it into the address bar.
 pub fn path_marker(path: &str) -> Value {
     frame(
-        &[text(Some(path), None, None, None, None, None, None)],
+        &[text(Some(path), None, None, None, None, None)],
+        None,
         None,
         None,
         None,
@@ -33,7 +34,8 @@ pub fn path_marker(path: &str) -> Value {
 /// The page's title. The runtime copies it into `document.title`.
 pub fn title_marker(title: &str) -> Value {
     frame(
-        &[text(Some(title), None, None, None, None, None, None)],
+        &[text(Some(title), None, None, None, None, None)],
+        None,
         None,
         None,
         None,
@@ -46,7 +48,8 @@ pub fn title_marker(title: &str) -> Value {
 /// An empty marker is a statement too: it is how a logout reaches the browser's storage.
 pub fn token_marker(token: &str) -> Value {
     frame(
-        &[text(Some(token), None, None, None, None, None, None)],
+        &[text(Some(token), None, None, None, None, None)],
+        None,
         None,
         None,
         None,
@@ -59,5 +62,5 @@ pub fn token_marker(token: &str) -> Value {
 pub fn page(path: &str, title: &str, children: &[Value]) -> Value {
     let mut nodes = vec![path_marker(path), title_marker(title)];
     nodes.extend_from_slice(children);
-    frame(&nodes, None, None, None, Some(PAGE_ID), None)
+    frame(&nodes, None, None, None, None, Some(PAGE_ID), None)
 }

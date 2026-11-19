@@ -72,8 +72,8 @@ def _unique_ids(node: Any, where: str, seen: dict[str, str]) -> None:
 
     A list renders by key, so two nodes sharing an id make the renderer drop or reuse a row; a
     frame is cheaper to refuse here than to debug in a page. Ids ride `children` (every container)
-    and `item` (a rack's row template) and nowhere else: `attrs` and the value channels (`source`,
-    `sink`) hold values, not nodes.
+    — and `item`, the template lane, if a type ever declares one — and nowhere else: `attrs` and the
+    value channels (`source`, `sink`) hold values, not nodes.
     """
     if not isinstance(node, dict):
         return

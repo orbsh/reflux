@@ -90,14 +90,34 @@ NODES: dict[str, dict] = {
     "svg": {"type": "svg", "children": [text("svg")]},
     "group": {"type": "group", "children": [text("group")]},
     "path": {"type": "path", "source": {"default": "M0 0 L1 1"}},
-    "rack": {"type": "rack", "item": [text("row")], "source": {"slot": "rows"}},
-    # `source` is the list of page rows (key = row id); `select` is the vals plane, and because the
-    # uplink lands the Outflow wrapper there (`{event, data}`) the key is read through `path`.
-    "pages": {
-        "type": "pages",
-        "display": "render",
-        "source": {"slot": "sel"},
-        "select": {"slot": "pages-key", "scope": "local", "path": "/data"},
+    # ADR 0031 §4: `rack` and `pages` are this one node with different steppers (`stage`/`step`), and
+    # the table family is *not* markup here — `columns` makes each item a `record` whose fields are
+    # named by their own `attrs.selector`. The header is a hook (one selector for the whole row).
+    "tiles": {
+        "type": "tiles",
+        "attrs": {
+            "columns": [{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
+            "header": {"selector": "gate-grid-head", "rows": 1},
+            "stage": "all",
+            "step": {"timer": 4000},
+        },
+        "source": {"slot": "rows"},
+        "children": [
+            {
+                "type": "record",
+                "attrs": {"selector": "gate-row"},
+                "children": [
+                    text("name", attrs={"selector": "name"}),
+                    text("1", attrs={"selector": "qty"}),
+                ],
+            }
+        ],
+    },
+    # A record is one item of a grid: named fields, each a child whose `selector` is the field's name.
+    # No `id` here — an item that does not name itself is keyed by where it arrived (ADR 0031 §4).
+    "record": {
+        "type": "record",
+        "children": [text("record-field", attrs={"selector": "name"})],
     },
     # A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind).
     "button": {"type": "button", "source": {"default": "提交"}, "sink": {"slot": "submit"}},
@@ -113,18 +133,6 @@ NODES: dict[str, dict] = {
         "options": {"slot": "opts"},
         "source": {"default": "a"},
     },
-    "table": {
-        "type": "table",
-        "children": [
-            {"type": "thead", "children": [{"type": "tr", "children": [{"type": "th", "children": [text("head")]}]}]},
-            {"type": "tbody", "children": [{"type": "tr", "children": [{"type": "td", "children": [text("cell")]}]}]},
-        ],
-    },
-    "thead": {"type": "thead", "children": [text("thead")]},
-    "tbody": {"type": "tbody", "children": [text("tbody")]},
-    "tr": {"type": "tr", "children": [text("tr")]},
-    "th": {"type": "th", "children": [text("th")]},
-    "td": {"type": "td", "children": [text("td")]},
     "text": text("text"),
 }
 

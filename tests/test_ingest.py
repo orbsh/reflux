@@ -50,7 +50,7 @@ class TestTheFrame(unittest.TestCase):
     def test_a_legal_frame_passes_untouched(self) -> None:
         good = frame(
             wire.tmpl("t1", '{"type":"text"}'),
-            wire.create(b.frame(b.text("hi", id="a"), b.rack(source=Slot("rows")))),
+            wire.create(b.frame(b.text("hi", id="a"), b.tiles(source=Slot("rows")))),
             wire.append("rows", b.text("row", id="r1")),
             wire.inject("chan", {"v": 1}),
         )
@@ -114,17 +114,20 @@ class TestTheNode(unittest.TestCase):
     def test_an_unknown_field(self) -> None:
         refused(self, frame(hand("create", {"type": "text", "name": "x"})), "'name' is not a field of 'text'")
 
-    def test_attributes_are_the_schemas_minus_the_hidden_ones(self) -> None:
-        # `selector` exists in accrete and stays out of a producer's reach for every type; `class`
-        # is out too, except as the token lane (next test) — `text` has variants, so a stray name
-        # is refused by the token check, and a type without any has no `class` key at all.
+    def test_class_is_the_only_hidden_attribute(self) -> None:
+        # `class` reaches the wire only as the token lane (next test) — `text` has variants, so a
+        # stray name is refused by the token check, and a type without any has no `class` key at all.
         refused(self, frame(hand("create", {"type": "text", "attrs": {"class": ["x"]}})), "'x' is not a token of 'text'")
-        refused(self, frame(hand("create", {"type": "text", "attrs": {"selector": "x"}})), "'selector' is not an attribute")
         refused(
             self,
             frame(hand("create", {"type": "text", "attrs": {"format": "x", "nope": 1}})),
             "'nope' is not an attribute",
         )
+        # `selector` is *not* hidden: a record names its fields with it (ADR 0031 §4), so a grid
+        # written by hand passes the same boundary the builders go through.
+        ingest.check_frame(frame(hand("create", {"type": "record", "children": [
+            {"type": "text", "attrs": {"selector": "name"}, "source": {"default": "a"}},
+        ]})))
 
     def test_a_leaked_python_spelling_is_refused(self) -> None:
         # `class_` is the model's name for the wire's `class`; the renderer's serde would drop it.

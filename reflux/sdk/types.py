@@ -9,8 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["ButtonAttr", "ClassAttr", "Direction", "DockExpand", "FrameAttr", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PagesDisplay", "PanelPlace", "PanelState", "RackDirection", "RackEnter", "RackLayout", "RackPause", "RackPlay1", "RackPlay", "RackScroll", "RackView", "SizeAttr", "StyleAttr", "SubmitMode", "SubmitSet", "Template", "TextAttr", "Theme1", "Theme", "Bind", "BundleAttr", "Button", "Canvas", "DockAttr", "ForceGraphStyle", "Image", "Input", "Pages", "PanelAttr", "Path", "RackAttr", "Text", "ForceGraph", "Bundle", "Dock", "Frame", "Grab", "Group", "Panel", "Rack", "Select", "Svg", "Table", "Tbody", "Td", "Th", "Thead", "Tr", "Accrete", "Scope"]
+__all__ = ["Align", "ButtonAttr", "ClassAttr", "Column", "Direction", "DockExpand", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "SizeAttr", "Stage", "Step1", "Step2", "Step", "StyleAttr", "SubmitMode", "SubmitSet", "Template", "TextAttr", "Theme1", "Theme", "TilesAttr", "Bind", "BundleAttr", "Button", "Canvas", "DockAttr", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "ForceGraph", "Bundle", "Dock", "Frame", "Grab", "Group", "Panel", "Record", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
+
+
+class Align(Enum):
+    start = 'start'
+    center = 'center'
+    end = 'end'
 
 
 class ButtonAttr(BaseModel):
@@ -26,6 +32,22 @@ class ClassAttr(BaseModel):
         description='容器自身的排布方向（同 FrameAttr 字段；ADR 0010 缺陷修复：\n此前只有 Case 认识 horizontal，select/rack 的 col 类无法被\n自己的 attrs 推翻——父 case 的 horizontal 只管父 div）。',
     )
     selector: str | None = None
+
+
+class Column(BaseModel):
+    align: Align | None = None
+    key: str
+    selectors: list[str] | None = Field(
+        None,
+        description="Extra class tokens for this column's cells: a column is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
+    )
+    title: str | None = Field(
+        None, description="The header text; absent falls back to the key's leaf."
+    )
+    width: str | None = Field(
+        None,
+        description='A CSS track size (`12rem`, `minmax(0, 2fr)`); absent is `minmax(0, 1fr)`.',
+    )
 
 
 class Direction(Enum):
@@ -45,6 +67,14 @@ class FrameAttr(BaseModel):
     grid: dict[str, Any] | None = None
     horizontal: bool | None = None
     selector: str | None = None
+
+
+class Header(BaseModel):
+    rows: conint(ge=1, le=2) | None = Field(
+        None,
+        description='`1` (default) or `2`. Anything else is a frame error at load, not a layout surprise.',
+    )
+    selector: str
 
 
 class ImageAttr(BaseModel):
@@ -76,11 +106,6 @@ class LinkShape(RootModel[LinkShape1 | Literal['axes'] | Literal['tetra']]):
     )
 
 
-class PagesDisplay(Enum):
-    render = 'render'
-    dom = 'dom'
-
-
 class PanelPlace(Enum):
     inline = 'inline'
     anchor = 'anchor'
@@ -92,74 +117,31 @@ class PanelState(Enum):
     bound = 'bound'
 
 
-class RackDirection(Enum):
-    vertical = 'vertical'
-    horizontal = 'horizontal'
-
-
-class RackEnter(Enum):
-    none = 'none'
-    fade = 'fade'
-    translate = 'translate'
-
-
-class RackLayout(Enum):
-    adaptive = 'adaptive'
-    fixed = 'fixed'
-    exclusive = 'exclusive'
-
-
-class RackPause(Enum):
-    off = 'off'
-    click = 'click'
-    hover = 'hover'
-
-
-class RackPlay1(Enum):
-    newest = 'newest'
-    rotate = 'rotate'
-
-
-class RackPlay(RootModel[RackPlay1 | Literal['dwell']]):
-    root: RackPlay1 | Literal['dwell'] = Field(
-        ...,
-        description="Who decides which row is current: the newest one (as before), or a rotation of the renderer's.",
-    )
-
-
-class RackScroll(Enum):
-    none = 'none'
-    bar = 'bar'
-    indicator = 'indicator'
-    arrow = 'arrow'
-
-
-class RackView(BaseModel):
-    count: conint(ge=0) | None = Field(
-        None, description='`fixed` 露出几行；其余布局不看这个数。'
-    )
-    direction: RackDirection | None = RackDirection('vertical')
-    enter: RackEnter | None = RackEnter('none')
-    enter_ms: conint(ge=0) | None = Field(
-        None,
-        description="How long `enter` and `leave` take, in ms. Absent = 350, the number the CSS was written\nwith; the renderer only ever writes them through the container's custom properties, so how\na row moves is still CSS's business (ADR 0024).",
-    )
-    every: conint(ge=0) | None = Field(
-        None,
-        description='一行在台上待多久（毫秒）：`rotate` 的一步（然后轮到下一行），`dwell` 的全部（到点就下台）。\n缺席 = 4000，渲染器另有下限 200。',
-    )
-    layout: RackLayout | None = RackLayout('adaptive')
-    leave_ms: conint(ge=0) | None = None
-    pause: RackPause | None = RackPause('off')
-    play: RackPlay | None = Field('newest', validate_default=True)
-    scroll: RackScroll | None = RackScroll('none')
-
-
 class SizeAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
     height: str | None = None
     selector: str | None = None
     width: str | None = None
+
+
+class Stage(Enum):
+    all = 'all'
+    one = 'one'
+
+
+class Step1(BaseModel):
+    timer: conint(ge=0)
+
+
+class Step2(BaseModel):
+    slot: str
+
+
+class Step(RootModel[Step1 | Step2]):
+    root: Step1 | Step2 = Field(
+        ...,
+        description='What advances the stage (ADR 0031 §4). Exactly two answers, because there are exactly two ways\nan item gets there: a clock this node owns, or a slot the world writes. Omitted = no stepping.',
+    )
 
 
 class StyleAttr(BaseModel):
@@ -201,6 +183,23 @@ class Theme(RootModel[Theme1 | Literal['dark']]):
     root: Theme1 | Literal['dark'] = Field(
         ...,
         description='图所在的底色。两套配色只差明度：莫兰迪色低彩度，同一套色在浅底上够\n对比就会在深底上糊成一团，反之亦然。',
+    )
+
+
+class TilesAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    columns: list[Column] | None = Field(
+        None,
+        description='Absent = each item is a node drawn as it is, one block per item. Present = each item is a\nRECORD and each column projects one of its fields into a cell (ADR 0031 §4).',
+    )
+    header: Header | None = Field(
+        None,
+        description='Absent = no header row. The cells carry `selector`, so the frame styles its own header.',
+    )
+    selector: str | None = None
+    stage: Stage | None = None
+    step: Step | None = Field(
+        None, description='Absent = nothing steps: every item stays where it is.'
     )
 
 
@@ -343,17 +342,6 @@ class Input(BaseModel):
     type: Literal['input'] = 'input'
 
 
-class Pages(BaseModel):
-    attrs: ClassAttr | None = None
-    display: PagesDisplay | None = PagesDisplay('render')
-    id: str | None = None
-    select: Bind | None = Field(
-        None, description='Second value (ADR 0031 §2 named field): the selected key.'
-    )
-    source: Bind | None = None
-    type: Literal['pages'] = 'pages'
-
-
 class PanelAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
     direction: Direction | None = Field(
@@ -390,23 +378,6 @@ class Path(BaseModel):
     id: str | None = None
     source: Bind | None = None
     type: Literal['path'] = 'path'
-
-
-class RackAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    horizontal: bool | None = Field(
-        None,
-        description="The container's own direction. `view.direction` is what a frame should say; this field is\nwhere the renderer lands it (`use_common_css` already reads it — the same field `ClassAttr`\ngrew for the same reason).",
-    )
-    scroll: bool | None = Field(
-        False,
-        description='The old boolean scroll switch: `true` means `view.scroll = "bar"`. It stays because frames\nalready say it, and what it meant now has a finer name.',
-    )
-    selector: str | None = None
-    view: RackView | None = Field(
-        None,
-        description='How the same rows are laid down (ADR 0024). Omitted = exactly what a rack has always done.',
-    )
 
 
 class Text(BaseModel):
@@ -493,13 +464,17 @@ class Panel(BaseModel):
     type: Literal['panel'] = 'panel'
 
 
-class Rack(BaseModel):
-    attrs: RackAttr | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    item: list[Accrete] | None = None
-    source: Bind | None = None
-    type: Literal['rack'] = 'rack'
+class Record(BaseModel):
+    attrs: ClassAttr | None = None
+    children: list[Accrete] | None = Field(
+        None,
+        description="The fields. A child's `attrs.selector` is the field's name, so a column projects by that\nkey rather than by position — reordering fields cannot move a value to another column.",
+    )
+    id: str | None = Field(
+        None,
+        description='The item\'s key (ADR 0031 §4, "Every item has a key"): a record that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.',
+    )
+    type: Literal['record'] = 'record'
 
 
 class Select(BaseModel):
@@ -526,57 +501,33 @@ class Svg(BaseModel):
     type: Literal['svg'] = 'svg'
 
 
-class Table(BaseModel):
+class Tiles(BaseModel):
+    attrs: TilesAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    type: Literal['table'] = 'table'
-
-
-class Tbody(BaseModel):
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['tbody'] = 'tbody'
-
-
-class Td(BaseModel):
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['td'] = 'td'
-
-
-class Th(BaseModel):
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['th'] = 'th'
-
-
-class Thead(BaseModel):
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['thead'] = 'thead'
-
-
-class Tr(BaseModel):
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['tr'] = 'tr'
+    source: Bind | None = None
+    type: Literal['tiles'] = 'tiles'
 
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Bundle | Svg | Group | Path | Rack | Pages | Button | Image | Input | Select | Table | Thead | Tbody | Tr | Th | Td | Text | Template | Grab | Dock], Field(discriminator='type')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Bundle | Svg | Group | Path | Tiles | Record | Button | Image | Input | Select | Text | Template | Grab | Dock], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
 ButtonAttr.model_rebuild()
 ClassAttr.model_rebuild()
+Column.model_rebuild()
 FrameAttr.model_rebuild()
+Header.model_rebuild()
 ImageAttr.model_rebuild()
-RackView.model_rebuild()
 SizeAttr.model_rebuild()
+Step1.model_rebuild()
+Step2.model_rebuild()
 StyleAttr.model_rebuild()
 Template.model_rebuild()
 TextAttr.model_rebuild()
+TilesAttr.model_rebuild()
 Bind.model_rebuild()
 BundleAttr.model_rebuild()
 Button.model_rebuild()
@@ -585,10 +536,8 @@ DockAttr.model_rebuild()
 ForceGraphStyle.model_rebuild()
 Image.model_rebuild()
 Input.model_rebuild()
-Pages.model_rebuild()
 PanelAttr.model_rebuild()
 Path.model_rebuild()
-RackAttr.model_rebuild()
 Text.model_rebuild()
 ForceGraph.model_rebuild()
 Bundle.model_rebuild()
@@ -597,12 +546,7 @@ Frame.model_rebuild()
 Grab.model_rebuild()
 Group.model_rebuild()
 Panel.model_rebuild()
-Rack.model_rebuild()
+Record.model_rebuild()
 Select.model_rebuild()
 Svg.model_rebuild()
-Table.model_rebuild()
-Tbody.model_rebuild()
-Td.model_rebuild()
-Th.model_rebuild()
-Thead.model_rebuild()
-Tr.model_rebuild()
+Tiles.model_rebuild()

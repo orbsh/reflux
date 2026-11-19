@@ -108,27 +108,29 @@
       ]
     },
     {
+      "description": "One container for a slot's items (ADR 0031 §4): `stage` says how many are on it, `step`\nwhat advances it. `rack` and `pages` were the same node with different steppers.",
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "const": "rack"
+          "const": "tiles"
         }
       },
-      "$ref": "#/$defs/Rack",
+      "$ref": "#/$defs/Tiles",
       "required": [
         "type"
       ]
     },
     {
+      "description": "A record — the item a `tiles` with `columns` projects (ADR 0031 §4). Rendered on its own it\nis a block of its fields; the grid is what turns it into a row.",
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "const": "pages"
+          "const": "record"
         }
       },
-      "$ref": "#/$defs/Pages",
+      "$ref": "#/$defs/Record",
       "required": [
         "type"
       ]
@@ -190,84 +192,6 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "table"
-        }
-      },
-      "$ref": "#/$defs/Table",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "thead"
-        }
-      },
-      "$ref": "#/$defs/Thead",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "tbody"
-        }
-      },
-      "$ref": "#/$defs/Tbody",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "tr"
-        }
-      },
-      "$ref": "#/$defs/Tr",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "th"
-        }
-      },
-      "$ref": "#/$defs/Th",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "td"
-        }
-      },
-      "$ref": "#/$defs/Td",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
           "const": "text"
         }
       },
@@ -318,6 +242,15 @@
     }
   ],
   "$defs": {
+    "Align": {
+      "description": "Where a cell's content sits along its column. `start` is what a text cell already does, so it is\nthe default and stays off the wire.",
+      "type": "string",
+      "enum": [
+        "start",
+        "center",
+        "end"
+      ]
+    },
     "Bind": {
       "description": "One value, one address, one scope (ADR 0031 §1-2). `source` is where a value\nflows in, `sink` where it flows out; both are this same struct.\n\nNo `slot` means the value is a literal: `default` *is* the value (that is\nwhat the retired `kind: default` said). With a slot, `default` is what to\nuse while the slot is still empty.",
       "type": "object",
@@ -558,6 +491,52 @@
           ]
         }
       }
+    },
+    "Column": {
+      "description": "One column of a grid (ADR 0031 §4). `key` is the record field this column projects — the\n`attrs.selector` of one of the record's children — and it is also what a two-row header derives\nits group from: split on `/`, everything before the last one is the group and the rest is the leaf\n(`price/retail` sits under `price`). Formatting has no spelling yet, so it is not implemented.",
+      "type": "object",
+      "properties": {
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Align"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "selectors": {
+          "description": "Extra class tokens for this column's cells: a column is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "description": "The header text; absent falls back to the key's leaf.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "description": "A CSS track size (`12rem`, `minmax(0, 2fr)`); absent is `minmax(0, 1fr)`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "key"
+      ]
     },
     "Direction": {
       "type": "string",
@@ -983,6 +962,25 @@
         }
       }
     },
+    "Header": {
+      "description": "The header of a grid (ADR 0031 §4): the cells carry `selector` — one hook for the whole header,\nsince no header cell is a special element. `rows: 2` puts a group row over a leaf row, both read\noff the columns' keys; there is no second shape to say the same thing.",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "description": "`1` (default) or `2`. Anything else is a frame error at load, not a layout surprise.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 2,
+          "minimum": 1
+        },
+        "selector": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector"
+      ]
+    },
     "Image": {
       "type": "object",
       "properties": {
@@ -1149,67 +1147,6 @@
           "description": "正四面体：四个顶点到中心的方向。",
           "type": "string",
           "const": "tetra"
-        }
-      ]
-    },
-    "Pages": {
-      "description": "id 字典页面容器（ADR 0010）：`bind[\"value\"]`（source，list 平面）喂\n页面行——行 = 任意 Accrete 节点，其 `id` 即字典键（行身份在数据里，\n同 rack 纪律）；`bind[\"select\"]`（local 或 source，可带 `path`）是\n选中信号，tracked 读、按 path 提键（path 缺省 = 整值；提出来必须是\n字符串，否则 warn + 不切换）。命中键显示对应行，未命中 = warn + 空白。",
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ClassAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "display": {
-          "$ref": "#/$defs/PagesDisplay",
-          "default": "render"
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "select": {
-          "description": "Second value (ADR 0031 §2 named field): the selected key.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "source": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "PagesDisplay": {
-      "oneOf": [
-        {
-          "description": "只挂载命中行：切页省内存，子树状态（滚动/输入/GL）随卸载丢失。",
-          "type": "string",
-          "const": "render"
-        },
-        {
-          "description": "所有行常驻 DOM，未命中行容器加 class `hide`（display:none）：\n状态全保，代价是全部行的渲染与内存常驻（生产端自选）。",
-          "type": "string",
-          "const": "dom"
         }
       ]
     },
@@ -1444,13 +1381,14 @@
         }
       }
     },
-    "Rack": {
+    "Record": {
+      "description": "A record: named fields, each one a child node whose `attrs.selector` is the field's name\n(ADR 0031 §4 — a record is the item of a `tiles` that has `columns`).\n\nA field whose direct children are themselves records holds a LIST of records, which a grid draws\nas child rows under the row it belongs to. That is the whole of \"hierarchy instead of spans\": the\ndata already says which row a row belongs to, so the markup does not merge cells to say it again.",
       "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/RackAttr"
+              "$ref": "#/$defs/ClassAttr"
             },
             {
               "type": "null"
@@ -1458,6 +1396,7 @@
           ]
         },
         "children": {
+          "description": "The fields. A child's `attrs.selector` is the field's name, so a column projects by that\nkey rather than by position — reordering fields cannot move a value to another column.",
           "type": [
             "array",
             "null"
@@ -1467,198 +1406,11 @@
           }
         },
         "id": {
+          "description": "The item's key (ADR 0031 §4, \"Every item has a key\"): a record that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.",
           "type": [
             "string",
             "null"
           ]
-        },
-        "item": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "source": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "RackAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "horizontal": {
-          "description": "The container's own direction. `view.direction` is what a frame should say; this field is\nwhere the renderer lands it (`use_common_css` already reads it — the same field `ClassAttr`\ngrew for the same reason).",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "scroll": {
-          "description": "The old boolean scroll switch: `true` means `view.scroll = \"bar\"`. It stays because frames\nalready say it, and what it meant now has a finer name.",
-          "type": "boolean",
-          "default": false
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "view": {
-          "description": "How the same rows are laid down (ADR 0024). Omitted = exactly what a rack has always done.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RackView"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "RackDirection": {
-      "type": "string",
-      "enum": [
-        "vertical",
-        "horizontal"
-      ]
-    },
-    "RackEnter": {
-      "description": "How a row enters. Leaving is the renderer's business and needs no word from the sender.",
-      "type": "string",
-      "enum": [
-        "none",
-        "fade",
-        "translate"
-      ]
-    },
-    "RackLayout": {
-      "description": "How many rows are on stage: adaptive (the flow, as before), a fixed N, or one at a time.",
-      "type": "string",
-      "enum": [
-        "adaptive",
-        "fixed",
-        "exclusive"
-      ]
-    },
-    "RackPause": {
-      "description": "What holds the rotation still.",
-      "type": "string",
-      "enum": [
-        "off",
-        "click",
-        "hover"
-      ]
-    },
-    "RackPlay": {
-      "description": "Who decides which row is current: the newest one (as before), or a rotation of the renderer's.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "newest",
-            "rotate"
-          ]
-        },
-        {
-          "description": "Every row lives `every` ms from the moment it went on stage, then leaves — all of them are\non stage at once, unlike `rotate`, which takes turns. The row stays in the slot; only the\nstage changes, so an area that keeps its rows (a log, a management page) shows all of them.",
-          "type": "string",
-          "const": "dwell"
-        }
-      ]
-    },
-    "RackScroll": {
-      "description": "The shape of scrolling: a bar (the old `scroll: true`), indicators, arrows, or none.",
-      "type": "string",
-      "enum": [
-        "none",
-        "bar",
-        "indicator",
-        "arrow"
-      ]
-    },
-    "RackView": {
-      "description": "How a list container presents its rows: where they sit, how they come and go, who plays them. It\nchanges no data — the slot is still the truth, this only decides which rows are shown.\n\nThe six defaults together are the rack that already existed (adaptive flow, vertical, no enter\neffect, no scroll control, following the newest row, no pausing), so an old frame that says\nnothing about `view` behaves exactly as before.",
-      "type": "object",
-      "properties": {
-        "count": {
-          "description": "`fixed` 露出几行；其余布局不看这个数。",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 0
-        },
-        "direction": {
-          "$ref": "#/$defs/RackDirection",
-          "default": "vertical"
-        },
-        "enter": {
-          "$ref": "#/$defs/RackEnter",
-          "default": "none"
-        },
-        "enter_ms": {
-          "description": "How long `enter` and `leave` take, in ms. Absent = 350, the number the CSS was written\nwith; the renderer only ever writes them through the container's custom properties, so how\na row moves is still CSS's business (ADR 0024).",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "every": {
-          "description": "一行在台上待多久（毫秒）：`rotate` 的一步（然后轮到下一行），`dwell` 的全部（到点就下台）。\n缺席 = 4000，渲染器另有下限 200。",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "layout": {
-          "$ref": "#/$defs/RackLayout",
-          "default": "adaptive"
-        },
-        "leave_ms": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "pause": {
-          "$ref": "#/$defs/RackPause",
-          "default": "off"
-        },
-        "play": {
-          "$ref": "#/$defs/RackPlay",
-          "default": "newest"
-        },
-        "scroll": {
-          "$ref": "#/$defs/RackScroll",
-          "default": "none"
         }
       }
     },
@@ -1771,6 +1523,45 @@
         }
       }
     },
+    "Stage": {
+      "description": "How much of the slot a `tiles` node puts on stage (ADR 0031 §4): every item, laid out the way\nthe frame's CSS says; or one at a time, occupying the whole area — the marquee, and also the\npage. Nothing about the container changes between the two.",
+      "type": "string",
+      "enum": [
+        "all",
+        "one"
+      ]
+    },
+    "Step": {
+      "description": "What advances the stage (ADR 0031 §4). Exactly two answers, because there are exactly two ways\nan item gets there: a clock this node owns, or a slot the world writes. Omitted = no stepping.",
+      "anyOf": [
+        {
+          "description": "`{timer: 4000}` — ms between turns. One clock per node, stopped when the node goes away:\nrotation, dwell and \"newest on top\" are all this.",
+          "type": "object",
+          "properties": {
+            "timer": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "timer"
+          ]
+        },
+        {
+          "description": "`{slot: \"page\"}` — the value of that slot says which item is on stage. What a `pages` node\nwas: a selection driven from outside (a nav click, a route, another component).",
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        }
+      ]
+    },
     "StyleAttr": {
       "type": "object",
       "properties": {
@@ -1863,66 +1654,6 @@
         }
       }
     },
-    "Table": {
-      "type": "object",
-      "properties": {
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "Tbody": {
-      "type": "object",
-      "properties": {
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "Td": {
-      "type": "object",
-      "properties": {
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
     "Template": {
       "type": "object",
       "properties": {
@@ -1996,46 +1727,6 @@
         }
       }
     },
-    "Th": {
-      "type": "object",
-      "properties": {
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "Thead": {
-      "type": "object",
-      "properties": {
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
     "Theme": {
       "description": "图所在的底色。两套配色只差明度：莫兰迪色低彩度，同一套色在浅底上够\n对比就会在深底上糊成一团，反之亦然。",
       "oneOf": [
@@ -2052,9 +1743,20 @@
         }
       ]
     },
-    "Tr": {
+    "Tiles": {
+      "description": "One container for a slot's items, cut into blocks (ADR 0031 §4): `rack` and `pages` were this\nnode with different steppers. `children` is the layout a tile is drawn with — a selector picks\none template, the rest of the list is the default (the mechanism `rack.item` used to carry).",
       "type": "object",
       "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TilesAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "children": {
           "type": [
             "array",
@@ -2068,6 +1770,71 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TilesAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "columns": {
+          "description": "Absent = each item is a node drawn as it is, one block per item. Present = each item is a\nRECORD and each column projects one of its fields into a cell (ADR 0031 §4).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Column"
+          }
+        },
+        "header": {
+          "description": "Absent = no header row. The cells carry `selector`, so the frame styles its own header.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Header"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage": {
+          "$ref": "#/$defs/Stage"
+        },
+        "step": {
+          "description": "Absent = nothing steps: every item stays where it is.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Step"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
