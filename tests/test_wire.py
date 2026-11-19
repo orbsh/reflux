@@ -49,10 +49,10 @@ class TestShapes(unittest.TestCase):
         )
 
     def test_patch_defaults_to_replace(self) -> None:
-        op = wire.patch("echo", "/bind/value/default", "x")
+        op = wire.patch("echo", "/source/default", "x")
         self.assertEqual(op["action"], "patch")
         self.assertEqual(op["slot"], "echo")
-        self.assertEqual(op["path"], "/bind/value/default")
+        self.assertEqual(op["path"], "/source/default")
         self.assertEqual(op["op"], "replace")
         self.assertNotIn("id", op)
 
@@ -60,10 +60,10 @@ class TestShapes(unittest.TestCase):
         self.assertEqual(wire.patch("", "/children/0", {})["slot"], "")
 
     def test_patch_append_extends_a_string(self) -> None:
-        self.assertEqual(wire.patch("echo", "/bind/value/default", "!", op="append")["op"], "append")
+        self.assertEqual(wire.patch("echo", "/source/default", "!", op="append")["op"], "append")
 
     def test_patch_can_address_a_row(self) -> None:
-        self.assertEqual(wire.patch("rows", "/bind/value/default", "x", id="row-2")["id"], "row-2")
+        self.assertEqual(wire.patch("rows", "/source/default", "x", id="row-2")["id"], "row-2")
 
     def test_inject_writes_the_vals_plane(self) -> None:
         self.assertEqual(
@@ -98,7 +98,7 @@ class TestRefusals(unittest.TestCase):
 
     def test_an_unknown_patch_op(self) -> None:
         with self.assertRaises(ValueError):
-            wire.patch("echo", "/bind/value/default", "x", op="insert")
+            wire.patch("echo", "/source/default", "x", op="insert")
 
     def test_a_position_that_is_not_an_int(self) -> None:
         with self.assertRaises(ValueError):

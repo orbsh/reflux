@@ -118,18 +118,18 @@ class TestSlowClient(unittest.TestCase):
         slow_device = self.app.devices[slow]
         fast_device = self.app.devices[fast]
         try:
-            slow_device.emit(wire.patch("x", "/bind/value/default", "first"))  # 让 flusher 进到 send 里
+            slow_device.emit(wire.patch("x", "/source/default", "first"))  # 让 flusher 进到 send 里
             self.assertTrue(slow.inside.wait(2.0), "flusher 应当已经进到 send 里并被卡住")
 
             for i in range(12):  # 远超 outbox=4
-                slow_device.emit(wire.patch("x", "/bind/value/default", i))
+                slow_device.emit(wire.patch("x", "/source/default", i))
 
             self.assertGreaterEqual(self.app.stats["shed"], 1, "溢出必须计数")
             self.assertTrue(slow_device.stale, "丢过帧就要标记陈旧")
             self.assertLessEqual(len(slow_device.outbox), 4, "出帧队列是有界的")
 
             # 别的会话照常：慢客户端不能按住别人
-            fast_device.emit(wire.patch("y", "/bind/value/default", "ok"))
+            fast_device.emit(wire.patch("y", "/source/default", "ok"))
             deadline = time.monotonic() + 2.0
             while not fast.written and time.monotonic() < deadline:
                 time.sleep(0.01)
