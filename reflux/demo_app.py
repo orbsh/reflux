@@ -10,22 +10,21 @@ Four things, one per shape a page needs to be an application:
   onto the `dock` below the rack and the landing point uplinks `{kind, payload}` — the payload is
   the row's id, so the archive handler resolves it the way the drag never could (the gesture itself
   reports nothing: only the landing point does);
-- **a form** — one submit carries every field it holds, in the shape the renderer itself produces —
-  and it is the LOGIN form, because credentials are the framework's business: the destination is
-  `reflux:login`, the app writes only `verify` and `view`, and no password is ever read by this
-  module;
+- **a bundle** — one submit carries every field it packs (`{tag: value, …}`, ADR 0032) — and it is
+  the LOGIN bundle, because credentials are the framework's business: the exit is `reflux:login`,
+  the app writes only `verify` and `view`, and no password is ever read by this module;
 - **a gated landing point** — `vault.secret` is declared `auth=True`, so an anonymous click opens
   the login surface instead of reaching the handler, and the same click lands once signed in
   (`退出` is the way back out);
 - **two routes** — `/` and `/about`, reached by the address bar, a deep link, back/forward, or the
-  page's own navigation forms.
+  page's own navigation bundles.
 
 Two facts about this vocabulary shape the code, and both are measured by the gates:
 
-- **A `button` lives inside a `form`** (`gate_t3_next`): that is where the renderer mounts it, and a
-  form's submit is the only click that produces a frame. So "add a row", "remove a row" and "go to
-  another page" are forms, and the frame's `id` is the form's own id — which is how a row's identity
-  rides up and back.
+- **A `button` lives inside a `bundle`** (`gate_t3_next`): that is where the renderer mounts it, and
+  a bundle's `submit` is what a press sends (`submit=["button"]`). So "add a row", "remove a row" and
+  "go to another page" are one-button bundles, and the frame's `id` is the bundle's own id — which is
+  how a row's identity rides up and back.
 - **accrete has no URL-bearing type**, so there is no anchor to click and nothing to intercept: a
   page change is the producer answering with a new structure plus the new path marker (`go.home` /
   `go.about` below). The runtime mirrors that marker into the address bar.
@@ -45,7 +44,7 @@ from .auth import Auth
 from .protocol import AUTH_SLOT, LOGIN, LOGOUT
 from .routes import route
 from .sdk import builders as b
-from .sdk.types import Accrete, JsType
+from .sdk.types import Accrete, Bind, JsType
 from .slots import Slot
 
 def slots_of(ctx: Context) -> "DemoSlots":
@@ -67,9 +66,13 @@ GO_HOME, GO_ABOUT = Slot("go.home"), Slot("go.about")
 GO = {GO_HOME.name: "/", GO_ABOUT.name: "/about"}
 
 
-def nav_form(label: str, dest: Slot) -> Accrete:
-    """A one-button form — the vocabulary's only clickable, and the demo's way between pages."""
-    return b.form(b.button(label), dest=dest, id=f"nav-{dest.name}")
+def nav_bundle(label: str, dest: Slot) -> Accrete:
+    """A one-button bundle — the vocabulary's only clickable, and the demo's way between pages.
+
+    The press is the bundle's own submit: `submit=["button"]` names the click as the timing, and the
+    bundle holds the exit, so the button only says "send this group" (ADR 0032 §3).
+    """
+    return b.bundle(b.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict, ctx: Context) -> Accrete:
@@ -82,10 +85,11 @@ def row_node(row: dict, ctx: Context) -> Accrete:
     is the wire's rule; a second copy of `row-1` on the grab is refused before it leaves.
     """
     # `remove` is a verb on a slot, so this name is written with the subscript.
-    return b.form(
+    return b.bundle(
         b.grab(b.text(row["text"]), kind="row", payload={"id": row["id"]}),
-        b.button("删"),
-        dest=ctx.slot.row["remove"],
+        b.button("删", sink=ctx.slot.row["remove"]),
+        sink=ctx.slot.row["remove"],
+        submit=["button"],
         id=row["id"],
     )
 
@@ -130,29 +134,33 @@ class Demo:
         slots = slots_of(ctx)
         return [
             b.text("演示", variant="heading-1"),
-            b.input(dest=ctx.slot.name.change, id="name-input"),
+            b.input(sink=ctx.slot.name.change, id="name-input"),
             b.text(source=slots.echo, id="echo"),
-            b.form(b.button("加一行"), dest=ctx.slot.row.add, id="add-row"),
+            b.bundle(b.button("加一行", sink=ctx.slot.row.add), sink=ctx.slot.row.add,
+                     submit=["button"], id="add-row"),
             b.rack(source=slots.rows, id="rows"),
             # The landing point names its event and what it accepts; `accept` is a closed set, so a
             # grab of any other kind is refused without a frame.
-            b.dock(b.text("拖一行到这里归档"), accept=["row"], dest=ctx.slot("row.archive"), id="archive"),
+            b.dock(b.text("拖一行到这里归档"), accept=["row"], sink=ctx.slot("row.archive"), id="archive"),
             b.text(source=slots.archived, id="archived"),
             # The credential form speaks the framework's verb: this app never sees the password,
             # and the answer (a token, a signed-in line) is drawn into the reserved `auth` region.
-            b.form(
-                b.input(field="user", id="f-user"),
-                b.input(field="pass", kind=JsType.password, id="f-pass"),
-                b.button("登录"),
-                dest=ctx.slot(LOGIN),
+            b.bundle(
+                b.input(tag="user", id="f-user"),
+                b.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
+                b.button("登录", sink=ctx.slot(LOGIN)),
+                sink=ctx.slot(LOGIN),
+                submit=["enter", "button"],
                 id="login",
             ),
             b.frame(source=ctx.slot(AUTH_SLOT), id="auth-region"),
             # Behind a declaration: a click here from a visitor never reaches the handler.
-            b.form(b.button("私密"), dest=ctx.slot("vault.secret"), id="vault"),
+            b.bundle(b.button("私密", sink=ctx.slot("vault.secret")), sink=ctx.slot("vault.secret"),
+                     submit=["button"], id="vault"),
             b.text(source=slots.secret, id="secret"),
-            b.form(b.button("退出"), dest=ctx.slot(LOGOUT), id="logout"),
-            nav_form("关于", GO_ABOUT),
+            b.bundle(b.button("退出", sink=ctx.slot(LOGOUT)), sink=ctx.slot(LOGOUT),
+                     submit=["button"], id="logout"),
+            nav_bundle("关于", GO_ABOUT),
             b.text(
                 "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构"
                 "加上新的路径标记，runtime 把标记镜像进地址栏。",
@@ -164,7 +172,7 @@ class Demo:
         return [
             b.text("关于", variant="heading-1"),
             b.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
-            nav_form("回到演示", GO_HOME),
+            nav_bundle("回到演示", GO_HOME),
         ]
 
     # --- handlers: change the app's data, push exactly that change -------------------------
@@ -215,11 +223,12 @@ def demo_view(ctx, state):
         lines.append(b.text("用户或密码不对", variant="muted"))
     return b.frame(
         *lines,
-        b.form(
-            b.input(field="user", id="auth-user"),
-            b.input(field="pass", kind=JsType.password, id="auth-pass"),
-            b.button("确认登录"),
-            dest=ctx.slot(LOGIN),
+        b.bundle(
+            b.input(tag="user", id="auth-user"),
+            b.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
+            b.button("确认登录", sink=ctx.slot(LOGIN)),
+            sink=ctx.slot(LOGIN),
+            submit=["enter", "button"],
             id="auth-form",
         ),
     )

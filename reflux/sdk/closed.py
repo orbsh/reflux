@@ -27,7 +27,7 @@ from typing import Any, get_args
 from .profile import hidden_attrs, tokens
 from .types import Accrete, Bind
 
-__all__ = ["problem", "node_keys", "attrs_keys", "bind_keys", "token_values", "arms"]
+__all__ = ["problem", "node_keys", "attrs_keys", "bind_keys", "value_fields", "token_values", "arms"]
 
 
 def _names(keys: Any) -> str:
@@ -94,12 +94,25 @@ def token_values(tag: str) -> frozenset[str]:
 
 
 @lru_cache(maxsize=1)
-def bind_keys() -> dict[str, frozenset[str]]:
-    """`bind` entry `kind` → the keys that entry may carry (the `Bind` union's own members)."""
+def bind_keys() -> frozenset[str]:
+    """The keys a `Bind` may carry — one value, one address, one closed scope (ADR 0031)."""
+    return _wire_keys(Bind)
+
+
+@lru_cache(maxsize=1)
+def value_fields() -> dict[str, frozenset[str]]:
+    """Per node type: the fields that carry a `Bind` (`source`, `sink`, and named second values).
+
+    Read off the generated models, not listed by hand: a node that grows a fourth value makes this
+    table grow with it, and `problem` then closes that field for free.
+    """
     out: dict[str, frozenset[str]] = {}
-    for cls in get_args(get_args(Bind)[0]):
-        kind = get_args(cls.model_fields["kind"].annotation)[0]
-        out[kind] = _wire_keys(cls)
+    for tag, cls in arms().items():
+        out[tag] = frozenset(
+            field.alias or name
+            for name, field in cls.model_fields.items()
+            if any(part is Bind for part in get_args(field.annotation))
+        )
     return out
 
 
@@ -132,14 +145,17 @@ def problem(node: Any, where: str = "node") -> str | None:
             if stray:
                 return f"{where}: {_names(stray)} is not a token of {tag!r}"
 
-    bind = node.get("bind")
-    if bind is not None:
-        if not isinstance(bind, dict):
-            return f"{where}: bind is {type(bind).__name__}, not an object"
-        for key, entry in bind.items():
-            bad = _bind_entry(entry, f"{where}.bind[{key!r}]")
-            if bad:
-                return bad
+    # Every value a node carries is one `Bind` (ADR 0031): the two channels and the node's own
+    # named second values are the same shape, so one key set closes all of them.
+    for field in value_fields()[tag]:
+        entry = node.get(field)
+        if entry is None:
+            continue
+        if not isinstance(entry, dict):
+            return f"{where}: {field} is {type(entry).__name__}, not an object"
+        extra = set(entry) - bind_keys()
+        if extra:
+            return f"{where}.{field}: {_names(extra)} is not a field of a value (slot/scope/default/path/type)"
 
     for field in ("children", "item"):
         kids = node.get(field)
@@ -151,17 +167,4 @@ def problem(node: Any, where: str = "node") -> str | None:
             bad = problem(kid, f"{where}.{field}[{i}]")
             if bad:
                 return bad
-    return None
-
-
-def _bind_entry(entry: Any, where: str) -> str | None:
-    if not isinstance(entry, dict):
-        return f"{where}: a binding is an object, got {type(entry).__name__}"
-    kind = entry.get("kind")
-    allowed = bind_keys().get(kind) if isinstance(kind, str) else None
-    if allowed is None:
-        return f"{where}: {kind!r} is not one of the wire's binding kinds"
-    extra = set(entry) - allowed
-    if extra:
-        return f"{where}: {_names(extra)} is not a field of a {kind!r} binding"
     return None

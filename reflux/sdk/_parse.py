@@ -1,11 +1,11 @@
-"""The SDK's boundary and `bind` assembly — hand-written, never generated.
+"""The SDK's boundary and value-channel assembly — hand-written, never generated.
 
 The generated builders call into this module. Two jobs:
 
 - `parse` / `dump`: validate a built node against the wire's types and turn it back into the wire's
   dict. Refusal is loud (a pydantic `ValidationError`) and "no value" is `None`, never a sentinel.
-- `bind_value` / `bind_options` / `bind_select`: assemble one entry of accrete's `bind` map, one
-  落点 at a time.
+- `as_source` / `as_sink`: turn what a caller passed to a channel into the wire's `Bind` shape —
+  ADR 0031's one value, one address, one closed scope.
 
 Why `drop_none` rather than emitting `null`s: accrete's serde skips absent fields and a `null` value
 is meaningless on this wire, so the SDK's shape is "absent means None". An empty dict collapses to
@@ -19,10 +19,10 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .types import Accrete
+from .types import Accrete, Bind
 from . import profile
 
-__all__ = ["parse", "dump", "drop_none", "token_attrs", "bind_value", "bind_options", "bind_select"]
+__all__ = ["parse", "dump", "drop_none", "token_attrs", "as_source", "as_sink", "as_set"]
 
 
 @lru_cache(maxsize=None)
@@ -83,91 +83,57 @@ def token_attrs(attrs: dict[str, Any] | None, variant: str | None, tag: str) -> 
     return out
 
 
-def bind_entry(
-    key: str,
-    *,
-    default: Any = None,
-    source: str | None = None,
-    dest: str | None = None,
-    field: str | None = None,
-    local: str | None = None,
-    submit: Any = None,
-    payload: Any = None,
-    path: str | None = None,
-    js_kind: Any = None,
-) -> dict[str, Any] | None:
-    """One entry of accrete's `bind` map — the display source, the uplink落点, or a form field, one
-    at a time. `key` is the entry's name on the wire (`value` for most types; `options` for a
-    select's rows, `select` for a pages container's key, `placeholder` for a textarea's).
+def _bind(value: Any, name: str, *, constant: bool = False) -> dict[str, Any]:
+    """One channel's entry: a `Bind` as it is, a `Slot` as its name, anything else as a constant.
 
-    `dest` is the uplink's target (ADR 0023 — kind and field are both `dest`; the uplink is *not*
-    a `slot`: a slot is a place in the page, a dest is a handler on the host).
-    `js_kind` is the entry's own `type` (accrete's `JsType`: bool → a checkbox, number, text,
-    password, …), a sibling of the variant, not part of it. `payload` rides a `field` entry only.
-    `path` rides a `local`落点: a client-side slot holds the wrapper an in-page emit wrote, so a
-    reader that wants the payload itself points at it (`path="/data"`).
+    A `Bind` is the whole address — slot, scope, default, path, type — so a caller that needs a
+    scope writes `Bind(slot="draft", scope="local")` rather than a second keyword beside the slot.
     """
-    picks = [
-        ("default", default),
-        ("source", source),
-        ("dest", dest),
-        ("field", field),
-        ("local", local),
-        ("submit", submit),
-    ]
-    chosen = [(kind, value) for kind, value in picks if value is not None]
-    if len(chosen) > 1:
-        names = [kind for kind, _ in chosen]
-        raise ValueError(f'bind[{key!r}] takes one target at a time, got {names}')
-    if not chosen:
-        if payload is not None or js_kind is not None or path is not None:
-            raise ValueError(f"bind[{key!r}]: payload / type / path need an entry to ride on")
-        return None
-    kind, value = chosen[0]
-    if kind in ("source", "dest"):
-        # A name is written once, where the handle lives. A string here would be the second spelling
-        # of the same name and the place typos go to die, so it is refused rather than accepted.
-        from ..slots import Slot  # local: reflux.slots -> reflux.wire -> reflux.sdk is a cycle here
+    if value is None:
+        return {}
+    if isinstance(value, Bind):
+        return value.model_dump(exclude_none=True)
+    from ..slots import Slot  # local: reflux.slots -> reflux.wire -> reflux.sdk is a cycle here
 
-        if not isinstance(value, Slot):
-            raise TypeError(
-                f"bind[{key!r}]: {kind}= takes a Slot, got {value!r} — take the name from the table "
-                f"first (ctx.slot({value!r}))"
-            )
+    if isinstance(value, Slot):
         value.declare()  # the name is used here; `/status` lists names in use
-        value = value.name
-    entry: dict[str, Any] = {"kind": kind}
-    if kind in ("default", "submit"):
-        entry["default"] = value  # the variant is unit; its value is the entry's own `default`
-    elif kind == "field":
-        entry["field"] = value
-        if payload is not None:
-            entry["payload"] = payload
-    elif kind == "local":
-        entry["slot"] = value
-        if path is not None:
-            entry["path"] = path
-    elif kind == "dest":
-        entry["dest"] = value  # 上行目标
-    else:  # source carries its own field, named after the kind
-        entry[kind] = value
-    if path is not None and kind != "local":
-        raise ValueError(f"bind[{key!r}]: `path` rides a `local` entry, got {kind!r}")
-    if js_kind is not None:
-        entry["type"] = getattr(js_kind, "value", js_kind)
-    return entry
+        return {"slot": value.name}
+    if constant:
+        return {"default": value}
+    raise TypeError(
+        f"{name}= takes a Bind, a Slot or a constant, got {value!r} — pass Bind(slot={value!r}) "
+        f"or take the name from the table first (ctx.slot({value!r}))"
+    )
 
 
-def bind_value(**kw: Any) -> dict[str, Any] | None:
-    """`bind["value"]` — the entry almost every type carries."""
-    return bind_entry("value", **kw)
+def as_source(value: Any = None, *, default: Any = None, constants: bool = True) -> dict[str, Any] | None:
+    """A read channel — `source=`, or one of a node's named second values.
+
+    `default` is the type's positional `value` folded in: a slot with a fallback is exactly what the
+    wire means by `{slot, default}`, so giving both is one value, not a contradiction. An explicit
+    `default` on a `Bind` wins over the positional one.
+    """
+    entry = _bind(value, "source", constant=constants)
+    if default is not None and "default" not in entry:
+        entry["default"] = default
+    return entry or None
 
 
-def bind_options(*, source: str | None = None) -> dict[str, Any] | None:
-    """`bind["options"]` — a select's rows: a list slot's name."""
-    return bind_entry("options", source=source)
+def as_sink(value: Any = None) -> dict[str, Any] | None:
+    """A write channel — `sink=`. A bare string is a slot name: a write has nothing to default to."""
+    if isinstance(value, str):
+        return {"slot": value} if value else None
+    return _bind(value, "sink") or None
 
 
-def bind_select(*, source: str | None = None, local: str | None = None) -> dict[str, Any] | None:
-    """`bind["select"]` — a pages container's selection key: a source slot or a local value slot."""
-    return bind_entry("select", source=source, local=local)
+def as_set(value: Any = None) -> list[Any] | None:
+    """A set-valued attribute — ADR 0032's `submit` (`enter | button | change`).
+
+    The wire takes a bare string or a list and means the same thing either way; the builder
+    writes the list, so one frame has one shape whoever built it.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value]
+    return list(value)

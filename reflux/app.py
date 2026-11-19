@@ -642,9 +642,9 @@ class App:
     def on(
         self, name: "str | Slot", handler: Callable | None = None, *, auth: bool = False
     ) -> Callable:
-        """Declare a handler for one upstream dest: `@app.on(app.slot.go.chat)` above it.
+        """Declare a handler for one upstream event: `@app.on(app.slot.go.chat)` above it.
 
-        The dest is a handle from the app's table, so a page saying `dest=ctx.slot.go.chat` and the
+        The event is a handle from the app's table, so a page saying `sink=ctx.slot.go.chat` and the
         handler answering it are one name. A plain string is still accepted for the framework's own
         host events (`connect`, `location`, `disconnect`) — those names are the framework's, not the
         app's.
@@ -667,7 +667,7 @@ class App:
     def slot(self) -> Slots:
         """The app's own table: `@app.on(app.slot.go.chat)`, `app.slot.routes`.
 
-        The names belong to the app — a page and its handler answering the same dest are the same
+        The names belong to the app — a page and its handler answering the same event are the same
         name — and a handle taken here has no delivery, so it names and declares but cannot send.
         `ctx.slot` is this same table with a device attached.
         """

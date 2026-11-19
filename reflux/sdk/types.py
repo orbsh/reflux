@@ -3,10 +3,13 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field, RootModel, conint
+from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 
 
-__all__ = ["ButtonAttr", "ClassAttr", "Direction", "DirectionAttr", "DockExpand", "FoldAttr", "FormAttr", "FrameAttr", "ImageAttr", "Input", "JsType", "LayerAttr", "LinkShape1", "LinkShape", "PagesDisplay", "Path", "PortalAttr", "PositionAttr", "RackDirection", "RackEnter", "RackLayout", "RackPause", "RackPlay", "RackScroll", "RackView", "SizeAttr", "StyleAttr", "Template", "TextArea", "TextAttr", "Theme1", "Theme", "Bind1", "Bind2", "Bind3", "Bind4", "Bind5", "Bind6", "Button", "Canvas", "DockAttr", "ForceGraphStyle", "Image", "Pages", "RackAttr", "Text", "ForceGraph", "Dock", "Float", "Fold", "Form", "Frame", "Grab", "Group", "Layer", "Popup", "Portal", "Rack", "Select", "Svg", "Table", "Tbody", "Td", "Th", "Thead", "Tr", "Accrete", "Bind"]
+# ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
+Scope = Literal['remote', 'local', 'both']
+
+__all__ = ["ButtonAttr", "ClassAttr", "Direction", "DockExpand", "FrameAttr", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PagesDisplay", "PanelPlace", "PanelState", "RackDirection", "RackEnter", "RackLayout", "RackPause", "RackPlay1", "RackPlay", "RackScroll", "RackView", "SizeAttr", "StyleAttr", "SubmitMode", "SubmitSet", "Template", "TextAttr", "Theme1", "Theme", "Bind", "BundleAttr", "Button", "Canvas", "DockAttr", "ForceGraphStyle", "Image", "Input", "Pages", "PanelAttr", "Path", "RackAttr", "Text", "ForceGraph", "Bundle", "Dock", "Frame", "Grab", "Group", "Panel", "Rack", "Select", "Svg", "Table", "Tbody", "Td", "Th", "Thead", "Tr", "Accrete", "Scope"]
 
 
 
@@ -32,28 +35,9 @@ class Direction(Enum):
     R = 'R'
 
 
-class DirectionAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    direction: Direction | None = None
-    selector: str | None = None
-
-
 class DockExpand(Enum):
     reveal = 'reveal'
     reserved = 'reserved'
-
-
-class FoldAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    float_body: bool | None = None
-    replace_header: bool | None = None
-    selector: str | None = None
-
-
-class FormAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    instant: bool | None = None
-    selector: str | None = None
 
 
 class FrameAttr(BaseModel):
@@ -72,13 +56,6 @@ class ImageAttr(BaseModel):
     width: str | None = None
 
 
-class Input(BaseModel):
-    attrs: ClassAttr | None = None
-    bind: dict[str, Bind] | None = None
-    id: str | None = None
-    type: Literal['input'] = 'input'
-
-
 class JsType(Enum):
     bool = 'bool'
     number = 'number'
@@ -86,15 +63,6 @@ class JsType(Enum):
     password = 'password'
     button = 'button'
     submit = 'submit'
-
-
-class LayerAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    dismiss: bool | None = Field(
-        None,
-        description='dismiss（ADR 0014）：点层自身（模糊区，而非模态内容）清空所绑槽。\n本页瞬时状态：只写 local/data 平面，不上线协议。',
-    )
-    selector: str | None = None
 
 
 class LinkShape1(Enum):
@@ -113,29 +81,15 @@ class PagesDisplay(Enum):
     dom = 'dom'
 
 
-class Path(BaseModel):
-    attrs: ClassAttr | None = None
-    bind: dict[str, Bind] | None = None
-    id: str | None = None
-    type: Literal['path'] = 'path'
+class PanelPlace(Enum):
+    inline = 'inline'
+    anchor = 'anchor'
+    viewport = 'viewport'
 
 
-class PortalAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    selector: str | None = None
-    to: str = Field(
-        ...,
-        description='目标挂载点：CSS 选择器，选中应用显式声明的 layer 宿主（ADR 0014：挂载点由\n应用声明，渲染器不加固定逻辑；解析不到就不渲染 + warn）。',
-    )
-
-
-class PositionAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    selector: str | None = None
-    left: str | None = None
-    right: str | None = None
-    top: str | None = None
-    bottom: str | None = None
+class PanelState(Enum):
+    toggle = 'toggle'
+    bound = 'bound'
 
 
 class RackDirection(Enum):
@@ -161,9 +115,16 @@ class RackPause(Enum):
     hover = 'hover'
 
 
-class RackPlay(Enum):
+class RackPlay1(Enum):
     newest = 'newest'
     rotate = 'rotate'
+
+
+class RackPlay(RootModel[RackPlay1 | Literal['dwell']]):
+    root: RackPlay1 | Literal['dwell'] = Field(
+        ...,
+        description="Who decides which row is current: the newest one (as before), or a rotation of the renderer's.",
+    )
 
 
 class RackScroll(Enum):
@@ -184,12 +145,13 @@ class RackView(BaseModel):
         description="How long `enter` and `leave` take, in ms. Absent = 350, the number the CSS was written\nwith; the renderer only ever writes them through the container's custom properties, so how\na row moves is still CSS's business (ADR 0024).",
     )
     every: conint(ge=0) | None = Field(
-        None, description='`rotate` 每一步停留多久（毫秒）。'
+        None,
+        description='一行在台上待多久（毫秒）：`rotate` 的一步（然后轮到下一行），`dwell` 的全部（到点就下台）。\n缺席 = 4000，渲染器另有下限 200。',
     )
     layout: RackLayout | None = RackLayout('adaptive')
     leave_ms: conint(ge=0) | None = None
     pause: RackPause | None = RackPause('off')
-    play: RackPlay | None = RackPlay('newest')
+    play: RackPlay | None = Field('newest', validate_default=True)
     scroll: RackScroll | None = RackScroll('none')
 
 
@@ -206,17 +168,23 @@ class StyleAttr(BaseModel):
     style: dict[str, Any] | None = None
 
 
+class SubmitMode(Enum):
+    enter = 'enter'
+    button = 'button'
+    change = 'change'
+
+
+class SubmitSet(RootModel[SubmitMode | list[SubmitMode]]):
+    root: SubmitMode | list[SubmitMode] = Field(
+        ...,
+        description='A bare string or a list on the wire: `submit: enter` and `submit: [enter]`\nsay the same thing, so the one-mode case (nearly every frame) does not have\nto remember the list syntax.',
+    )
+
+
 class Template(BaseModel):
     data: dict[str, Any]
     name: str
     type: Literal['template'] = 'template'
-
-
-class TextArea(BaseModel):
-    attrs: ClassAttr | None = None
-    bind: dict[str, Bind] | None = None
-    id: str | None = None
-    type: Literal['textarea'] = 'textarea'
 
 
 class TextAttr(BaseModel):
@@ -236,77 +204,46 @@ class Theme(RootModel[Theme1 | Literal['dark']]):
     )
 
 
-class Bind1(BaseModel):
+class Bind(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
     default: Any | None = None
-    type: JsType | None = None
-    kind: Literal['source']
     path: str | None = Field(
         None,
-        description='可选 JSON Pointer（ADR 0008）：进槽内节点的 WIRE SHAPE 提取\n子值（与 ADR 0005 patch 路径同一词法）；省略 = 取槽节点自己的\n`bind[<key>].default`（同 key 直传惯例）。',
+        description="JSON Pointer into the slot's value (ADR 0008): the shape belongs to the\nproducer, the read picks one field out of it. ADR 0031 is silent on\nextraction — it is orthogonal to the address, so it stays.",
     )
-    source: str
-
-
-class Bind2(BaseModel):
-    default: Any | None = None
+    scope: Scope = 'remote'
+    slot: str | None = None
     type: JsType | None = None
-    kind: Literal['local']
-    name: str | None = Field(
-        None,
-        description='包装里的那个名字，缺省 = 槽名。另起的名字才写它——落点本身是 `slot`。',
+
+
+class BundleAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    selector: str | None = None
+    submit: SubmitSet | None = Field(
+        None, description='When to send. Absent = `[enter]`.'
     )
-    path: str | None = None
-    report: str | None = Field(
-        None,
-        description='本地切换之外的第二个去向：这是**点击**，venue 也需要知道（ADR 0028）。\n一次导航点击既是"页面里的选中值变了"，也是"这个人走到了某个岛"——前者是本地\n值槽，后者只有 venue 能记住（跨设备续上）。写本地槽之后再照发一份，事件名由\n帧给（框架不认识"岛"这个词），载荷是这次的值本身。',
-    )
-    slot: str
-
-
-class Bind3(BaseModel):
-    default: Any | None = None
-    type: JsType | None = None
-    dest: str
-    kind: Literal['dest']
-
-
-class Bind4(BaseModel):
-    default: Any | None = None
-    type: JsType | None = None
-    field: str
-    kind: Literal['field']
-    payload: Any | None = None
-
-
-class Bind5(BaseModel):
-    default: Any | None = None
-    type: JsType | None = None
-    kind: Literal['submit']
-
-
-class Bind6(BaseModel):
-    default: Any | None = None
-    type: JsType | None = None
-    kind: Literal['default']
 
 
 class Button(BaseModel):
     attrs: ButtonAttr | None = None
-    bind: dict[str, Bind] | None = None
     id: str | None = None
+    sink: Bind | None = None
+    source: Bind | None = None
     type: Literal['button'] = 'button'
 
 
 class Canvas(BaseModel):
     attrs: SizeAttr | None = None
-    bind: dict[str, Any] | None = Field(
-        None,
-        description='`bind["value"]`：载荷惯例与 Chart/diagram 同族——`kind: source` 指向\n具名数据槽（槽内节点的 `bind.value.default` 原始 JSON 即模块 data 区），\n流式喂数据 = 对该槽 `set`/`patch`（指针 `/bind/value/default/...`）。',
-    )
     id: str | None = None
     options: Any | None = Field(
         None,
         description='模块私有选项的**动态袋**（ADR 0017）：核心不认识的渲染器配置\n（3d-force-graph 的节点/边尺寸、力参数、配色……）打包放这里，\n宿主原样交给模块的 `mount(el, data, host, options)`，一个键都不解释。\n这是"变体不进 accrete"的落点：换渲染器只换 url + options，DSL 不变。\n缺省/Null = `{}`（模块自己套默认值）；与 `url` 同一语义——挂载期配置，\n不进 update 热更新腿（改它要靠重新挂载）。',
+    )
+    source: Bind | None = Field(
+        None,
+        description='`bind["value"]`：载荷惯例与 Chart/diagram 同族——`kind: source` 指向\n具名数据槽（槽内节点的 `bind.value.default` 原始 JSON 即模块 data 区），\n流式喂数据 = 对该槽 `set`/`patch`（指针 `/bind/value/default/...`）。',
     )
     url: str = Field(
         ...,
@@ -382,17 +319,77 @@ class ForceGraphStyle(BaseModel):
 
 class Image(BaseModel):
     attrs: ImageAttr | None = None
-    bind: dict[str, Bind] | None = None
     id: str | None = None
+    source: Bind | None = None
     type: Literal['image'] = 'image'
+
+
+class Input(BaseModel):
+    attrs: ClassAttr | None = None
+    id: str | None = None
+    multiline: bool | None = Field(
+        None, description='Multi-line is a layout of the field, not a different node.'
+    )
+    placeholder: Bind | None = Field(
+        None,
+        description='Second value: the placeholder text (literal or slot) — the channel\n`textarea` used to carry on its own type.',
+    )
+    sink: Bind | None = None
+    source: Bind | None = None
+    tag: str | None = Field(
+        None,
+        description="The field's name inside an enclosing bundle: the bundle packs this tag\nas the key, so the sink's address no longer names the field.",
+    )
+    type: Literal['input'] = 'input'
 
 
 class Pages(BaseModel):
     attrs: ClassAttr | None = None
-    bind: dict[str, Bind] | None = None
     display: PagesDisplay | None = PagesDisplay('render')
     id: str | None = None
+    select: Bind | None = Field(
+        None, description='Second value (ADR 0031 §2 named field): the selected key.'
+    )
+    source: Bind | None = None
     type: Literal['pages'] = 'pages'
+
+
+class PanelAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    direction: Direction | None = Field(
+        None,
+        description='`viewport` only: which edge the body hugs. Absent = `L` — the left edge of the viewport\n(`Direction` is the same enum `popup` positions with).',
+    )
+    dismiss: bool | None = Field(
+        None,
+        description='Closes on a click outside the body — the mask for `viewport`, "anywhere else" for the rest.\nA panel without it can only be closed by its trigger (a bundle that must not lose its work).',
+    )
+    place: PanelPlace | None = Field(
+        None, description='Where it sits. Absent = `inline`.'
+    )
+    replace_header: bool | None = Field(
+        None,
+        description='`inline` only: the first child is the header and toggles the body (the old `fold` shape).',
+    )
+    selector: str | None = None
+    state: PanelState | None = Field(
+        None, description='Who decides. Absent = `toggle`.'
+    )
+    width: str | None = Field(
+        None,
+        description="`viewport` only: the body's width. Absent = whatever the class says.",
+    )
+    left: str | None = None
+    right: str | None = None
+    top: str | None = None
+    bottom: str | None = None
+
+
+class Path(BaseModel):
+    attrs: ClassAttr | None = None
+    id: str | None = None
+    source: Bind | None = None
+    type: Literal['path'] = 'path'
 
 
 class RackAttr(BaseModel):
@@ -414,62 +411,52 @@ class RackAttr(BaseModel):
 
 class Text(BaseModel):
     attrs: TextAttr | None = None
-    bind: dict[str, Bind] | None = None
     id: str | None = None
+    source: Bind | None = None
     type: Literal['text'] = 'text'
 
 
 class ForceGraph(BaseModel):
     attrs: SizeAttr | None = None
-    bind: dict[str, Bind] | None = None
     id: str | None = None
+    source: Bind | None = None
     style: ForceGraphStyle | None = Field(
         None, description='渲染器旋钮，全部有缺省值；缺省时不进 wire。'
+    )
+    theme: Bind | None = Field(
+        None, description='Second value: the theme channel (`true`/`"dark"`).'
     )
     type: Literal['forcegraph'] = 'forcegraph'
 
 
+class Bundle(BaseModel):
+    attrs: BundleAttr | None = None
+    children: list[Accrete] | None = None
+    id: str | None = None
+    sink: Bind | None = None
+    tag: str | None = Field(
+        None,
+        description="The key this bundle contributes to its parent's packed object. Only read\nwhen the bundle sits inside another bundle; falls back to `id`.",
+    )
+    type: Literal['bundle'] = 'bundle'
+
+
 class Dock(BaseModel):
     attrs: DockAttr | None = None
-    bind: dict[str, Any] | None = Field(
+    children: list[Accrete] | None = None
+    id: str | None = None
+    sink: Bind | None = Field(
         None,
         description='`bind["value"]`：`event` 上行（事件名就是这里的名字），或 `local` 写槽\n（包装与上行同形，ADR 0010）。带什么货由源（`grab`）给，落点不再附加任何\n元数据——事件名与帧的 `id` 已经唯一确定是哪个落点。',
     )
-    children: list[Accrete] | None = None
-    id: str | None = None
     type: Literal['dock'] = 'dock'
-
-
-class Float(BaseModel):
-    attrs: PositionAttr | None = None
-    bind: dict[str, Bind] | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['float'] = 'float'
-
-
-class Fold(BaseModel):
-    attrs: FoldAttr | None = None
-    bind: dict[str, Bind] | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    item: list[Accrete] | None = None
-    type: Literal['fold'] = 'fold'
-
-
-class Form(BaseModel):
-    attrs: FormAttr | None = None
-    bind: dict[str, Bind] | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['form'] = 'form'
 
 
 class Frame(BaseModel):
     attrs: FrameAttr | None = None
-    bind: dict[str, Bind] | None = None
     children: list[Accrete] | None = None
     id: str | None = None
+    source: Bind | None = None
     type: Literal['frame'] = 'frame'
 
 
@@ -492,56 +479,50 @@ class Grab(BaseModel):
 
 class Group(BaseModel):
     attrs: StyleAttr | None = None
-    bind: dict[str, Bind] | None = None
     children: list[Accrete] | None = None
     id: str | None = None
+    source: Bind | None = None
     type: Literal['group'] = 'group'
 
 
-class Layer(BaseModel):
-    attrs: LayerAttr | None = None
-    bind: dict[str, Bind] | None = None
+class Panel(BaseModel):
+    attrs: PanelAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    type: Literal['layer'] = 'layer'
-
-
-class Popup(BaseModel):
-    attrs: DirectionAttr | None = None
-    bind: dict[str, Bind] | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    type: Literal['popup'] = 'popup'
-
-
-class Portal(BaseModel):
-    attrs: PortalAttr | None = None
-    children: list[Accrete] | None = None
-    type: Literal['portal'] = 'portal'
+    source: Bind | None = None
+    type: Literal['panel'] = 'panel'
 
 
 class Rack(BaseModel):
     attrs: RackAttr | None = None
-    bind: dict[str, Bind] | None = None
     children: list[Accrete] | None = None
     id: str | None = None
     item: list[Accrete] | None = None
+    source: Bind | None = None
     type: Literal['rack'] = 'rack'
 
 
 class Select(BaseModel):
     attrs: ClassAttr | None = None
-    bind: dict[str, Bind] | None = None
     children: list[Accrete] | None = None
     id: str | None = None
+    options: Bind | None = Field(
+        None, description='Second value: the option rows (list plane).'
+    )
+    sink: Bind | None = None
+    source: Bind | None = None
+    tag: str | None = Field(
+        None,
+        description="The field's name inside an enclosing bundle (same rule as `input`).",
+    )
     type: Literal['select'] = 'select'
 
 
 class Svg(BaseModel):
     attrs: SizeAttr | None = None
-    bind: dict[str, Bind] | None = None
     children: list[Accrete] | None = None
     id: str | None = None
+    source: Bind | None = None
     type: Literal['svg'] = 'svg'
 
 
@@ -583,56 +564,39 @@ class Tr(BaseModel):
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Float | Layer | Portal | Fold | Form | Popup | Svg | Group | Path | Rack | Pages | Button | Image | Input | Select | Table | Thead | Tbody | Tr | Th | Td | Text | TextArea | Template | Grab | Dock], Field(discriminator='type')]
-
-# `bind` is a map of these, discriminated on `kind`.
-Bind = Annotated[Union[Bind1 | Bind2 | Bind3 | Bind4 | Bind5 | Bind6], Field(discriminator='kind')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Bundle | Svg | Group | Path | Rack | Pages | Button | Image | Input | Select | Table | Thead | Tbody | Tr | Th | Td | Text | Template | Grab | Dock], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
 ButtonAttr.model_rebuild()
 ClassAttr.model_rebuild()
-DirectionAttr.model_rebuild()
-FoldAttr.model_rebuild()
-FormAttr.model_rebuild()
 FrameAttr.model_rebuild()
 ImageAttr.model_rebuild()
-Input.model_rebuild()
-LayerAttr.model_rebuild()
-Path.model_rebuild()
-PortalAttr.model_rebuild()
-PositionAttr.model_rebuild()
 RackView.model_rebuild()
 SizeAttr.model_rebuild()
 StyleAttr.model_rebuild()
 Template.model_rebuild()
-TextArea.model_rebuild()
 TextAttr.model_rebuild()
-Bind1.model_rebuild()
-Bind2.model_rebuild()
-Bind3.model_rebuild()
-Bind4.model_rebuild()
-Bind5.model_rebuild()
-Bind6.model_rebuild()
+Bind.model_rebuild()
+BundleAttr.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()
 DockAttr.model_rebuild()
 ForceGraphStyle.model_rebuild()
 Image.model_rebuild()
+Input.model_rebuild()
 Pages.model_rebuild()
+PanelAttr.model_rebuild()
+Path.model_rebuild()
 RackAttr.model_rebuild()
 Text.model_rebuild()
 ForceGraph.model_rebuild()
+Bundle.model_rebuild()
 Dock.model_rebuild()
-Float.model_rebuild()
-Fold.model_rebuild()
-Form.model_rebuild()
 Frame.model_rebuild()
 Grab.model_rebuild()
 Group.model_rebuild()
-Layer.model_rebuild()
-Popup.model_rebuild()
-Portal.model_rebuild()
+Panel.model_rebuild()
 Rack.model_rebuild()
 Select.model_rebuild()
 Svg.model_rebuild()

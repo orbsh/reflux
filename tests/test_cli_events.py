@@ -6,8 +6,8 @@ Offline by design: no browser, no socket, no cargo. Two jobs:
   loudly, because a target that silently becomes "nothing registered" would teach people that the
   verb is broken rather than their spelling;
 - the **check** the tests here are really for: every event a page can send has a handler. Walking the
-  reference app's two pages and collecting `bind.kind == "intent"` catches `form(dest="login.submit")`
-  typos before a browser run does, and it keeps the demo honest as it grows.
+  reference app's two pages and collecting `sink.slot` from every node catches a mistyped
+  `bundle(sink=…)` before a browser run does, and it keeps the demo honest as it grows.
 
 `kind=builtin` is the framework's own names (`reflux:hello`, `reflux:nav`); everything else is `app`.
 """
@@ -31,20 +31,20 @@ from reflux.sdk import dump
 def sent_dests(node) -> set[str]:
     """Every uplink destination the nodes of one page can send.
 
-    `bind.kind == "dest"` is the uplink target and its `dest` is where it goes: an input's Enter, a
-    form's submit, a row's own button. `submit`/`field`/`default` bindings carry values, not
-    destinations, so they are not collected.
+    A node's `sink` is where its value flows out (ADR 0031 §2); when the value is an event, the
+    address is the handler's name, carried as `sink.slot`. `source` is the read side — a slot the
+    page reads from, never one it speaks to — so it is not collected.
     """
     names: set[str] = set()
 
     def walk(node) -> None:
         if not isinstance(node, dict):
             return
-        for entry in (node.get("bind") or {}).values():
-            if isinstance(entry, dict) and entry.get("kind") == "dest":
-                name = entry.get("dest")
-                if isinstance(name, str):
-                    names.add(name)
+        sink = node.get("sink")
+        if isinstance(sink, dict):
+            name = sink.get("slot")
+            if isinstance(name, str):
+                names.add(name)
         for key in ("children", "item"):
             for kid in node.get(key) or ():
                 walk(kid)

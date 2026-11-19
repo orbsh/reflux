@@ -31,7 +31,7 @@ CTX = Context(app=None, device=SESSION)  # type: ignore[arg-type]
 
 def drew(page):
     """The content a page handler drew: `ctx.page` writes the two markers ahead of it."""
-    return page.children[2].bind["value"].default
+    return page.children[2].source.default
 
 
 def handler(name: str = "h"):

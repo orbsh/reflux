@@ -42,14 +42,15 @@
       ]
     },
     {
+      "description": "内容区：`place` × `state` 两轴四格（ADR 0030）。`fold`/`popup`/`layer` 作为节点类型\n已删除 —— 它们的实现还在 ui_core 里给这里用，但帧里不再能写出来。",
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "const": "float"
+          "const": "panel"
         }
       },
-      "$ref": "#/$defs/Float",
+      "$ref": "#/$defs/Panel",
       "required": [
         "type"
       ]
@@ -59,62 +60,10 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "layer"
+          "const": "bundle"
         }
       },
-      "$ref": "#/$defs/Layer",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "portal"
-        }
-      },
-      "$ref": "#/$defs/Portal",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "fold"
-        }
-      },
-      "$ref": "#/$defs/Fold",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "form"
-        }
-      },
-      "$ref": "#/$defs/Form",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "popup"
-        }
-      },
-      "$ref": "#/$defs/Popup",
+      "$ref": "#/$defs/Bundle",
       "required": [
         "type"
       ]
@@ -332,19 +281,6 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "textarea"
-        }
-      },
-      "$ref": "#/$defs/TextArea",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
           "const": "template"
         }
       },
@@ -383,9 +319,26 @@
   ],
   "$defs": {
     "Bind": {
+      "description": "One value, one address, one scope (ADR 0031 §1-2). `source` is where a value\nflows in, `sink` where it flows out; both are this same struct.\n\nNo `slot` means the value is a literal: `default` *is* the value (that is\nwhat the retired `kind: default` said). With a slot, `default` is what to\nuse while the slot is still empty.",
       "type": "object",
       "properties": {
         "default": true,
+        "path": {
+          "description": "JSON Pointer into the slot's value (ADR 0008): the shape belongs to the\nproducer, the read picks one field out of it. ADR 0031 is silent on\nextraction — it is orthogonal to the address, so it stays.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "slot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "type": {
           "anyOf": [
             {
@@ -397,126 +350,79 @@
           ]
         }
       },
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "source"
+      "additionalProperties": false
+    },
+    "Bundle": {
+      "description": "A bundle packs a group of fields into one object and sends it (ADR 0032).\nIt owns the exit for its fields (`sink`) and when they leave (`attrs.submit`)\n— nothing else. `id` marks this submission (the instance), not the fields:\nfields are named by their own `tag`.",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BundleAttr"
             },
-            "path": {
-              "description": "可选 JSON Pointer（ADR 0008）：进槽内节点的 WIRE SHAPE 提取\n子值（与 ADR 0005 patch 路径同一词法）；省略 = 取槽节点自己的\n`bind[<key>].default`（同 key 直传惯例）。",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "source": {
-              "type": "string"
+            {
+              "type": "null"
             }
-          },
-          "required": [
-            "kind",
-            "source"
           ]
         },
-        {
-          "description": "具名本地值槽（ADR 0008）：独立于 data（Accrete 展示形态）的\n裸 Value 平面——发射侧省略 `path`（整值写入），订阅侧带 `path`\n时进槽内 Value 的 JSON Pointer 提取子值（形状归生产端，\n与 wire-shape 无关）。\nADR 0010：落槽载荷与上行同形（`Outflow {slot, id?, data}` 包装\n对象）——事件形状由事件定义、不由落点决定，`kind: event` 改绑\n`kind: local` 订阅方零改动。`name` 缺省 = 槽名（槽即频道）；\n`path` 仍是订阅侧字段，发射侧忽略。",
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "local"
-            },
-            "name": {
-              "description": "包装里的那个名字，缺省 = 槽名。另起的名字才写它——落点本身是 `slot`。",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "path": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "report": {
-              "description": "本地切换之外的第二个去向：这是**点击**，venue 也需要知道（ADR 0028）。\n一次导航点击既是\"页面里的选中值变了\"，也是\"这个人走到了某个岛\"——前者是本地\n值槽，后者只有 venue 能记住（跨设备续上）。写本地槽之后再照发一份，事件名由\n帧给（框架不认识\"岛\"这个词），载荷是这次的值本身。",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "slot": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "slot"
+        "children": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
           ]
         },
-        {
-          "description": "上行目标：这个控件把交互送到宿主上的哪个目标（ADR 0023）。叫 `dest` 而不是 `slot`：\n上下行并不对称（下行写页面里的位置，上行调起宿主的一个处理器），所以不共用一个词;\n`event` 留给 DOM 与后端自己的事件，UI 侧不用这个词。",
-          "type": "object",
-          "properties": {
-            "dest": {
-              "type": "string"
+        "sink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
             },
-            "kind": {
-              "type": "string",
-              "const": "dest"
+            {
+              "type": "null"
             }
-          },
-          "required": [
-            "kind",
-            "dest"
           ]
         },
-        {
-          "type": "object",
-          "properties": {
-            "field": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string",
-              "const": "field"
-            },
-            "payload": true
-          },
-          "required": [
-            "kind",
-            "field"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "submit"
-            }
-          },
-          "required": [
-            "kind"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "default"
-            }
-          },
-          "required": [
-            "kind"
+        "tag": {
+          "description": "The key this bundle contributes to its parent's packed object. Only read\nwhen the bundle sits inside another bundle; falls back to `id`.",
+          "type": [
+            "string",
+            "null"
           ]
         }
-      ]
+      }
+    },
+    "BundleAttr": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "submit": {
+          "description": "When to send. Absent = `[enter]`.",
+          "$ref": "#/$defs/SubmitSet"
+        }
+      }
     },
     "Button": {
       "type": "object",
@@ -531,19 +437,30 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "id": {
           "type": [
             "string",
             "null"
+          ]
+        },
+        "sink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -586,16 +503,6 @@
             }
           ]
         },
-        "bind": {
-          "description": "`bind[\"value\"]`：载荷惯例与 Chart/diagram 同族——`kind: source` 指向\n具名数据槽（槽内节点的 `bind.value.default` 原始 JSON 即模块 data 区），\n流式喂数据 = 对该槽 `set`/`patch`（指针 `/bind/value/default/...`）。",
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "id": {
           "type": [
             "string",
@@ -604,6 +511,17 @@
         },
         "options": {
           "description": "模块私有选项的**动态袋**（ADR 0017）：核心不认识的渲染器配置\n（3d-force-graph 的节点/边尺寸、力参数、配色……）打包放这里，\n宿主原样交给模块的 `mount(el, data, host, options)`，一个键都不解释。\n这是\"变体不进 accrete\"的落点：换渲染器只换 url + options，DSL 不变。\n缺省/Null = `{}`（模块自己套默认值）；与 `url` 同一语义——挂载期配置，\n不进 update 热更新腿（改它要靠重新挂载）。"
+        },
+        "source": {
+          "description": "`bind[\"value\"]`：载荷惯例与 Chart/diagram 同族——`kind: source` 指向\n具名数据槽（槽内节点的 `bind.value.default` 原始 JSON 即模块 data 区），\n流式喂数据 = 对该槽 `set`/`patch`（指针 `/bind/value/default/...`）。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "url": {
           "description": "CDN 上的 ES module 地址（导出 mount/update/resize/unmount 契约）。",
@@ -650,36 +568,6 @@
         "R"
       ]
     },
-    "DirectionAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "direction": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Direction"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
     "Dock": {
       "description": "拖拽的落点（ADR 0019）：`children` = 已放下的内容（生产者随后往里追加钉住的\n流）。事件名与落点身份在这一侧定义，于是多个 dock 天然可分；释放时由本节点\n发射，`id` 是它自己的 id，「被拖来的是什么」进 `data`。",
       "type": "object",
@@ -694,16 +582,6 @@
             }
           ]
         },
-        "bind": {
-          "description": "`bind[\"value\"]`：`event` 上行（事件名就是这里的名字），或 `local` 写槽\n（包装与上行同形，ADR 0010）。带什么货由源（`grab`）给，落点不再附加任何\n元数据——事件名与帧的 `id` 已经唯一确定是哪个落点。",
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "children": {
           "type": [
             "array",
@@ -717,6 +595,17 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "sink": {
+          "description": "`bind[\"value\"]`：`event` 上行（事件名就是这里的名字），或 `local` 写槽\n（包装与上行同形，ADR 0010）。带什么货由源（`grab`）给，落点不再附加任何\n元数据——事件名与帧的 `id` 已经唯一确定是哪个落点。",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -769,125 +658,6 @@
         }
       ]
     },
-    "Float": {
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PositionAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "Fold": {
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FoldAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "item": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        }
-      }
-    },
-    "FoldAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "float_body": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "replace_header": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
     "ForceGraph": {
       "description": "三维力导向关系图（ADR 0018）。原生组件，不是 canvas 模块：渲染器与布局\n都在 wasm 里（`forcegraph` crate），所以没有 `url`、没有 JS 资产、没有\nmount/update/resize/unmount 契约——可写的只有 `attrs`、渲染器旋钮 `style`\n和数据区 `bind[\"value\"]`。\n\n数据区载荷 = `forcegraph::Snapshot`：`{nodes, links, focus?}`，按 id 求\n差量（整份快照重复送达幂等）。`focus` 是视图指令\n`{ids, seq?, padding_px?, duration_ms?}`——`seq` 变了同一个目标可以再飞一次，\n不动 `seq` 的重复写入不碰相机。\n\n**这是一个独立组件，不是 canvas 的一种**（ADR 0029）：渲染、布局、相机、拾取都在\n同一个 wasm 里，所以它有自己的节点类型、自己的 `style` 词表（类型化，可被 schema\n与 patch 校验），不走 url + options 那条动态袋。图数据是这个界面的主要读数面，\n定制能力按\"再加一个维度\"来长：载荷是快照，加字段不换节点类型——`node_cluster` /\n`edge_cluster` 这类分组显示将作为 `Snapshot` 的新字段与 `style` 的新旋钮出现，\n而不是变成另一个组件或换一个渲染器。",
       "type": "object",
@@ -902,24 +672,36 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "id": {
           "type": [
             "string",
             "null"
           ]
         },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "style": {
           "description": "渲染器旋钮，全部有缺省值；缺省时不进 wire。",
           "$ref": "#/$defs/ForceGraphStyle"
+        },
+        "theme": {
+          "description": "Second value: the theme channel (`true`/`\"dark\"`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -1056,71 +838,6 @@
         }
       }
     },
-    "Form": {
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FormAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "FormAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "instant": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
     "Frame": {
       "type": "object",
       "properties": {
@@ -1134,15 +851,6 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "children": {
           "type": [
             "array",
@@ -1156,6 +864,16 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -1238,15 +956,6 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "children": {
           "type": [
             "array",
@@ -1260,6 +969,16 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -1277,19 +996,20 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "id": {
           "type": [
             "string",
             "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -1337,6 +1057,7 @@
       }
     },
     "Input": {
+      "description": "A field: one value, one line (or many, with `multiline`) (ADR 0032).",
       "type": "object",
       "properties": {
         "attrs": {
@@ -1349,16 +1070,49 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "multiline": {
+          "description": "Multi-line is a layout of the field, not a different node.",
+          "type": "boolean"
+        },
+        "placeholder": {
+          "description": "Second value: the placeholder text (literal or slot) — the channel\n`textarea` used to carry on its own type.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tag": {
+          "description": "The field's name inside an enclosing bundle: the bundle packs this tag\nas the key, so the sink's address no longer names the field.",
           "type": [
             "string",
             "null"
@@ -1376,73 +1130,6 @@
         "button",
         "submit"
       ]
-    },
-    "Layer": {
-      "description": "模态层（ADR 0014）：应用显式声明的全屏挂载点，portal 把内容传送进来。\n显隐只有一条规则——所绑 `bind[\"value\"]` 槽非空即显示（空即无，ADR 0012 复用）；\n`dismiss` 点层自身（模糊区）时清空该槽（清空即关）。几何内联在渲染侧，\n遮罩走 custom.css。",
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/LayerAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "LayerAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "dismiss": {
-          "description": "dismiss（ADR 0014）：点层自身（模糊区，而非模态内容）清空所绑槽。\n本页瞬时状态：只写 local/data 平面，不上线协议。",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
     },
     "LinkShape": {
       "description": "图渲染器的旋钮。语义与 canvas 的 `options` 同级：挂载期配置，改它要\n重新挂载（不进 update 腿）。区别只在于这是自家渲染器的词表，所以可以\n类型化、可以被 schema 和 patch 校验。\n边的走向。两种朝向都是\"节点上的接口\"：连线从一个朝向离开，再从另一端的\n朝向进入，中间用三次曲线接起来。",
@@ -1479,15 +1166,6 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "display": {
           "$ref": "#/$defs/PagesDisplay",
           "default": "render"
@@ -1496,6 +1174,27 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "select": {
+          "description": "Second value (ADR 0031 §2 named field): the selected key.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -1514,57 +1213,19 @@
         }
       ]
     },
-    "Path": {
+    "Panel": {
+      "description": "面板：一个\"出现/消失的内容区\"。`attrs.place` 说它放在哪（inline / 贴触发器 / 贴视口），\n`attrs.state` 说谁决定它出现（本地切换 / 跟着所绑槽）。这两条轴上的四格就是原来的\n`fold`、`popup`、`layer`，以及它们没覆盖的一格 —— 贴视口 + 本地切换（抽屉）。\n\n`children[0]` 是触发器，`children[1]` 是浮层内容（`state: bound` 时触发器可以省：面板\n的出现由槽决定，不需要人点）。缺内容就什么都不画 —— 少写一个子节点是帧的错误。",
       "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ClassAttr"
+              "$ref": "#/$defs/PanelAttr"
             },
             {
               "type": "null"
             }
           ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "Popup": {
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DirectionAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
         },
         "children": {
           "type": [
@@ -1580,35 +1241,20 @@
             "string",
             "null"
           ]
-        }
-      }
-    },
-    "Portal": {
-      "description": "渲染位置传送（ADR 0014）：children 渲染到 `to` 选中的元素里，就地只留一个空锚点。\n只做位置，不管显隐与遮罩——那是 layer 的语义。",
-      "type": "object",
-      "properties": {
-        "attrs": {
+        },
+        "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/PortalAttr"
+              "$ref": "#/$defs/Bind"
             },
             {
               "type": "null"
             }
           ]
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
         }
       }
     },
-    "PortalAttr": {
+    "PanelAttr": {
       "type": "object",
       "properties": {
         "class": {
@@ -1619,6 +1265,35 @@
           "items": {
             "type": "string"
           }
+        },
+        "direction": {
+          "description": "`viewport` only: which edge the body hugs. Absent = `L` — the left edge of the viewport\n(`Direction` is the same enum `popup` positions with).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dismiss": {
+          "description": "Closes on a click outside the body — the mask for `viewport`, \"anywhere else\" for the rest.\nA panel without it can only be closed by its trigger (a bundle that must not lose its work).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "place": {
+          "description": "Where it sits. Absent = `inline`.",
+          "$ref": "#/$defs/PanelPlace"
+        },
+        "replace_header": {
+          "description": "`inline` only: the first child is the header and toggles the body (the old `fold` shape).",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "selector": {
           "type": [
@@ -1626,28 +1301,12 @@
             "null"
           ]
         },
-        "to": {
-          "description": "目标挂载点：CSS 选择器，选中应用显式声明的 layer 宿主（ADR 0014：挂载点由\n应用声明，渲染器不加固定逻辑；解析不到就不渲染 + warn）。",
-          "type": "string"
-        }
-      },
-      "required": [
-        "to"
-      ]
-    },
-    "PositionAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+        "state": {
+          "description": "Who decides. Absent = `toggle`.",
+          "$ref": "#/$defs/PanelState"
         },
-        "selector": {
+        "width": {
+          "description": "`viewport` only: the body's width. Absent = whatever the class says.",
           "type": [
             "string",
             "null"
@@ -1719,6 +1378,72 @@
         }
       ]
     },
+    "PanelPlace": {
+      "description": "How a panel sits on the page — the first of the two axes that used to be three components.",
+      "oneOf": [
+        {
+          "description": "In the flow: opening it pushes the rest of the page down. (Was `fold`, `float_body: false`.)",
+          "type": "string",
+          "const": "inline"
+        },
+        {
+          "description": "Over the trigger it belongs to: the page around it does not move. (Was `popup`.)",
+          "type": "string",
+          "const": "anchor"
+        },
+        {
+          "description": "Over the whole viewport, at the named edge, with a mask behind it. (Was `layer`; a panel at\nthe right edge is the drawer that had no spelling before.)",
+          "type": "string",
+          "const": "viewport"
+        }
+      ]
+    },
+    "PanelState": {
+      "description": "Who decides whether a panel is on screen — the second axis.",
+      "oneOf": [
+        {
+          "description": "A local toggle: the trigger opens it, a click on the mask / Esc / outside closes it. Nothing\nabout it reaches the sender.",
+          "type": "string",
+          "const": "toggle"
+        },
+        {
+          "description": "The panel follows its binding: non-empty means on screen (ADR 0012's \"empty is absent\"),\nand dismissing clears that slot — one state, not two. Named `bound`, not `source`: the\nchannel `source` says where a VALUE comes from, this says who decides the panel is there.",
+          "type": "string",
+          "const": "bound"
+        }
+      ]
+    },
+    "Path": {
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "Rack": {
       "type": "object",
       "properties": {
@@ -1731,15 +1456,6 @@
               "type": "null"
             }
           ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
         },
         "children": {
           "type": [
@@ -1764,6 +1480,16 @@
           "items": {
             "$ref": "#"
           }
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -1846,10 +1572,19 @@
     },
     "RackPlay": {
       "description": "Who decides which row is current: the newest one (as before), or a rotation of the renderer's.",
-      "type": "string",
-      "enum": [
-        "newest",
-        "rotate"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "newest",
+            "rotate"
+          ]
+        },
+        {
+          "description": "Every row lives `every` ms from the moment it went on stage, then leaves — all of them are\non stage at once, unlike `rotate`, which takes turns. The row stays in the slot; only the\nstage changes, so an area that keeps its rows (a log, a management page) shows all of them.",
+          "type": "string",
+          "const": "dwell"
+        }
       ]
     },
     "RackScroll": {
@@ -1893,7 +1628,7 @@
           "minimum": 0
         },
         "every": {
-          "description": "`rotate` 每一步停留多久（毫秒）。",
+          "description": "一行在台上待多久（毫秒）：`rotate` 的一步（然后轮到下一行），`dwell` 的全部（到点就下台）。\n缺席 = 4000，渲染器另有下限 200。",
           "type": [
             "integer",
             "null"
@@ -1927,6 +1662,15 @@
         }
       }
     },
+    "Scope": {
+      "description": "Where a value is authoritative (ADR 0031 §1). The store is chosen by this\nfield, not by a separate variant: `local` lives in the page's own value\nplane, `remote` on the side that owns the session, `both` assigns locally\nand mirrors the change up.",
+      "type": "string",
+      "enum": [
+        "remote",
+        "local",
+        "both"
+      ]
+    },
     "Select": {
       "type": "object",
       "properties": {
@@ -1940,15 +1684,6 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "children": {
           "type": [
             "array",
@@ -1959,6 +1694,44 @@
           }
         },
         "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "options": {
+          "description": "Second value: the option rows (list plane).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tag": {
+          "description": "The field's name inside an enclosing bundle (same rule as `input`).",
           "type": [
             "string",
             "null"
@@ -2027,6 +1800,29 @@
         }
       }
     },
+    "SubmitMode": {
+      "description": "When a bundle sends (ADR 0032). The modes combine, so the attribute is a\nset: `[enter, button]` is a chat box, `[change]` packs as the user types.\nThis is timing — a different axis from `scope`, which says where a value\nlands.",
+      "type": "string",
+      "enum": [
+        "enter",
+        "button",
+        "change"
+      ]
+    },
+    "SubmitSet": {
+      "description": "A bare string or a list on the wire: `submit: enter` and `submit: [enter]`\nsay the same thing, so the one-mode case (nearly every frame) does not have\nto remember the list syntax.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SubmitMode"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubmitMode"
+          }
+        }
+      ]
+    },
     "Svg": {
       "type": "object",
       "properties": {
@@ -2039,15 +1835,6 @@
               "type": "null"
             }
           ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
         },
         "children": {
           "type": [
@@ -2062,6 +1849,16 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -2155,49 +1952,20 @@
             }
           ]
         },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
         "id": {
           "type": [
             "string",
             "null"
           ]
-        }
-      }
-    },
-    "TextArea": {
-      "type": "object",
-      "properties": {
-        "attrs": {
+        },
+        "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ClassAttr"
+              "$ref": "#/$defs/Bind"
             },
             {
               "type": "null"
             }
-          ]
-        },
-        "bind": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "$ref": "#/$defs/Bind"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
           ]
         }
       }

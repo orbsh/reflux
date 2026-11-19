@@ -54,8 +54,8 @@ def shell(ctx: Context) -> Accrete:
     """
     return b.frame(
         b.frame(
-            b.form(b.button("概览"), dest=names.go.dashboard, id="nav-dashboard"),
-            b.form(b.button("对话"), dest=names.go.chat, id="nav-chat"),
+            b.bundle(b.button("概览", sink=names.go.dashboard), sink=names.go.dashboard, submit="button", id="nav-dashboard"),
+            b.bundle(b.button("对话", sink=names.go.chat), sink=names.go.chat, submit="button", id="nav-chat"),
             b.text("reflux 示例", variant="muted"),
             id="nav",
             grid={"grid-template-columns": "auto auto 1fr", "gap": "8px", "align-items": "center"},

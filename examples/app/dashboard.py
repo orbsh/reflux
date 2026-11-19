@@ -156,7 +156,7 @@ def dashboard(ctx: Context, match: Match) -> None:
                 variant="muted",
                 id="viewer-note",
             ),
-            b.form(b.button("换一组数据"), dest=names.dashboard.refresh, id="refresh"),
+            b.bundle(b.button("换一组数据", sink=names.dashboard.refresh), sink=names.dashboard.refresh, submit="button", id="refresh"),
             id="page-dashboard",
             grid={"gap": "12px"},
         ),

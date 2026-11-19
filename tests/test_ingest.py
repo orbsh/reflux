@@ -130,22 +130,26 @@ class TestTheNode(unittest.TestCase):
         # `class_` is the model's name for the wire's `class`; the renderer's serde would drop it.
         refused(self, frame(hand("create", {"type": "text", "attrs": {"class_": ["x"]}})), "'class_' is not an attribute")
 
-    def test_the_bind_map_is_closed_per_kind(self) -> None:
+    def test_the_value_map_is_closed(self) -> None:
+        # One value, one address, one closed scope (ADR 0031): `source`, `sink` and a node's named
+        # second values are all one `Bind`, so a key that is not the `Bind`'s is refused on any of
+        # them — and the reason names the key and the set it missed.
         refused(
             self,
-            frame(hand("create", {"type": "text", "bind": {"value": {"kind": "elsewhere"}}})),
-            "not one of the wire's binding kinds",
+            frame(hand("create", {"type": "text", "source": {"kind": "elsewhere"}})),
+            "'kind' is not a field of a value (slot/scope/default/path/type)",
         )
-        # `payload` rides a `field`落点 only — on a `source` entry it is a silent drop anywhere else.
         refused(
             self,
-            frame(
-                hand(
-                    "create",
-                    {"type": "text", "bind": {"value": {"kind": "source", "source": "s", "payload": ["a"]}}},
-                )
-            ),
-            "'payload' is not a field of a 'source' binding",
+            frame(hand("create", {"type": "input", "sink": {"slot": "s", "payload": ["a"]}})),
+            "'payload' is not a field of a value (slot/scope/default/path/type)",
+        )
+        # The retired `bind` map is not a field of any node either: a producer speaking the old
+        # dialect is refused where it starts, not silently dropped by the renderer's serde.
+        refused(
+            self,
+            frame(hand("create", {"type": "text", "bind": {"value": {"default": "x"}}})),
+            "'bind' is not a field of 'text'",
         )
 
     def test_the_token_lane_is_closed_at_the_boundary(self) -> None:
@@ -173,7 +177,7 @@ class TestTheNode(unittest.TestCase):
         refused(self, frame(hand("create", {"type": "input", "kind": "nope"})), "frame[0] (create).data")
 
     def test_a_defect_deep_in_the_tree_names_its_path(self) -> None:
-        bad = {"type": "frame", "children": [{"type": "text", "bind": {"value": {"kind": "default", "default": "x"}}}, {"type": "nope"}]}
+        bad = {"type": "frame", "children": [{"type": "text", "source": {"default": "x"}}, {"type": "nope"}]}
         with self.assertRaises(Refused) as caught:
             ingest.check_frame(frame(hand("create", bad)))
         self.assertIn("children[1]", str(caught.exception))

@@ -44,7 +44,7 @@ def shown(node: dict) -> str:
     """The text the page's content carries — `ctx.page` writes the two markers ahead of it."""
     if node.get("type") == "frame" and (node.get("children") or [{}])[0].get("id") == "reflux:path":
         node = node["children"][2]
-    return node["bind"]["value"]["default"]
+    return node["source"]["default"]
 
 
 class TestPageResolution(unittest.TestCase):
@@ -169,7 +169,7 @@ class TestTheDemoApp(unittest.TestCase):
         app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/about"}})
         root = page_of(device)
         markers = {
-            child["id"]: child["children"][0]["bind"]["value"]["default"]
+            child["id"]: child["children"][0]["source"]["default"]
             for child in root["children"]
             if child["type"] == "frame"
         }
@@ -192,7 +192,7 @@ class TestTheDemoApp(unittest.TestCase):
         self.assertEqual(device.path, "/about")
         root = page_of(device)
         path_marker = next(child for child in root["children"] if child.get("id") == "reflux:path")
-        self.assertEqual(path_marker["children"][0]["bind"]["value"]["default"], "/about")
+        self.assertEqual(path_marker["children"][0]["source"]["default"], "/about")
 
 
 if __name__ == "__main__":

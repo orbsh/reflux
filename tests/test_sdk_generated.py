@@ -7,12 +7,14 @@ Offline by design — no codegen, no cargo, no browser. Two commands make up thi
 
 What this file pins, and why each one is here rather than assumed:
 
-- every one of the wire's types parses into *its own* class. The codegen's raw output failed this for
-  18 of them ({"type": "float"} validated as `Frame`), so the regression is a first-class check.
-- an unknown or missing `type` is refused, and so is an unknown `bind.kind`.
-- `bind` is a typed map (not `dict[str, Any]`) and `PositionAttr`'s flattened keys survive a round
-  trip — both were silently dropped by the raw output.
-- the profile's keys are exactly the schema's 30 types, the builders expose exactly the profile's
+- every one of the wire's types parses into *its own* class. The codegen's raw output keyed each arm
+  on a synthesised inline class (10 duplicated as `Accrete1..10`, the named classes untagged), so the
+  regression is a first-class check.
+- an unknown or missing `type` is refused, and so is an unknown key on a value or an out-of-domain
+  `scope` (ADR 0031 made the scope a closed set; an open one is what that ADR retires).
+- `source` / `sink` are typed `Bind`s (one plain model, not a free-form map) and `PanelAttr`'s
+  flattened keys survive a round trip — both were silently dropped by the raw output.
+- the profile's keys are exactly the schema's 25 types, the builders expose exactly the profile's
   exposed set, the hidden attributes are unreachable, and every builder's defaults are the schema's.
 """
 
@@ -92,11 +94,12 @@ class UnionTest(unittest.TestCase):
                 self.assertEqual(sdk.dump(node)["type"], const)
 
     def test_the_regression_the_codegen_had(self):
-        """{"type": "float"} used to validate as `Frame`; the tag is what makes this true."""
-        for const in ("frame", "float", "rack", "select", "layer"):
+        """`{"type": "panel"}` used to land on a synthesised copy; the tag is what makes this true."""
+        for const, cls in (("frame", "Frame"), ("panel", "Panel"), ("rack", "Rack"),
+                           ("select", "Select"), ("dock", "Dock"), ("svg", "Svg")):
             with self.subTest(type=const):
                 node = sdk.parse({"type": const, "children": []})
-                self.assertEqual(type(node).__name__, const.capitalize() if const != "svg" else "Svg")
+                self.assertEqual(type(node).__name__, cls)
 
     def test_round_trip_keeps_what_the_wire_said(self):
         for const, cls in ARMS:
@@ -110,25 +113,32 @@ class UnionTest(unittest.TestCase):
                 with self.assertRaises(pydantic.ValidationError):
                     sdk.parse(bad)
 
-    def test_bind_is_a_typed_map_discriminated_on_kind(self):
-        kinds = {
-            "default": {"kind": "default", "default": "x"},
-            "source": {"kind": "source", "source": "slot"},
-            "slot": {"kind": "dest", "dest": "save"},
-            "field": {"kind": "field", "field": "name", "payload": {"k": 1}},
-            "submit": {"kind": "submit", "default": "提交"},
-            "local": {"kind": "local", "slot": "draft"},
+    def test_a_channel_is_one_typed_bind_with_a_closed_scope(self):
+        """ADR 0031 §1-2: `{slot, scope, default, path, type}` — one shape, three legal scopes."""
+        values = {
+            "constant": {"default": "x"},
+            "slot": {"slot": "notice"},
+            "both": {"slot": "draft", "scope": "both"},
+            "local+path": {"slot": "chan", "scope": "local", "path": "/data"},
+            "typed": {"slot": "name", "type": "text"},
+            "whole": {"slot": "s", "scope": "local", "default": "0", "type": "number", "path": "/n"},
         }
-        for name, entry in kinds.items():
-            with self.subTest(kind=name):
-                node = sdk.parse({"type": "input", "bind": {"value": entry}})
-                self.assertEqual(sdk.dump(node)["bind"]["value"], entry)
+        for name, entry in values.items():
+            with self.subTest(value=name):
+                node = sdk.parse({"type": "input", "source": entry})
+                self.assertEqual(sdk.dump(node)["source"], {**entry, "scope": entry.get("scope", "remote")})
+                node = sdk.parse({"type": "input", "sink": entry})
+                self.assertEqual(sdk.dump(node)["sink"], {**entry, "scope": entry.get("scope", "remote")})
+        # The retired vocabulary is not a second spelling: `kind` is not a field of a value.
         with self.assertRaises(pydantic.ValidationError):
-            sdk.parse({"type": "input", "bind": {"value": {"kind": "nope"}}})
+            sdk.parse({"type": "input", "source": {"kind": "source", "source": "slot"}})
+        # The scope is closed: a typo is an error, not a new namespace.
+        with self.assertRaises(pydantic.ValidationError):
+            sdk.parse({"type": "input", "source": {"slot": "s", "scope": "loca"}})
 
     def test_position_attrs_survive(self):
         """serde's #[flatten] hides left/right/top/bottom from `properties`; they are wire fields."""
-        node = sdk.float(sdk.text("x"), left="10px", top="2px")
+        node = sdk.panel(sdk.text("x"), left="10px", top="2px")
         self.assertEqual(sdk.dump(node)["attrs"], {"left": "10px", "top": "2px"})
 
 
@@ -187,41 +197,77 @@ class ProfileTest(unittest.TestCase):
                         with self.subTest(type=const, attr=attr):
                             self.assertEqual(params[attr].default, attr_schema.get("default", None))
 
-    def test_one_off_bind_reaches_the_wire(self):
-        self.assertEqual(sdk.dump(sdk.text("hi"))["bind"], {"value": {"kind": "default", "default": "hi"}})
-        self.assertEqual(sdk.dump(sdk.text(source=Slot("title")))["bind"],
-                         {"value": {"kind": "source", "source": "title"}})
-        with self.assertRaises(ValueError):
-            sdk.text("hi", source=Slot("title"))  # two sources for one slot
-        self.assertEqual(sdk.dump(sdk.button("提交"))["bind"],
-                         {"value": {"kind": "submit", "default": "提交"}})
-        self.assertEqual(sdk.dump(sdk.select(options_source=Slot("rows")))["bind"],
-                         {"options": {"kind": "source", "source": "rows"}})
-        self.assertEqual(sdk.dump(sdk.textarea(placeholder="写点什么"))["bind"],
-                         {"placeholder": {"kind": "default", "default": "写点什么"}})
-        node = sdk.input(field="name", kind=sdk.JsType.text)
-        self.assertEqual(sdk.dump(node)["bind"],
-                         {"value": {"kind": "field", "field": "name", "type": "text"}})
-        self.assertEqual(sdk.dump(sdk.input(dest=Slot("save")))["bind"],
-                         {"value": {"kind": "dest", "dest": "save"}})
-        with self.assertRaises(ValueError):
-            sdk.input(dest=Slot("save"), field="name")  # one落点 at a time
-        with self.assertRaises(ValueError):
-            sdk.input(payload={"k": 1})  # payload rides a field落点, not thin air
+    def test_a_constant_is_a_source_default(self):
+        """`text("hi")` and `text(source="hi")` are the same node — a constant is not a channel."""
+        self.assertEqual(sdk.dump(sdk.text("hi")),
+                         {"source": {"default": "hi", "scope": "remote"}, "type": "text"})
+        self.assertEqual(sdk.dump(sdk.text(source="hi")),
+                         {"source": {"default": "hi", "scope": "remote"}, "type": "text"})
+        # A slot with a fallback is what the wire means by `{slot, default}`, so both is one value.
+        self.assertEqual(sdk.dump(sdk.text("untitled", source=Slot("draft")))["source"],
+                         {"default": "untitled", "scope": "remote", "slot": "draft"})
+        self.assertEqual(sdk.dump(sdk.image("/static/logo.svg"))["source"],
+                         {"default": "/static/logo.svg", "scope": "remote"})
 
-    def test_a_local_binding_carries_its_path(self):
-        # A client-side slot holds the wrapper an in-page emit wrote, so a reader that wants the
-        # payload itself points into it. `path` rides a local落点 and nothing else.
-        self.assertEqual(
-            sdk.dump(sdk.text(local="chan", path="/data"))["bind"],
-            {"value": {"kind": "local", "slot": "chan", "path": "/data"}},
+    def test_a_slot_is_a_name_written_once(self):
+        self.assertEqual(sdk.dump(sdk.text(source=Slot("title")))["source"],
+                         {"scope": "remote", "slot": "title"})
+        # A bare string is not a second spelling of a slot: take the handle, or say `sdk.Bind(slot=…)`.
+        with self.assertRaises(TypeError):
+            sdk.frame(source="title")
+
+    def test_both_channels_reach_the_wire(self):
+        self.assertEqual(sdk.dump(sdk.input(sink="save"))["sink"], {"scope": "remote", "slot": "save"})
+        self.assertEqual(sdk.dump(sdk.input(source=Slot("prefill"), sink=Slot("name")))["source"],
+                         {"scope": "remote", "slot": "prefill"})
+        node = sdk.input(sink=sdk.Bind(slot="name", type=sdk.JsType.text))
+        self.assertEqual(sdk.dump(node)["sink"], {"scope": "remote", "slot": "name", "type": "text"})
+        self.assertEqual(sdk.dump(sdk.select(options=Slot("rows")))["options"],
+                         {"scope": "remote", "slot": "rows"})
+        self.assertEqual(sdk.dump(sdk.input(placeholder="写点什么"))["placeholder"],
+                         {"default": "写点什么", "scope": "remote"})
+        self.assertEqual(sdk.dump(sdk.button("提交", sink=Slot("submit")))["sink"],
+                         {"scope": "remote", "slot": "submit"})
+        # A channel a type does not accept is not a keyword of its builder — refused where it is built.
+        for call in (lambda: sdk.text(sink="x"), lambda: sdk.bundle(source="x"), lambda: sdk.table(sink="x")):
+            with self.assertRaises(TypeError):
+                call()
+
+    def test_a_bundle_packs_its_fields(self):
+        """ADR 0032: fields are named by `tag`, the bundle owns the sink, `submit` is its timing."""
+        node = sdk.bundle(
+            sdk.input(tag="name", sink="name"),
+            sdk.input(tag="body", multiline=True, sink="body"),
+            sink="compose",
         )
-        self.assertEqual(sdk.dump(sdk.text(local="chan"))["bind"],
-                         {"value": {"kind": "local", "slot": "chan"}})
-        with self.assertRaises(ValueError):
-            sdk.text(source=Slot("title"), path="/data")  # path on a source落点
-        with self.assertRaises(ValueError):
-            sdk.text(path="/data")  # path with no落点 at all
+        wire = sdk.dump(node)
+        self.assertEqual(wire["sink"], {"scope": "remote", "slot": "compose"})
+        self.assertEqual([(child["tag"], child.get("multiline")) for child in wire["children"]],
+                         [("name", None), ("body", True)])
+        self.assertNotIn("attrs", wire)  # absent `submit` means the wire default, `[enter]`
+        # A bare string and a one-item list are the same set; both reach the wire as a list.
+        self.assertEqual(sdk.dump(sdk.bundle(submit="change"))["attrs"], {"submit": ["change"]})
+        self.assertEqual(sdk.dump(sdk.bundle(submit=["enter", "button"]))["attrs"],
+                         {"submit": ["enter", "button"]})
+        # A field's values ride the channels: placeholder is a read, sink a write.
+        field = sdk.dump(sdk.input(placeholder="写点什么", sink="note"))
+        self.assertEqual(field["placeholder"], {"default": "写点什么", "scope": "remote"})
+        self.assertEqual(field["sink"], {"scope": "remote", "slot": "note"})
+        # `multiline` is a layout of `input`, not a type of its own.
+        self.assertFalse(hasattr(sdk, "textarea"))
+
+    def test_a_value_carries_its_scope_and_path(self):
+        # ADR 0031 §1: scope rides the value, so a local read is a `Bind`, not a second keyword.
+        self.assertEqual(
+            sdk.dump(sdk.text(source=sdk.Bind(slot="chan", scope="local", path="/data")))["source"],
+            {"path": "/data", "scope": "local", "slot": "chan"},
+        )
+        self.assertEqual(sdk.dump(sdk.text(source=sdk.Bind(slot="chan")))["source"],
+                         {"scope": "remote", "slot": "chan"})
+        with self.assertRaises(pydantic.ValidationError):
+            sdk.text(source=sdk.Bind(slot="chan", scope="loca"))
+        with self.assertRaises(pydantic.ValidationError):
+            sdk.text(source=sdk.Bind(kind="local", slot="chan"))
 
     def test_children_and_item_come_through(self):
         node = sdk.frame(sdk.text("a"), sdk.text("b"))

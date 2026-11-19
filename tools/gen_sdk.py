@@ -13,15 +13,20 @@
 
 Repairs applied to the codegen's output — each one is a measured defect of that output, not a taste:
 
-  1. `type` tags and a discriminated root union. 18 of the 30 arms lost their `type` const, so
-     {"type": "float", …} validated as the wrong arm (measured, back then `Case`); the other 12 were inlined anonymously
-     (`Accrete1..12`) while their named classes sat unreferenced. We tag every member and build the
-     union over the 30 named classes.
-  2. `bind: dict[str, Bind]`, with `Bind` discriminated on `kind`. The codegen flattened the map to
-     `dict[str, Any]` and left the `Bind` model unreferenced — free-form bindings on the wire.
-  3. `PositionAttr` gains the flattened `left`/`right`/`top`/`bottom` keys. serde's `#[flatten]` hides
+  1. `type` tags and a discriminated root union. The codegen keys each arm on a synthesised inline
+     class instead: 10 arms were duplicated as `Accrete1..10` (the copy carries the `type` const, the
+     named class is left untagged and unreferenced) and the other 15 named classes carry no tag at
+     all, so a node built from one has no discriminator. We tag all 25 named classes and build the
+     union over them.
+  2. `Scope` is a closed set, not an enum type: the wire's `remote | local | both` becomes the
+     `Literal` alias `Scope` (ADR 0031 §1 — an open value domain is the mistake that ADR retires),
+     and `Bind.scope` defaults to `'remote'`, so a value with no scope named is the authoritative
+     one rather than an absent field. `Bind` itself comes out of the codegen whole (one plain model,
+     `default / path / scope / slot / type`) — nothing to rebuild there.
+  3. `PanelAttr` gains the flattened `left`/`right`/`top`/`bottom` keys. serde's `#[flatten]` hides
      them from `properties` (they arrive in `allOf`), so the codegen emitted only class/selector plus
-     two unreferenced fragments — `float`'s positioning deserialized as silently dropped.
+     two unreferenced fragments (`PanelAttr1`, `PanelAttr2`) — a panel's positioning deserialized as
+     silently dropped.
   4. A stable header. The codegen's own header carries a timestamp, which would make a drift gate
      report a difference on every run.
 """
@@ -55,8 +60,9 @@ REGEN = "Regenerate: python3 tools/gen_sdk.py      Verify: python3 tools/gen_sdk
 TYPES_HEADER = f'''"""GENERATED from schema/accrete.schema.json by tools/gen_sdk.py — do not edit.
 
 The wire's types: one class per accrete type, plus the `Accrete` union discriminated on `type` and
-the `Bind` union discriminated on `kind`. Field names are the wire's names (`class_` carries the
-alias `class`); a value that is `None` is absent on this wire.
+the one `Bind` model every channel carries (ADR 0031: a value has a slot and a closed `Scope`).
+Field names are the wire's names (`class_` carries the alias `class`); a value that is `None` is
+absent on this wire.
 
 {REGEN}
 """
@@ -65,9 +71,15 @@ alias `class`); a value that is `None` is absent on this wire.
 BUILDERS_HEADER = f'''"""GENERATED from schema/accrete.schema.json + profile/profile.json by tools/gen_sdk.py — do not edit.
 
 The constructor surface: one function per type the profile exposes, named after the wire's own
-`type` value. Which arguments are positional, which bind keys exist, and what is hidden is decided
-by the profile; annotations and defaults come from the schema. Every builder validates through the
-type layer before returning, so a node that contradicts the wire is refused at construction.
+`type` value. Which arguments are positional, which channels exist (`source` in, `sink` out), and
+what is hidden is decided by the profile; annotations and defaults come from the schema. Every
+builder validates through the type layer before returning, so a node that contradicts the wire is
+refused at construction.
+
+A channel takes a `Bind` (slot / scope / default / path / type — the whole address), a `Slot`, or a
+bare value: on a read a bare value is the constant `{{"default": …}}`, on a write it is a slot name.
+`scope` is never a builder keyword — it belongs to the address, and a node with two channels would
+otherwise have one `scope=` meaning two different things.
 
 {REGEN}
 """
@@ -78,27 +90,27 @@ TYPES_IMPORTS = """from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field, RootModel, conint
+from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 
+
+# ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
+Scope = Literal['remote', 'local', 'both']
 """
 
 BUILDERS_IMPORTS = """from __future__ import annotations
 
 from typing import Any
 
-from ._parse import bind_entry, bind_value, drop_none, parse, token_attrs
+from ._parse import as_set, as_sink, as_source, drop_none, parse, token_attrs
 from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 """
 
 ANON = re.compile(r"^Accrete\d+$")
 # Dropped and rebuilt by the post-pass: the codegen's root RootModel (we emit the union alias
-# instead), the `Bind` RootModel (same, discriminated on `kind`), and the two fragments it hoisted
-# out of PositionAttr's flattened union.
-REBUILT = {"Accrete", "Bind", "PositionAttr1", "PositionAttr2"}
-
-SHARED_FIELDS = {"type", "attrs", "bind", "children", "item", "id"}
-HIDDEN_ATTRS = {"class", "selector"}
+# instead) and the two fragments it hoisted out of PanelAttr's flattened union.
+REBUILT = {"Accrete", "PanelAttr1", "PanelAttr2"}
+SCOPE = ("remote", "local", "both")
 
 
 def load(path: pathlib.Path) -> dict:
@@ -183,43 +195,47 @@ def repair(src: str, schema: dict, profile: dict) -> str:
     arms = arm_list(schema)
     defs = schema["$defs"]
     const_of = {name: const for const, name in arms}
+    scope = tuple((defs.get("Scope") or {}).get("enum") or ())
+    if scope != SCOPE:
+        # The alias in TYPES_IMPORTS is written out, not generated: if the wire's closed set moves,
+        # this is where the generator refuses rather than shipping a stale domain.
+        raise SystemExit(f"schema Scope is {scope or 'absent'}, the generator writes {SCOPE}")
     blocks_all = class_blocks(src)
-    enums = {block.name for block in blocks_all if "Enum" in block.bases}
+    enums = {block.name for block in blocks_all if "Enum" in block.bases} - {"Scope"}
     kept: list[Block] = []
 
     for block in blocks_all:
-        if ANON.fullmatch(block.name) or block.name in REBUILT:
+        if ANON.fullmatch(block.name) or block.name in REBUILT | {"Scope"}:
             continue
         body = list(block.body)
         if block.name in const_of and not any(re.match(r"\s+type:", ln) for ln in body):
             tag = repr(const_of[block.name])
             body.append(f"    type: Literal[{tag}] = {tag}")
-        if block.name == "PositionAttr":
-            for name in flattened_properties(defs["PositionAttr"]):
+        if block.name == "PanelAttr":
+            for name in flattened_properties(defs["PanelAttr"]):
                 body.append(f"    {name}: str | None = None")
-        body = [
-            re.sub(r"^(\s+)bind: dict\[str, Any\] \| None = None$",
-                   r"\1bind: dict[str, Bind] | None = None", ln)
-            for ln in body
-        ]
+        if block.name == "Bind":
+            # ADR 0031 §1: absent scope means the side that owns the session. The wire leaves the
+            # field optional; the model says what absence *means*, so a dump is the same frame
+            # whoever built it.
+            body = [
+                re.sub(r"^(\s+)scope: Scope \| None = None$", r"\1scope: Scope = 'remote'", ln)
+                for ln in body
+            ]
         body = [enum_default(ln, enums) for ln in body]
         kept.append(Block(block.name, block.header, body, block.bases))
 
-    names = [block.name for block in kept] + ["Accrete", "Bind"]
+    names = [block.name for block in kept] + ["Accrete", "Scope"]
     parts = [TYPES_IMPORTS, f"__all__ = {json.dumps(names)}", ""]
     parts += [ln for block in kept for ln in ("", "", *block.text)]
 
     union = " | ".join(name for _, name in arms)
-    bind_union = " | ".join(f"Bind{i}" for i in range(1, 7))
     parts += [
         "",
         "",
         "# The root union, discriminated on `type`: each arm is one of the classes above, so a node",
         "# validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.",
         f"Accrete = Annotated[Union[{union}], Field(discriminator='type')]",
-        "",
-        "# `bind` is a map of these, discriminated on `kind`.",
-        f"Bind = Annotated[Union[{bind_union}], Field(discriminator='kind')]",
         "",
         "",
         "# Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.",
@@ -285,7 +301,12 @@ def builders_text(models: list) -> str:
             head.append("*")
         keywords = [param(p.kwarg, p.annotation, p.default) for p in model.params]
 
-        attrs_kw = ", ".join(f"{p.kwarg}={p.kwarg}" for p in model.attrs)
+        # One keyword per attribute; a set-valued one (`submit`) takes the wire's two spellings
+        # (bare string / list) and writes the list, so the frame has one shape.
+        def expr(p) -> str:
+            return f"{p.kwarg}=as_set({p.kwarg})" if p.rkind == "strlist" else f"{p.kwarg}={p.kwarg}"
+
+        attrs_kw = ", ".join(expr(p) for p in model.attrs)
         if model.attrs and model.variants:
             attrs = f"    attrs = token_attrs(drop_none({attrs_kw}), variant, {model.wire!r})"
         elif model.variants:
@@ -295,25 +316,24 @@ def builders_text(models: list) -> str:
         else:
             attrs = "    attrs = None"
 
-        # One entry per bind key, the key's 落点 in the profile's order.
-        groups: list[tuple[str, list[str]]] = []
-        for op in model.ops:
-            if op.kwarg is None:
-                arg = f"{op.kind}=value"  # the positional value is this entry's value
-            elif op.kind == "type":
-                arg = "js_kind=kind"  # accrete's JsType rides as the entry's own `type`
+        # One line per channel (ADR 0031 §2): a Bind, a Slot, or a bare value. A read's bare value
+        # is the constant `{default: …}` when the profile says this type has one; the positional
+        # `value` *is* that constant, so it is folded in here rather than emitted twice.
+        channels: list[str] = []
+        for channel in model.channels:
+            if channel.name == "source":
+                merge = ", default=value" if model.positional == "value" else ""
+                latch = "" if channel.default else ", constants=False"
+                channels.append(f"    source = as_source(source{merge}{latch})")
             else:
-                arg = f"{op.kind}={op.kwarg}"
-            if groups and groups[-1][0] == op.key:
-                groups[-1][1].append(arg)
-            else:
-                groups.append((op.key, [arg]))
-        bind_parts = [
-            f"value=bind_value({', '.join(args)})" if key == "value" else f"{key}=bind_entry({key!r}, {', '.join(args)})"
-            for key, args in groups
-        ]
+                channels.append("    sink = as_sink(sink)")
+        # The node's own named second values (options / select / placeholder): a read of their own.
+        values = [f"    {p.kwarg} = as_source({p.kwarg})" for p in model.values]
 
-        node_args = [f"type={model.wire!r}", "attrs=attrs", "bind=bind", "id=id"]
+        node_args = [f"type={model.wire!r}", "attrs=attrs"]
+        node_args += [f"{channel.name}={channel.name}" for channel in model.channels]
+        node_args += [f"{p.kwarg}={p.kwarg}" for p in model.values]
+        node_args.append("id=id")
         if model.positional == "children":
             node_args.append("children=list(children) or None")
         if model.item:
@@ -327,7 +347,8 @@ def builders_text(models: list) -> str:
             f") -> {model.cls}:",
             f'    """Build a `{model.wire}` node (the wire type `{model.wire}`)."""',
             attrs,
-            f"    bind = drop_none({', '.join(bind_parts)})" if bind_parts else "    bind = None",
+            *channels,
+            *values,
             f"    return parse(drop_none({', '.join(node_args)}), {model.cls})",
         ]
         parts += [*body, "", ""]

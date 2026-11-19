@@ -75,7 +75,7 @@ class TestShell(unittest.TestCase):
         self.assertEqual([op["action"] for op in first], ["create", "set"])
         self.assertEqual(first[0]["data"]["id"], "shell")
         self.assertEqual(first[1]["slot"], ROUTES_SLOT)
-        self.assertEqual(first[1]["data"]["children"][2]["bind"]["value"]["default"], "page:/")
+        self.assertEqual(first[1]["data"]["children"][2]["source"]["default"], "page:/")
 
     def test_a_page_turn_after_that_writes_the_slot_and_nothing_else(self):
         app = app_with_shell("/", "/about")
@@ -85,7 +85,7 @@ class TestShell(unittest.TestCase):
         second = ops(device)
         self.assertEqual([op["action"] for op in second], ["set"])
         self.assertEqual(second[0]["slot"], ROUTES_SLOT)
-        self.assertEqual(second[0]["data"]["children"][2]["bind"]["value"]["default"], "page:/about")
+        self.assertEqual(second[0]["data"]["children"][2]["source"]["default"], "page:/about")
 
     def test_a_missing_path_lands_as_the_builtin_404_inside_the_shell(self):
         app = app_with_shell("/")

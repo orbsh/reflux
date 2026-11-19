@@ -12,7 +12,7 @@ so an `ev` field would only restate it, and a `sender` would be a field no reade
 
 **An address is a `slot`; an `event` is a name** (fluxen ADR 0022). `create`/`set`/`append`/`remove`/
 `patch` carry `slot` (`""` = the layout root); `event` appears only on the way *up* (`Outflow.event`,
-and inside a node's `bind`), plus `inject`'s optional `event?` — the local event it imitates.
+and in a node's `sink`), plus `inject`'s optional `event?` — the local event it imitates.
 
 Shape is what this layer can check — not list length. `position`'s domain depends on how many rows the
 slot holds, so an out-of-range position is the renderer's refusal (`warn`, no counter); the gate asserts
@@ -72,8 +72,8 @@ def _unique_ids(node: Any, where: str, seen: dict[str, str]) -> None:
 
     A list renders by key, so two nodes sharing an id make the renderer drop or reuse a row; a
     frame is cheaper to refuse here than to debug in a page. Ids ride `children` (every container)
-    and `item` (a rack's or fold's row template) and nowhere else: `attrs` and `bind` hold values,
-    not nodes.
+    and `item` (a rack's row template) and nowhere else: `attrs` and the value channels (`source`,
+    `sink`) hold values, not nodes.
     """
     if not isinstance(node, dict):
         return

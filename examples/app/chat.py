@@ -8,7 +8,7 @@ Six pieces of backend behaviour, one per section — each asserted in `tests/tes
    transcript is also the page tree's (the rows), so the backend only keeps what the model needs:
    turns, and how many of them the window holds.
 2. **streaming** — a worker thread per reply appends chunks with
-   `reply.patch("/bind/value/default", chunk, op="append")` — a `Slot`, not a name in a string. The frame queue is the device's, so
+   `reply.patch("/source/default", chunk, op="append")` — a `Slot`, not a name in a string. The frame queue is the device's, so
    one client's slow write never holds a model call or another device.
 3. **single flight** — a second message while one is streaming is refused *with a reason on the
    status line*, not silently dropped: the composer is not disabled, so the second send is a real
@@ -43,7 +43,7 @@ from .names import Names
 
 __all__ = ["Chat", "MAX_CHARS", "WINDOW", "page", "send", "settings", "spawn", "stream"]
 
-TEXT_VALUE = "/bind/value/default"  # pointer into a text node stored in a slot
+TEXT_VALUE = "/source/default"  # pointer into a text node stored in a slot
 MAX_CHARS = 4096  # an application limit, not a wire limit
 WINDOW = 12  # turns of context the model sees; older ones are dropped
 
@@ -125,8 +125,19 @@ def page(ctx: Context, match: Match) -> None:
             b.text(source=slots.status, variant="muted", id="status"),
             b.rack(source=slots.messages, scroll=True, id="messages"),
             b.frame(
-                b.form(b.input(field="text", id="composer"), b.button("发送"), dest=slots.chat.send, id="send"),
-                b.form(b.button("停止"), dest=slots.chat.stop, id="stop"),
+                b.bundle(
+                    b.input(tag="text", id="composer"),
+                    b.button("发送", sink=slots.chat.send),
+                    sink=slots.chat.send,
+                    submit=["enter", "button"],
+                    id="send",
+                ),
+                b.bundle(
+                    b.button("停止", sink=slots.chat.stop),
+                    sink=slots.chat.stop,
+                    submit="button",
+                    id="stop",
+                ),
                 grid={"grid-template-columns": "1fr auto", "gap": "8px"},
                 id="composer-row",
             ),

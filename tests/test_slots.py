@@ -6,6 +6,7 @@ import unittest
 
 from reflux import App
 from reflux.sdk import builders as b
+from reflux.sdk import dump
 from reflux.slots import Slot, Slots
 
 from tests.fakes import FakeDevice
@@ -73,8 +74,10 @@ class TheSlot(unittest.TestCase):
         self.assertEqual(len(self.device.frames), 4, "each verb is one frame on its own")
 
     def test_a_slot_stands_for_its_name_in_a_node(self) -> None:
+        # A handle reaches the wire as its name in the `Bind` the channel carries (ADR 0031 §1–2).
         node = b.text(source=self.ctx.slot["status"])
-        self.assertEqual(node.bind["value"].source, "status")
+        assert node.source is not None  # optional on the wire, never on a node built with one
+        self.assertEqual(node.source.slot, "status")
 
     def test_a_declaration_is_recorded_on_the_app(self) -> None:
         self.ctx.slot["status"].set(b.text("x"))
@@ -85,36 +88,43 @@ class TheSlot(unittest.TestCase):
 
 
 class TheAddressesInNodes(unittest.TestCase):
-    """`source=` and `dest=` take handles. A string is the name written a second time — refused."""
+    """`source=` and `sink=` take handles (ADR 0031 §2); a bare value means what each side can hold.
+
+    A read has a constant to fall back on (for the types the profile gives one), so a bare value
+    there is that constant, never a name. A write has nothing to default to, so a bare string there
+    is the slot's name — the same string, read as the one thing it could mean.
+    """
 
     def setUp(self) -> None:
         self.app = App()
         self.ctx = self.app.context(FakeDevice())
 
     def test_a_source_handle_reaches_the_wire_as_its_name(self) -> None:
-        self.assertEqual(b.text(source=self.ctx.slot["status"]).bind["value"].source, "status")
+        self.assertEqual(b.text(source=self.ctx.slot["status"]).source.slot, "status")
 
-    def test_a_dest_handle_reaches_the_wire_as_its_name(self) -> None:
-        node = b.form(b.button("send"), dest=self.ctx.slot("chat.send"))
-        self.assertEqual(node.bind["value"].dest, "chat.send")
+    def test_a_sink_handle_reaches_the_wire_as_its_name(self) -> None:
+        node = b.bundle(b.button("send", sink=self.ctx.slot("chat.send")), sink=self.ctx.slot("chat.send"))
+        self.assertEqual(node.sink.slot, "chat.send")
 
-    def test_a_string_is_refused_for_both(self) -> None:
-        for build in (
-            lambda: b.text(source="status"),
-            lambda: b.form(b.button("send"), dest="chat.send"),
-            lambda: b.rack(source="rows"),
-        ):
+    def test_a_bare_value_is_a_constant_on_a_read_and_a_name_on_a_write(self) -> None:
+        self.assertEqual(dump(b.text(source="status"))["source"], {"default": "status", "scope": "remote"})
+        self.assertEqual(dump(b.bundle(sink="chat.send"))["sink"], {"scope": "remote", "slot": "chat.send"})
+
+    def test_a_read_with_no_constant_refuses_a_bare_string(self) -> None:
+        # A `rack` has no `default` in the profile: a bare value there is neither a constant nor a
+        # name, so the builder refuses instead of guessing which one was meant.
+        for build in (lambda: b.rack(source="rows"), lambda: b.frame(source="rows")):
             with self.assertRaises(TypeError):
                 build()
 
     def test_the_message_says_where_the_handle_comes_from(self) -> None:
         with self.assertRaises(TypeError) as caught:
-            b.text(source="status")
-        self.assertIn("ctx.slot('status')", str(caught.exception))
+            b.rack(source="rows")
+        self.assertIn("ctx.slot('rows')", str(caught.exception))
 
     def test_a_slot_with_no_delivery_can_name_but_not_write(self) -> None:
         handle = Slot("rows")
-        self.assertEqual(b.rack(source=handle).bind["value"].source, "rows")
+        self.assertEqual(b.rack(source=handle).source.slot, "rows")
         with self.assertRaises(RuntimeError):
             handle.append(b.text("row"))
 

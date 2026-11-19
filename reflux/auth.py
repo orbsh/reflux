@@ -31,7 +31,7 @@ from typing import Any, Callable, Protocol
 
 from .protocol import LOGIN, SIGNUP
 from .sdk import builders as b
-from .sdk.types import Accrete, JsType
+from .sdk.types import Accrete, Bind, JsType
 
 __all__ = ["Auth", "TokenStore", "Tokens", "credentials_of", "default_view", "DEFAULT_IDLE_WINDOW"]
 
@@ -113,9 +113,9 @@ class Tokens:
 def credentials_of(frame: Any) -> dict[str, Any]:
     """The frame's payload as `{name: value}`, whichever way it was written.
 
-    A page's form sends every field as `{"data": value, "payload": null}` (the renderer's own shape,
-    and the null is its `Option`, not our lane); a program sends the flat dict. Unwrapping at the
-    entry keeps that difference out of `verify` — the same rule the reference app's form follows.
+    A bundle sends the flat object it packed — `{tag: value, …}` (ADR 0032), no per-field wrapper.
+    A frame from an older renderer still carries `{"data": value, "payload": null}` on each entry,
+    and that is unwrapped here so the difference never reaches `verify`.
     """
     data = frame.get("data") if isinstance(frame, dict) else None
     if not isinstance(data, dict):
@@ -140,13 +140,17 @@ def default_view(ctx: Any, state: str) -> Accrete:
     lines: list[Accrete] = [b.text("登录", variant="heading-1")]
     if state == "refused":
         lines.append(b.text("用户名或密码不对", variant="muted"))
+    # A bundle owns the exit (`sink`) and the timing (`submit`, ADR 0032); each field is named by
+    # its own `tag`. The js-kind rides the write side's `Bind` — a tagged field has no address of
+    # its own, so that entry names a type and no slot.
     return b.frame(
         *lines,
-        b.form(
-            b.input(field="username", id="auth-user"),
-            b.input(field="password", kind=JsType.password, id="auth-pass"),
-            b.button("继续"),
-            dest=ctx.slot(verb),
+        b.bundle(
+            b.input(tag="username", id="auth-user"),
+            b.input(tag="password", sink=Bind(type=JsType.password), id="auth-pass"),
+            b.button("继续", sink=ctx.slot(verb)),
+            sink=ctx.slot(verb),
+            submit=["enter", "button"],
             id="auth-form",
         ),
     )

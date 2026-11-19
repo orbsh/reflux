@@ -27,7 +27,8 @@ def status_text(device: FakeDevice) -> str:
     for frame in reversed(device.frames):
         for op in frame:
             if op.get("action") == "set" and op.get("slot") == "status":
-                return ((op.get("data") or {}).get("bind") or {}).get("value", {}).get("default", "")
+                text = ((op.get("data") or {}).get("source") or {}).get("default", "")
+                return text if isinstance(text, str) else ""
     return ""
 
 
@@ -216,7 +217,7 @@ class OneExchange(unittest.TestCase):
         self.assertEqual([op["action"] for op in frame], ["append", "append", "set", "set"])
         self.assertEqual(frame[0]["data"]["id"], "row-user-1")
         self.assertEqual(frame[1]["data"]["id"], "row-bot-1")
-        self.assertEqual(frame[1]["data"]["children"][0]["bind"]["value"]["source"], "reply.1")
+        self.assertEqual(frame[1]["data"]["children"][0]["source"]["slot"], "reply.1")
         self.assertEqual(frame[2]["slot"], "reply.1")  # the region the bubble reads, made in the same batch
 
     def test_every_later_frame_only_addresses_that_region(self):

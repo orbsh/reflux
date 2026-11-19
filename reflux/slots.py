@@ -1,13 +1,14 @@
-"""Slots: the names a node carries — the one it reads (`source=`) and the one it speaks to (`dest=`).
+"""Slots: the names a node carries — the one it reads (`source=`) and the one it speaks to (`sink=`).
 
-Both are names on the wire (a slot is a place in the page, a dest is a handler on the host — ADR 0023)
+Both are names on the wire (a slot is a place in the page, an event is a handler on the host — ADR 0023)
 and both are handled the same way: as a handle from one table, never as a string at the point of use.
 `source="status"` next to a `slot.set(...)` is the same name written twice, kept in step by eye; the
-particular kind of address is the bind entry's business, not the caller's. So there is one table
-(`ctx.slot`), one type (`Slot`), and both `source=` and `dest=` refuse strings.
+particular kind of address is the `Bind`'s business — slot, scope, default, path, type (ADR 0031) —
+not the caller's. So there is one table (`ctx.slot`), one type (`Slot`), and both `source=` and
+`sink=` refuse strings.
 
 A `Slot` carries its verbs (`set`/`append`/`patch`/`remove`, each one frame) — the writing side of a
-data plane. Using one as a `dest=` is the same name used as an address, which is all a dest is.
+data plane. Using one as a `sink=` is the same name used as an address, which is all an uplink is.
 
     class Chat(Protocol):
         send: Slot
@@ -16,12 +17,13 @@ data plane. Using one as a `dest=` is the same name used as an address, which is
     class ChatSlots(Protocol):           # annotations only — this is what the editor completes
         status: Slot
         messages: Slot
-        chat: Chat                       # `slots.chat.send` is the dest "chat.send"
+        chat: Chat                       # `slots.chat.send` is the sink "chat.send"
 
     slots: ChatSlots = ctx.slot          # type: ignore[assignment]
     slots.status.set(b.text("就绪"))      # one frame
     b.text(source=slots.status)          # a node reads a slot
-    b.form(b.button("发送"), dest=slots.chat.send)        # and speaks to a dest — same view, nested
+    b.bundle(b.button("发送", sink=slots.chat.send), sink=slots.chat.send, submit="button")
+                                         # and speaks to an event — same view, nested
 
 `ctx.slot("chat/status")`, `ctx.slot["status"]` and `ctx.slot.status` are one slot. Paths go out as
 written: hierarchical names are allowed and nothing parses the `/` yet. Declared slots land in
@@ -42,7 +44,7 @@ class Slot:
 
     A slot belongs to a delivery (`ctx`), because saying something is a device's act: two devices
     reading the same slot hold two `Slot`s with the same name. A handle with no delivery is still a
-    name — enough to read a slot (`source=`) or address a dest (`dest=`), and a mistake to write
+    name — enough to read a slot (`source=`) or address an event (`sink=`), and a mistake to write
     through.
     """
 
@@ -78,7 +80,7 @@ class Slot:
         """Record this name on the app — what makes `/status` a list of names in use, not of guesses.
 
         Called where the name is actually used: a write (`set`/`append`/`patch`/`remove`) or an
-        entry in a node (`source=`, `dest=`). Taking a handle is not a use, so `ctx.slot.go` inside
+        entry in a node (`source=`, `sink=`). Taking a handle is not a use, so `ctx.slot.go` inside
         `ctx.slot.go.dashboard` records `go.dashboard` and not the `go` on the way.
         """
         if self._app is not None:
@@ -90,7 +92,7 @@ class Slot:
         if self._ctx is None:
             raise RuntimeError(
                 f"slot {self.name!r} has no delivery: a handle built without one can name an address "
-                f"(source=, dest=) but not write through it"
+                f"(source=, sink=) but not write through it"
             )
         self._ctx.emit(operation)
 
@@ -110,7 +112,7 @@ class Slot:
         """`slots.chat["send"]` — the same child as `slots.chat.send`, and the way past the verbs.
 
         `set`/`append`/`patch`/`remove` are always verbs, so a name that ends in one of them is
-        reached with the subscript: `slots.row["remove"]` is the dest `row.remove`, while
+        reached with the subscript: `slots.row["remove"]` is the sink `row.remove`, while
         `slots.row.remove` is the verb that drops a row.
         """
         return self._child(name)
@@ -145,7 +147,7 @@ class Slots:
         self._ctx = ctx
 
     def __call__(self, path: str) -> Slot:
-        """Declare a name: `ctx.slot("chat/status")` — or the dest a form speaks to."""
+        """Declare a name: `ctx.slot("chat/status")` — or the sink a bundle exits through."""
         return self._make(path)
 
     def __getitem__(self, name: str) -> Slot:

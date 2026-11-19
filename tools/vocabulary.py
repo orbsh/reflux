@@ -2,7 +2,7 @@
 
     schema/accrete.schema.json   the wire's snapshot — types, fields, value domains
     profile/profile.json         reflux's selection — which types are exposed, which keywords exist,
-                                 which bind 落点 each one carries, which variant names are closed
+                                 which value channels each one offers, which variant names are closed
     reflux/sdk/types.py          the generated type layer — **field order** comes from here, because
                                  that order is what `model_dump` writes on the wire
 
@@ -14,9 +14,14 @@ belongs in this file.
 Why the field order is not this file's opinion: the wire's byte order for a node is its class's
 declaration order in `types.py` (pydantic serializes in declaration order, and the codegen's order
 came from the schema). Reading it from the generated file — rather than recomputing "alphabetical,
-probably" — is what lets a second language emit the same bytes. A bind entry is the same story
-with a twist: serde's flattened unions gave the `Bind1..6` classes an order that is *not*
-alphabetical (`default, type, kind, path, source`), so the order is read, never assumed.
+probably" — is what lets a second language emit the same bytes. A `Bind` (ADR 0031's one value, one
+address, one scope) is the same story: its field order (`default, path, scope, slot, type`) is an
+accident of serde's struct, not alphabetical, so the emitter reads it rather than assuming it.
+
+The two directions (ADR 0031 §2) are the only value surface a builder offers: `source` is where a
+value comes from, `sink` is where it goes, and the profile says which of them the renderer actually
+reads/writes for that type. A node's *named second* values (`options`, `select`, `placeholder`) are
+not channels — each is one field of its own type, found in the schema.
 """
 
 from __future__ import annotations
@@ -24,15 +29,16 @@ from __future__ import annotations
 import ast
 import json
 import pathlib
-import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "schema" / "accrete.schema.json"
 PROFILE_PATH = ROOT / "profile" / "profile.json"
 TYPES_PATH = ROOT / "reflux" / "sdk" / "types.py"
 
-SHARED_FIELDS = {"type", "attrs", "bind", "children", "item", "id"}
+SHARED_FIELDS = {"type", "attrs", "source", "sink", "children", "item", "id"}
 HIDDEN_ATTRS = {"class", "selector"}
+# The two directions, in flow order: in, then out (ADR 0031 §2).
+CHANNELS = ("source", "sink")
 
 
 class ModelError(SystemExit):
@@ -74,30 +80,14 @@ def _annotated_names(node: ast.ClassDef) -> list[str]:
     return names
 
 
-def _literal(stmt: ast.AnnAssign) -> str | None:
-    """The `Literal['…']` a class declares for a field (used to find each Bind arm's kind)."""
-    text = ast.unparse(stmt.annotation)
-    m = re.search(r"Literal\['([^']+)'\]", text)
-    return m.group(1) if m else None
-
-
-def read_orders(types_src: str) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    """(class → field order, bind kind → field order) read from the generated type layer."""
+def read_orders(types_src: str) -> dict[str, list[str]]:
+    """class → field order, read from the generated type layer (the wire's byte order)."""
     classes: dict[str, list[str]] = {}
-    bind_orders: dict[str, list[str]] = {}
     for node in ast.parse(types_src).body:
         if not isinstance(node, ast.ClassDef):
             continue
-        order = _annotated_names(node)
-        classes[node.name] = order
-        if not re.fullmatch(r"Bind\d+", node.name):
-            continue
-        for stmt in node.body:
-            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.target.id == "kind":
-                kind = _literal(stmt)
-                if kind:
-                    bind_orders[kind] = order
-    return classes, bind_orders
+        classes[node.name] = _annotated_names(node)
+    return classes
 
 
 def rkind(fragment: dict, defs: dict) -> str:
@@ -174,30 +164,32 @@ class Param:
         self.rkind, self.lane, self.wire = rkind, lane, wire
 
 
-class BindOp:
-    """One 落点 on one bind key: `value=default`, `options=source`, `value=field` + payload, …"""
+class Channel:
+    """One direction of a value on a node (ADR 0031 §2): `source` in, `sink` out.
 
-    __slots__ = ("key", "kind", "kwarg", "param")
+    `default` is the profile's word for "a bare constant is a legal value here" — a read with a
+    constant is `{default: …}`, a write with one is a slot name, so only a read can have it.
+    """
 
-    def __init__(self, key: str, kind: str, kwarg: str | None, param: Param | None):
-        self.key, self.kind, self.kwarg, self.param = key, kind, kwarg, param
+    __slots__ = ("name", "default")
+
+    def __init__(self, name: str, default: bool):
+        self.name, self.default = name, default
 
 
 class TypeModel:
-    __slots__ = ("wire", "cls", "positional", "value_kind", "params", "head", "attrs", "extras",
-                 "binds", "ops", "item", "variants", "js_kind", "node_order", "attrs_order")
+    __slots__ = ("wire", "cls", "positional", "params", "attrs", "extras", "channels", "values",
+                 "item", "variants", "node_order", "attrs_order")
 
-    def __init__(self, wire: str, cls: str, positional: str | None, value_kind: str | None):
-        self.wire, self.cls, self.positional, self.value_kind = wire, cls, positional, value_kind
+    def __init__(self, wire: str, cls: str, positional: str | None):
+        self.wire, self.cls, self.positional = wire, cls, positional
         self.params: list[Param] = []
-        self.head: tuple[str, ...] = ()
         self.attrs: list[Param] = []
         self.extras: list[Param] = []
-        self.binds: list[tuple[str, list[str]]] = []
-        self.ops: list[BindOp] = []
+        self.channels: list[Channel] = []
+        self.values: list[Param] = []
         self.item = False
         self.variants: dict[str, str] = {}
-        self.js_kind = False
         self.node_order: list[str] = []
         self.attrs_order: list[str] = []
 
@@ -208,6 +200,48 @@ class TypeModel:
         raise ModelError(f"{self.wire}: no keyword {kwarg!r}")
 
 
+def is_bind(fragment: dict) -> bool:
+    """Is this schema fragment `Bind` (a value's address), rather than a plain payload?"""
+    return any((sub.get("$ref") or "").rsplit("/", 1)[-1] == "Bind" for sub in walk(fragment))
+
+
+def _enum_of(fragment: dict, defs: dict) -> list[str] | None:
+    """The strings of a `$ref`-to-string-enum fragment, or None when it is anything else."""
+    name = (fragment.get("$ref") or "").rsplit("/", 1)[-1]
+    values = (defs.get(name) or {}).get("enum")
+    if isinstance(values, list) and all(isinstance(v, str) for v in values):
+        return values
+    return None
+
+
+def is_string_set(fragment: dict, defs: dict) -> bool:
+    """Is this a `SubmitSet`-shaped domain — one string, or a list of them (ADR 0032's `submit`)?"""
+    name = (fragment.get("$ref") or "").rsplit("/", 1)[-1]
+    target = defs.get(name) or {}
+    branches = target.get("anyOf") or target.get("oneOf") or []
+    if len(branches) != 2:
+        return False
+    kinds = [_enum_of(b.get("items") or {}, defs) if b.get("type") == "array" else _enum_of(b, defs)
+             for b in branches]
+    return kinds[0] is not None and kinds[0] == kinds[1]
+
+
+def keyword_type(fragment: dict, defs: dict) -> tuple[str, str]:
+    """(the keyword's annotation, the second language's kind) for a node or attrs field.
+
+    A field the schema leaves nullable stays nullable here: every keyword defaults to `None`, and
+    an annotation that hides that (`multiline: bool = None`) would lie about what absence means.
+    A bare-or-list string domain (`submit`) is exposed as what a caller actually passes, not as
+    the codegen's `RootModel` wrapper.
+    """
+    if is_string_set(fragment, defs):
+        return "list[str] | str | None", "strlist"
+    annotation_text = annotation(fragment)
+    if literal(fragment) is None and "None" not in annotation_text:
+        annotation_text = f"{annotation_text} | None"
+    return annotation_text, rkind(fragment, defs)
+
+
 def vocabulary(schema: dict, profile: dict, types_src: str) -> list[TypeModel]:
     """Every exposed type, in the schema's order, with its keywords and its wire order."""
     arms = arm_list(schema)
@@ -216,7 +250,7 @@ def vocabulary(schema: dict, profile: dict, types_src: str) -> list[TypeModel]:
     hidden = set(profile.get("hidden_attrs", [])) | HIDDEN_ATTRS
     renames = profile.get("kwarg_renames", {})
     tokens = profile.get("tokens") or {}
-    classes, bind_orders = read_orders(types_src)
+    classes = read_orders(types_src)
 
     unknown = [c for c in entries if c not in {c for c, _ in arms}]
     missing = [c for c, _ in arms if c not in entries]
@@ -233,20 +267,26 @@ def vocabulary(schema: dict, profile: dict, types_src: str) -> list[TypeModel]:
         defn = defs[cls]
         props = defn.get("properties") or {}
         positional = entry.get("positional")
-        kinds = (entry.get("bind") or {}).get("value", [])
-        # The positional value's 落点: `default` when the type has one, else the only kind it has
-        # (a button's positional *is* its submit binding).
-        value_kind = None
-        if positional == "value":
-            value_kind = "default" if "default" in kinds else (kinds[0] if len(kinds) == 1 else "default")
+        facts = entry.get("channels") or {}
+        offered = [name for name in CHANNELS if facts.get(name)]
+        stray = [name for name in offered if name not in props]
+        if stray:
+            # A channel the schema does not carry on this node is a frame error on the wire; a
+            # builder that offered it would emit a field serde drops.
+            raise ModelError(f"{const}: the profile declares channels the schema does not have: {', '.join(stray)}")
+        if positional == "value" and "source" not in offered:
+            raise ModelError(f"{const}: a positional value is a constant source, but the profile offers no source")
+        if positional == "value" and not facts.get("default"):
+            raise ModelError(f"{const}: a positional value is a constant, but the profile offers no default")
+        if facts.get("default") and "source" not in offered:
+            raise ModelError(f"{const}: `default` needs a source to be the default of")
 
-        model = TypeModel(const, cls, positional, value_kind)
-        model.head = () if positional is None else (positional,)
+        model = TypeModel(const, cls, positional)
         model.variants = dict(tokens.get(const) or {})
-        model.js_kind = bool(entry.get("js_kind"))
         model.item = bool(entry.get("item"))
         model.node_order = classes.get(cls, [])
-        model.binds = [(key, list(key_kinds)) for key, key_kinds in (entry.get("bind") or {}).items()]
+        model.channels = [Channel(name, bool(facts.get("default")) if name == "source" else False)
+                          for name in offered]
 
         ref = attrs_def_name(defn)
         if ref:
@@ -259,49 +299,24 @@ def vocabulary(schema: dict, profile: dict, types_src: str) -> list[TypeModel]:
                 if name in hidden:
                     continue
                 kw = renames.get(name, name)
-                param = Param(kw, annotation(sub), literal(sub), rkind(sub, defs), "attrs", name)
-                model.attrs.append(param)
-                model.params.append(param)
+                ann, kind = keyword_type(sub, defs)
+                model.attrs.append(Param(kw, ann, literal(sub), kind, "attrs", name))
+
+        model.params.extend(model.attrs)
+        for name in offered:
+            model.params.append(Param(name, "Any", None, "json", "channel", name))
 
         for name, sub in props.items():
-            if name in SHARED_FIELDS:
+            if name in SHARED_FIELDS or name in offered:
                 continue
             kw = renames.get(name, name)
-            param = Param(kw, annotation(sub), literal(sub), rkind(sub, defs), "extra", name)
-            model.extras.append(param)
+            # A Bind-valued field of its own (`options`, `select`, `placeholder`, …) is a named
+            # second value: same Bind-or-value rule as a channel, its own keyword.
+            lane = "value" if is_bind(sub) else "extra"
+            ann, kind = ("Any", "json") if lane == "value" else keyword_type(sub, defs)
+            param = Param(kw, ann, None if lane == "value" else literal(sub), kind, lane, name)
+            (model.values if lane == "value" else model.extras).append(param)
             model.params.append(param)
-
-        for key, key_kinds in model.binds:
-            for kind in key_kinds:
-                if key == "value" and positional == "value" and kind == model.value_kind:
-                    model.ops.append(BindOp(key, kind, None, None))
-                    continue
-                if kind == "submit":  # the positional value is the submit's
-                    if positional != "value":
-                        raise ModelError(f"{const}: a `submit` 落点 needs a positional value")
-                    model.ops.append(BindOp(key, kind, None, None))
-                    continue
-                kw = kind if key == "value" else (key if kind == "default" else f"{key}_{kind}")
-                if kw == "default":
-                    kw = "value"
-                param = Param(kw, "Any", None, "json", "bind", key)
-                model.ops.append(BindOp(key, kind, kw, param))
-                if not any(p.kwarg == kw for p in model.params):
-                    model.params.append(param)
-            if key == "value" and "field" in key_kinds:
-                param = Param("payload", "Any", None, "json", "bind", "payload")
-                model.ops.append(BindOp(key, "payload", "payload", param))
-                model.params.append(param)
-            if key == "value" and model.js_kind:
-                param = Param("kind", "JsType", None, "str", "bind", "type")
-                model.ops.append(BindOp(key, "type", "kind", param))
-                model.params.append(param)
-            if "local" in key_kinds:
-                # `path` rides a local落点: a client-side slot holds the wrapper an in-page emit
-                # wrote, so a reader that wants the payload itself points into it.
-                param = Param("path", "str | None", None, "str", "bind", "path")
-                model.ops.append(BindOp(key, "path", "path", param))
-                model.params.append(param)
 
         if model.item:
             model.params.append(Param("item", "Any", None, "json", "item", "item"))

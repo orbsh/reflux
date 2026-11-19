@@ -8,7 +8,8 @@ Layering, so imports never cycle:
   protocol            the protocol's own constants — the operation cap, the reserved prefix, the
                       routes slot, and the names of the events the host raises
   sdk.types|builders  the vocabulary: accrete's types as models, and one builder per type (generated)
-  sdk._parse          the boundary: `parse` / `dump`, and the assembly of a `bind` entry
+  sdk._parse          the boundary: `parse` / `dump`, and the assembly of a value channel
+                      (`source` in, `sink` out — ADR 0031)
   sdk.closed          the closure walk — the one vocabulary list the boundary reads
   wire                accrete's eight actions, and the `draw` frame that carries them
   channel / dests / app / server  the producer: the page tree, the channel route, the registry
