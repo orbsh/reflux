@@ -61,7 +61,10 @@ fn ordered_pairs(fields: &[(String, Value)], order: &[&str]) -> Value {
 ///
 ///     Bind { slot: Some("draft".into()), scope: Some("local".into()), ..Default::default() }
 ///
-/// The narrowing this SDK carries: `default` is a `String` (a structured default is built by hand).
+/// `scope` is a closed set with `remote` as its default, and it is always written: the Python side
+/// declares `scope: Scope = 'remote'`, so a value with no scope named serializes as `"remote"` and
+/// the Rust object must read the same bytes. The narrowing this SDK carries: `default` is a
+/// `String` (a structured default is built by hand).
 #[derive(Clone, Default)]
 pub struct Bind {
     pub slot: Option<String>,
@@ -81,9 +84,7 @@ impl Bind {
         if let Some(v) = &self.path {
             fields.push(("path".to_string(), s(v)));
         }
-        if let Some(v) = &self.scope {
-            fields.push(("scope".to_string(), s(v)));
-        }
+        fields.push(("scope".to_string(), s(self.scope.as_deref().unwrap_or("remote"))));
         if let Some(v) = &self.slot {
             fields.push(("slot".to_string(), s(v)));
         }

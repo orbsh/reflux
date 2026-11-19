@@ -36,6 +36,10 @@ def field(tag: str, **rest: Any) -> dict:
     """A bundled field: `tag` is the key the enclosing bundle packs it under, `sink` its exit."""
     return {"type": "input", "tag": tag, "sink": {"slot": tag}, **rest}
 
+# A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind). It
+# lives inside a `bundle` — that is the only place the renderer mounts one.
+BUTTON: dict = {"type": "button", "source": {"default": "提交"}, "sink": {"slot": "gate.button"}}
+
 
 NODES: dict[str, dict] = {
     # One node, two states (ADR 0027): `children` is the static shape, a `source` binding is the
@@ -62,11 +66,13 @@ NODES: dict[str, dict] = {
     # `float` / `portal` are `viewport` at an edge.
     "panel": {
         "type": "panel",
+        "id": "t3-panel",
         "attrs": {"place": "inline", "replace_header": True},
         "children": [text("panel-header"), text("panel-body")],
     },
     # ADR 0032: the bundle packs its fields into one object and owns the exit (`sink`) and the
-    # timing (`attrs.submit`); each field's name is its own `tag`, never the sink's address.
+    # timing (`attrs.submit`); each field's name is its own `tag`, never the sink's address. Its
+    # button is the press the `submit: [button]` names — a button renders nowhere else.
     "bundle": {
         "type": "bundle",
         "attrs": {"submit": ["enter", "button"]},
@@ -75,6 +81,7 @@ NODES: dict[str, dict] = {
             field("name"),
             field("body", multiline=True, placeholder={"default": "写点什么"}),
             {"type": "select", "tag": "kind", "options": {"slot": "opts"}, "source": {"default": "a"}},
+            BUTTON,
         ],
     },
     # The drag pair (ADR 0019): the source carries the cargo, the landing point owns the event name
@@ -120,7 +127,7 @@ NODES: dict[str, dict] = {
         "children": [text("record-field", attrs={"selector": "name"})],
     },
     # A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind).
-    "button": {"type": "button", "source": {"default": "提交"}, "sink": {"slot": "submit"}},
+    "button": BUTTON,
     # `image` renders an `<img>` only when it has a `default` value **and** some attrs
     # (`&& let Some(x) = accrete.attrs` in the renderer) — without attrs it draws an empty div.
     "image": {"type": "image", "attrs": {"desc": "a dot"}, "source": {"default": "/static/logo.svg"}},
@@ -128,10 +135,13 @@ NODES: dict[str, dict] = {
     # and reads neither `default` nor `source` for display — measured, and the reason the profile
     # no longer offers a constant source for `input`.
     "input": {"type": "input", "sink": {"slot": "gate.input"}},
+    # The option rows are a list plane: `options` is the wire's own field, and the renderer
+    # currently reads the list off the primary `source` — so the fixture names the slot on both,
+    # which is legal either way and lets the live gate see the rows.
     "select": {
         "type": "select",
         "options": {"slot": "opts"},
-        "source": {"default": "a"},
+        "source": {"slot": "opts", "default": "a"},
     },
     "text": text("text"),
 }

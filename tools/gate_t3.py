@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """T3 gate — the profile's whole vocabulary draws, in one tree, and the DOM proves each type.
 
-The renderer implements all 29 accrete types, so what reflux owes is the closed set — every exposed
+The renderer implements every accrete type, so what reflux owes is the closed set — every exposed
 type is a legal node and reaches the page. The set itself is proven offline
 (`tests/test_types_drawable.py`, one legal node per type, exactly the profile's list); this gate
 draws them all at once.
 
-How "each type drew" is measured: every component puts a **role class** on its element (`frame`,
-`rack`, `pages`, `txt`, `select`, …), read off the renderer. Four types have no class of their own
-and are asserted by behaviour instead — a `fold`'s header is its `item[0]` while its body stays
-collapsed, a `form` is the only place a `button` renders, and a `portal` mounts its children into
-the element its `attrs.to` names.
+How "each type drew" is measured: most components put a **role class** on their element (`frame`,
+`tiles`, `record`, `case`, `txt`, `select`, …), read off the renderer. `panel` is asserted by
+behaviour instead — an `inline` panel is a fold: it starts collapsed and its body appears on a
+click — and `button` is asserted where it renders, inside its `bundle`.
 
 The asset-backed type stays out on purpose (`canvas` mounts an ES module): its capability is a
 deployment artifact, not vocabulary. A stub module would prove the stub.
@@ -35,32 +34,25 @@ from reflux.sdk._parse import dump  # noqa: E402
 from tests.types_fixture import ASSET_BACKED, NODES, text  # noqa: E402
 
 PAGE = "/"
+PANEL = "t3-panel"  # the fixture's id: an inline panel is only observable by clicking it open
 
-# The renderer's own role classes, one per type that has one. `fold`/`form`/`portal`/`button` are
-# asserted by behaviour (see the docstring), so they are not here.
+# The renderer's own role classes, one per type that has one. `panel` and `button` are asserted by
+# behaviour (see the docstring), so they are not here.
 ROLE: dict[str, str] = {
     "frame": ".frame",
+    "forcegraph": ".fg-host",
+    "bundle": ".case",
     "grab": ".grab",
     "dock": ".dock",
-    "float": ".float",
-    "layer": ".layer",
-    "popup": ".popup",
-    "svg": ".svg",
-    "group": ".group",
-    "path": ".path",
-    "rack": ".rack",
-    "pages": ".pages",
+    "svg": "svg",
+    "group": "g",
+    "path": "path",
+    "tiles": ".tiles",
+    "record": ".record",
     "image": "img",
     "input": "input",
     "select": ".select",
-    "table": "table",
-    "thead": "thead",
-    "tbody": "tbody",
-    "tr": "tr",
-    "th": "th",
-    "td": "td",
     "text": ".txt",
-    "textarea": "textarea",
 }
 
 PROBE = """(() => {
@@ -74,12 +66,11 @@ PROBE = """(() => {
     src: q('img') && q('img').getAttribute('src'),
     d: q('.path') && q('.path').getAttribute('d'),
     input: q('input') && q('input').value,
-    textarea: q('textarea') && q('textarea').value,
+    in_bundle: all('.case input, .case textarea').length,
     options: all('.select > div').map((d) => d.innerText.trim()),
     selected: all('.select .selected').map((d) => d.innerText.trim()),
-    cells: all('table th, table td').map((c) => c.innerText.trim()),
-    rack: all('.rack *').map((r) => r.innerText.trim()).filter(Boolean),
-    pages: q('.pages') ? q('.pages').innerText.trim() : null,
+    head: all('.tiles-hcell').map((c) => c.innerText.trim()),
+    rows: all('.tiles-row').length,
     buttons: all('.button').length,
     graph: (() => {
       const c = q('canvas');
@@ -104,11 +95,11 @@ PROBE = """(() => {
 
 
 def tree() -> dict:
-    """Every drawable type as one case's children; the button rides inside the form (see fixture)."""
+    """Every drawable type as one case's children; the button rides inside its bundle (see fixture)."""
     kids = [
         node
         for tag, node in NODES.items()
-        if tag not in ASSET_BACKED and tag != "button"  # `button` is the form's child
+        if tag not in ASSET_BACKED and tag != "button"  # `button` is the bundle's child
     ]
     return {"type": "frame", "children": [*kids, {"type": "frame", "children": [tokens()]}]}
 
@@ -134,14 +125,12 @@ def tokens() -> dict:
 
 
 def seed_slots() -> list[dict]:
-    """The three list slots the fixture binds to: rack rows, select options, pages rows."""
+    """The two list slots the fixture binds to: the tiles' rows and the select's options."""
     return [
         wire.append("rows", text("row-from-slot", id="row-1")),
         wire.append("rows", text("row-from-slot", id="row-2")),  # two rows: the count is the point
         wire.append("opts", text("option-a", id="a")),
         wire.append("opts", text("option-b", id="b")),
-        wire.append("sel", text("page-one", id="a")),
-        wire.inject("pages-key", "a"),  # the pages key: vals plane, read through `path: "/data"`
     ]
 
 
@@ -168,7 +157,7 @@ def main() -> int:
             return 1
 
         device.send(wire.draw(*seed_slots(), wire.create(tree())))
-        wait_for(cdp, "!!document.querySelector('.rack')")
+        wait_for(cdp, "!!document.querySelector('.tiles')")
         cdp.drain()
         seen = json.loads(cdp.eval(f"JSON.stringify({probe})") or "{}")
         counts: dict[str, int] = seen.get("counts") or {}
@@ -183,25 +172,35 @@ def main() -> int:
             )
         )
 
+        # An inline `panel` is a fold: header (its `item`) plus a body that a click reveals. The
+        # fixture has no `item`, so the header is blank on purpose — what it proves is the toggle.
+        collapsed = "panel-body" not in body
+        opened = False
+        if collapsed:
+            # A collapsed panel is an empty grid, so it has no box for a mouse event to land on:
+            # the fold's own handler is what a press would call, so the gate calls it that way.
+            cdp.eval(f"document.getElementById({PANEL!r}).click()")
+            opened = wait_for(cdp, "'panel-body' && document.body.innerText.includes('panel-body')")
         checks.append(
             (
-                "a fold shows its item as the header and keeps its body collapsed",
-                "fold" in body and "fold-body" not in body,
-                f"header={'fold' in body} body_hidden={'fold-body' not in body}",
+                "an inline panel starts collapsed and opens on a click",
+                collapsed and opened,
+                f"collapsed={collapsed} opened={opened}",
             )
         )
+
         checks.append(
             (
-                "a form registers itself — its submit button renders",
-                seen.get("buttons") == 1,
-                f"buttons={seen.get('buttons')}",
+                "a bundle registers itself — its submit button renders, with its fields",
+                seen.get("buttons") == 1 and seen.get("in_bundle") == 2,
+                f"buttons={seen.get('buttons')} fields={seen.get('in_bundle')}",
             )
         )
-        checks.append(("a portal mounts its children into the named target", "portal" in body, "portal" if "portal" in body else "missing"))
+        checks.append(("a record draws its named fields", "record-field" in body, f"record={'record-field' in body}"))
         checks.append(("a leaf paints its bound value", "text" in body, f"text={'text' in body}"))
-        # The graph is the one exposed type with no role class and no DOM id: its renderer is in the
-        # wasm, so the proof is the canvas it mounts — nothing else in this tree can make one — plus
-        # a drawing buffer that is not 0x0.
+        # The graph is the one exposed type with no DOM id: its renderer is in the wasm, so the proof
+        # is the canvas it mounts — nothing else in this tree can make one — plus a drawing buffer
+        # that is not 0x0.
         graph = seen.get("graph") or {}
         checks.append(
             (
@@ -221,24 +220,10 @@ def main() -> int:
             )
         )
         checks.append(
-            ("the table family renders its cells", seen.get("cells") == ["head", "cell"], f"cells={seen.get('cells')}")
-        )
-        checks.append(
             (
-                # A rack renders its `item` template once per row of the bound list slot.
-                "rack renders its item once per row of the list slot",
-                (seen.get("rack") or []) == ["row", "row"],
-                f"rack={seen.get('rack')}",
-            )
-        )
-        checks.append(
-            ("pages renders the selected page", "page-one" in (seen.get("pages") or ""), f"pages={seen.get('pages')!r}")
-        )
-        checks.append(
-            (
-                "textarea carries its bound default",
-                seen.get("textarea") == "textarea",
-                f"value={seen.get('textarea')!r}",
+                "a tiles header names its columns, and its rows come from the list slot",
+                seen.get("head") == ["Name", "qty"] and seen.get("rows") == 2,
+                f"head={seen.get('head')} rows={seen.get('rows')}",
             )
         )
         # The renderer's truth, and the reason the profile no longer offers `default`/`source` for an

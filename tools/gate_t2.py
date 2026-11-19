@@ -26,30 +26,29 @@ from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk.types import Bind  # noqa: E402
 from reflux.slots import Slot  # noqa: E402
 
 PAGE = "/"
 
 # A body the tmpl op registers: `{{label}}` is the only template language there is (ADR 0006).
-TEMPLATE_BODY = (
-    '{"type":"text","bind":{"value":{"kind":"default","default":"{{label}}"}}}'
-)
+TEMPLATE_BODY = '{"type":"text","source":{"default":"{{label}}"}}'
 
 
 def local_text(slot: str, *, id: str):
-    """A `text` bound to the vals plane.
+    """A `text` reading the page's own vals plane.
 
-    The reader takes `path: "/data"` because the vals slot holds the Outflow-shaped wrapper an
-    in-page `local` emit writes, so the payload itself is one level in. This used to be hand-built —
-    `local` was exposed on `fold`/`pages` only, so the `text` reader had no keyword for it.
+    The scope is `local` (ADR 0031 §1) and the reader takes `path: "/data"` because the vals slot
+    holds the Outflow-shaped wrapper an in-page `local` emit writes, so the payload itself is one
+    level in. A `Bind` is the whole address, so the scope rides beside the slot.
     """
-    return b.text(local=slot, path="/data", id=id)
+    return b.text(source=Bind(slot=slot, scope="local", path="/data"), id=id)
 
 
 def tree():
     return b.frame(
         b.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
-        b.rack(source=Slot("rows"), id="rows"),          # the list slot (append / remove)
+        b.tiles(source=Slot("rows"), id="rows"),         # the list slot (append / remove)
         local_text("chan", id="local-echo"),       # the vals plane (inject)
         {"type": "template", "name": "t1", "data": {"label": "expanded"}},
         id="root",
@@ -119,11 +118,11 @@ def main() -> int:
         ok = wait(lambda: rows(cdp) == ["row-1", "row-3"])
         checks.append(("remove drops the row by identity", bool(ok), f"rows={rows(cdp)}"))
 
-        send(wire.patch("echo", "/bind/value/default", "patched"))
+        send(wire.patch("echo", "/source/default", "patched"))
         ok = wait(lambda: text_of(cdp, "echo") == "patched")
         checks.append(("patch replace rewrites the pointed value", bool(ok), f"echo={text_of(cdp, 'echo')!r}"))
 
-        send(wire.patch("echo", "/bind/value/default", "!", op="append"))
+        send(wire.patch("echo", "/source/default", "!", op="append"))
         ok = wait(lambda: text_of(cdp, "echo") == "patched!")
         checks.append(("patch append extends a string", bool(ok), f"echo={text_of(cdp, 'echo')!r}"))
 

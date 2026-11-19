@@ -34,7 +34,7 @@
 ```
 python3 tools/vendor.py fetch                    # 先装渲染器包（不入库；离线用 build --fluxen <path>）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 182 例
+python3 -m unittest discover -s tests -t .       # 280 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -91,20 +91,20 @@ README 里明说的「不做」，要做等于另开一轮。
   只在声明过变体的类型上放行 `class`，且每个元素必须是令牌。`selector` 一律隐藏。别给生产端开自由 class。
 - **生产者侧两条规则在 `wire`**：一帧超过 `MAX_OPS_PER_FRAME` 拒建、一棵树里同一个 id 出现两次拒建
   （`reflux/protocol.py` 是那两个协议数字的唯一来源）。服务端那道门独立复核，两条都要留。
-- **上行的时机是渲染器的**：`input`／`textarea` 在 **Enter**（全仓没有 blur），空值不上行；`field` 只被 `input`
-  读（回车提交进 form，form 的 submit 一次发出全部字段）；帧的 `id` = 发射节点自身，空 id 无键。写门之前先读
+- **上行的时机是渲染器的**：`input`（含 `multiline`）在 **Enter**（全仓没有 blur），空值不上行；`tag` 只被 `input`
+  读（回车提交进 bundle，bundle 的 `submit` 一次发出全部字段）；帧的 `id` = 发射节点自身，空 id 无键。写门之前先读
   `ui_leptos`。
-- **`button` 只在 `form` 里渲染**，且一次点击就是一帧 form submit——所以「点一下做事」的组件一律包一层 form，
-  行身份靠 form 自己的 id 上行（`demo_app.row_node`）。
+- **`button` 只在 `bundle` 里渲染**，且一次点击就是一帧 bundle submit——所以「点一下做事」的组件一律包一层 bundle，
+  行身份靠 bundle 自己的 id 上行（`demo_app.row_node`）。
 - **两个标记必须是 `frame`**：`text` 只把 id 塞进 class 列表，`frame` 还把它落到 DOM 的 `id` 属性上
-  （`placeholder` 并进来时带过来的行为，ADR 0027）；`rack`/`pages`/`layer`/`fold`/`canvas` 虽然也 `.id()`，
+  （`placeholder` 并进来时带过来的行为，ADR 0027）；`tiles`/`panel`/`canvas` 虽然也 `.id()`，
   但各自带语义，标记不该借用。gate 里按 id-as-class 取节点的那几处（`text`）照旧。
 - **挂载前缀的唯一来源是页面的 `<base href>`**（现在是 `/`）：标记写应用路径，地址栏写挂载后的路径，换算只在
   `reflux.js` 的 `toApp`／`toBrowser`。换前缀＝改 `<base>` + 挂载表，页面与 runtime 不动。
 - **资源一律源站绝对路径**（`/static/…`）：相对路径会被深链解析到深链目录底下（实测白屏 + `Unexpected token '<'`）。
   页面的 `<img>` 也一样——`tests/types_fixture.py` 那个 `image` 节点指向 `www/static/logo.svg` 是有原因的
   （它原指 `/favicon.svg`，那是壳的挂载根里的文件，M1.7 之后 404）。
-- **`inject` 落的是 Outflow 形状的包装**：vals 槽里是 `{slot, data}`，订阅方要 `bind.path = "/data"`。
+- **`inject` 落的是 Outflow 形状的包装**：vals 槽里是 `{slot, data}`，订阅方要 `Bind(path="/data")`。
 - **`position` 的域外只有渲染器判得了**（它要知道列表多长）；我们只校验「是整数」。同一帧里同一个列表槽的行 id
   出现两次才是我们能判的——那条在入站整帧拒收。
 - **槽里的种子是一次性的**：`create` 换树，数据平面（槽）不换，所以「页面每次重画都 append 一遍种子行」会把行
@@ -172,7 +172,7 @@ tools/gate_chat.py             示例的门：真 socket 的九条 + 真浏览�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（182 例 + 十一道门，全绿；gate_t10 需要 cargo，gate_chat 需要 chromium）
+1. 跑一遍第二节的全套，确认基线（280 例 + 十一道门，全绿；gate_t10 需要 cargo，gate_chat 需要 chromium）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节列的四条小缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件

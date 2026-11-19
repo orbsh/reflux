@@ -9,9 +9,9 @@ framework's built-in 404, and authentication end to end (a gated landing point, 
 verb, a token that survives a RELOAD, and a logout that revokes).
 
 Navigation is asserted as the **mirror**, not as an anchor: accrete has no URL-bearing type, so the
-demo moves between pages with a one-button form, and the producer answers with a new structure that
-carries a new `reflux:path` marker; the address bar follows because the runtime mirrors that marker
-(`gate_t6` pins the runtime, this gate uses it).
+demo moves between pages with a one-button bundle, and the producer answers with a new structure
+that carries a new `reflux:path` marker; the address bar follows because the runtime mirrors that
+marker (`gate_t6` pins the runtime, this gate uses it).
 
 The 404 check is new ground: it could not exist before M1.7, when the built-in 404 was still the
 retired shell's shape and drew nothing on this page. It is an accrete node now (two token variants),
@@ -58,7 +58,7 @@ def seen(cdp: Cdp, text: str) -> bool:
 
 
 def rows(cdp: Cdp) -> int:
-    """The buttons inside the list slot — one per row (each row is a one-button form)."""
+    """The buttons inside the list slot — one per row (each row is a one-button bundle)."""
     return cdp.eval("document.querySelectorAll('#rows .button').length") or 0
 
 
@@ -96,7 +96,7 @@ def type_into(cdp: Cdp, index: int, text: str, *, enter: bool = True) -> None:
 # page-level session, and the drop on the landing point is what emits (ADR 0019). Synthetic events
 # carry a real DataTransfer — `dragstart` writes a label into it, and Firefox refuses a drag without.
 DRAG_FIRST_ROW = """(() => {
-  const grab = document.querySelector('.rack .grab');
+  const grab = document.querySelector('.tiles .grab');
   const dock = document.querySelector('.dock');
   if (!grab || !dock) return 'missing';
   const dt = new DataTransfer();
@@ -141,17 +141,17 @@ def main() -> int:
         echoed = wait_for(lambda: seen(cdp, "hello"))
         checks.append(("an input's Enter reaches the slot it wrote", bool(echoed), f"echo={'hello' in body(cdp)}"))
 
-        # 2 — one form submit adds a row (the add form's button is the page's own).
+        # 2 — one bundle submit adds a row (the add bundle's button is the page's own).
         click_label(cdp, "加一行")
         added = wait_for(lambda: rows(cdp) == 3)
-        checks.append(("a one-button form adds a row", bool(added), f"rows={rows(cdp)}"))
+        checks.append(("a one-button bundle adds a row", bool(added), f"rows={rows(cdp)}"))
 
-        # 3 — a row's own form removes that row, by the identity it carried up.
+        # 3 — a row's own bundle removes that row, by the identity it carried up.
         click_label(cdp, "删", nth=0)
         removed = wait_for(lambda: rows(cdp) == 2 and "第一行" not in body(cdp))
         checks.append(
             (
-                "a row's form removes it by identity",
+                "a row's bundle removes it by identity",
                 bool(removed),
                 f"rows={rows(cdp)} first_row={'第一行' in body(cdp)}",
             )
@@ -183,15 +183,15 @@ def main() -> int:
             )
         )
 
-        # 6 — the login form is the framework's VERB: every field arrives in the renderer's own
-        #     shape and the answer is a token plus the signed-in line, drawn into the `auth` region.
+        # 6 — the login bundle is the framework's VERB: every field arrives packed and the answer is a
+        #     token plus the signed-in line, drawn into the `auth` region.
         type_into(cdp, 1, "ada")
         type_into(cdp, 2, "pw")
         click_label(cdp, "登录")
         signed_in = wait_for(lambda: "已登录 user-ada" in body(cdp))
         checks.append(
             (
-                "the login form reaches the venue's verb and binds the connection",
+                "the login bundle reaches the venue's verb and binds the connection",
                 bool(signed_in),
                 f"signed_in={'已登录 user-ada' in body(cdp)}",
             )

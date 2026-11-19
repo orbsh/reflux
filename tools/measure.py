@@ -7,8 +7,8 @@
 Sections:
 
 - **bytes** — one turn's JSON for each shape the reference app produces (offline). Also the
-  envelope's own cost and the per-operation cost, so a future SDK in another language has a
-  baseline to compare against byte for byte.
+  per-operation cost, so a future SDK in another language has a baseline to compare against byte
+  for byte.
 - **mutations** — how much DOM one turn changes, per plane (real browser). The claim under
   measurement is the one DESIGN makes: a turn is one transaction and the change lands on the plane
   it addresses, not on the whole tree.
@@ -66,15 +66,16 @@ def _ctx():
     return demo.make_app().context(None)
 
 
-def seed_frame() -> dict:
+def seed_frame() -> list[dict]:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
-wire.create(demo.demo.home(_ctx())),
-        *[wire.append("rows", demo.row_node(row, _ctx())) for row in demo.demo.rows])
+        wire.create(b.frame(*demo.demo.home(_ctx()))),
+        *[wire.append("rows", demo.row_node(row, _ctx())) for row in demo.demo.rows],
+    )
 
 
 def section_bytes() -> None:
-    turns: list[tuple[str, dict]] = [
+    turns: list[tuple[str, list[dict]]] = [
         ("echo (`set`)", wire.draw(wire.set("echo", b.text("hello")))),
         (
             "add row (`append`)",
@@ -82,7 +83,7 @@ def section_bytes() -> None:
         ),
         ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
         (
-            "form submit (`set`)",
+            "bundle submit (`set`)",
             wire.draw(wire.set("submitted", b.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         ("page turn (`create` + 2 seeded rows)", seed_frame()),
@@ -118,7 +119,7 @@ def section_mutations() -> None:
             return
         cdp.eval(OBSERVE)
 
-        def turn(label: str, frame: dict, marker: str) -> None:
+        def turn(label: str, frame: list[dict], marker: str) -> None:
             cdp.eval("window.__muts = 0")
             device.send(frame)
             deadline = time.time() + 5

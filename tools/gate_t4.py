@@ -6,14 +6,14 @@ contract — read out of `ui_leptos`, not assumed:
 
 - an `input` emits on **Enter** (there is no blur handler anywhere in that crate), and an empty
   value does not fire at all;
-- an `input` bound with `field` only commits into its form's field signal — the uplink is the
-  form's, one frame carrying every field as `{field: {data, payload?}}`;
-- a `form` submits when a `button` with a `submit` binding flips its confirm signal;
+- a tagged `input` inside a `bundle` only commits into the bundle's pack — the uplink is the
+  bundle's, one frame carrying `{tag: value}` for every field it packs;
+- a `bundle` sends when `attrs.submit` names the timing and that timing happens: here only
+  `button`, so a press inside it is the one submit (`enter` would make the field's Enter send);
 - the frame's `id` is the **emitting node's** own id, and an empty id is no id at all (the key is
   absent, it is not null);
-- there is no `payload` lane of ours: what a producer sends is what the component sends. (The
-  field entry does carry `"payload": null` — the renderer's own `Option` without a skip — so the
-  gate asserts that shape rather than pretending the key is absent.)
+- there is no `payload` lane of ours: what a producer sends is what the component sends, and a
+  packed field is a plain value — the old `{data, payload}` entry retired with the envelope.
 
     python3 tools/gate_t4.py
 """
@@ -39,35 +39,30 @@ SEEN: list[dict] = []
 
 
 def field(name: str, *, id: str) -> dict:
-    """An input whose value lands in the enclosing form's field signal on Enter."""
-    return {
-        "type": "input",
-        "id": id,
-        "bind": {"value": {"kind": "field", "field": name, "type": "text"}},
-    }
+    """An input whose typed value lands in the enclosing bundle under `name` (`tag` names it)."""
+    return {"type": "input", "id": id, "tag": name}
 
 
 def tree() -> Any:
     return b.frame(
         # 0: an event-emitting input with its own identity
-        {"type": "input", "id": "name-in", "bind": {"value": {"kind": "dest", "dest": "gate.name", "type": "text"}}},
+        {"type": "input", "id": "name-in", "sink": {"slot": "gate.name"}},
         # 1: the same, with no id — an empty id is not an id
-        {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.anon", "type": "text"}}},
-        # 2: a form: two field inputs and its submit button
-        {
-            "type": "form",
-            "id": "the-form",
-            "bind": {"value": {"kind": "dest", "dest": "gate.form"}},
-            "children": [
-                field("who", id="who-in"),
-                field("n", id="n-in"),
-                {"type": "button", "bind": {"value": {"kind": "submit"}}},
-            ],
-        },
+        {"type": "input", "sink": {"slot": "gate.anon"}},
+        # 2: a bundle: two tagged fields and the press that packs them. `submit: [button]` says a
+        # press is the only timing — Enter in a field commits, it does not uplink.
+        b.bundle(
+            field("who", id="who-in"),
+            field("n", id="n-in"),
+            b.button("送", sink=Slot("gate.form")),
+            sink=Slot("gate.form"),
+            submit=["button"],
+            id="the-form",
+        ),
         # 3: the drag pair (ADR 0019) — the source carries the cargo, the landing point owns the
-        # event name and what it accepts. A second source carries a kind the dock refuses.
+        # handler and what it accepts (its `sink` names the handler). A second source carries a kind the dock refuses.
         b.grab(b.text("cargo", id="cargo-text"), kind="note", payload={"n": 1}, id="cargo-1"),
-        b.dock(b.text("drop here"), accept=["note"], dest=Slot("gate.dock"), id="dock-1"),
+        b.dock(b.text("drop here"), accept=["note"], sink=Slot("gate.dock"), id="dock-1"),
         b.grab(b.text("refused cargo", id="other-text"), kind="other", id="cargo-2"),
     )
 
@@ -140,7 +135,7 @@ def main() -> int:
             print("the fixture never drew: expected four inputs")
             return 1
 
-        # 1 — Enter on an input is the uplink, and the frame is exactly {event, id, data}.
+        # 1 — Enter on an input is the uplink, and the frame is exactly {dest, id, data}.
         focus(cdp, 0)
         cdp.type_text("hello")
         press_enter(cdp)
@@ -148,7 +143,7 @@ def main() -> int:
         first = SEEN[0] if SEEN else {}
         checks.append(
             (
-                "an input's Enter uplinks {event, id, data}",
+                "an input's Enter uplinks {dest, id, data}",
                 first == {"dest": "gate.name", "id": "name-in", "data": "hello"},
                 json.dumps(first, ensure_ascii=False),
             )
@@ -180,7 +175,7 @@ def main() -> int:
             )
         )
 
-        # 4 — a `field` input commits, it does not uplink; the form owns the frame.
+        # 4 — a packed field commits, it does not uplink; the bundle owns the frame.
         before = len(SEEN)
         focus(cdp, 2)
         cdp.type_text("ada")
@@ -190,47 +185,43 @@ def main() -> int:
         press_enter(cdp)
         time.sleep(0.4)
         silent = len(SEEN) == before
-        checks.append(("a form field's Enter commits without uplinking", silent, f"frames +{len(SEEN) - before}"))
+        checks.append(("a bundle field's Enter commits without uplinking", silent, f"frames +{len(SEEN) - before}"))
 
-        # 5 — the submit button's click is the one frame, carrying every field.
-        cdp.click(".button")  # a form draws as a div; the button carries the role class
+        # 5 — the button's press is the one frame, carrying every field it packs.
+        cdp.click(".button")  # a bundle draws as a div; the button carries the role class
         wait_for(lambda: len(SEEN) == before + 1)
         submit = SEEN[-1] if len(SEEN) > before else {}
         checks.append(
             (
-                "a form submits once, with every field and the form's own id",
+                "a bundle sends once, with every tagged field and its own id",
                 submit
                 == {
                     "dest": "gate.form",
                     "id": "the-form",
-                    "data": {
-                        "who": {"data": "ada", "payload": None},
-                        "n": {"data": "7", "payload": None},
-                    },
+                    "data": {"who": "ada", "n": "7"},
                 },
                 json.dumps(submit, ensure_ascii=False),
             )
         )
 
-        # 6 — no payload *of ours*: the entry's `payload` is the renderer's `Option` at null, which is
-        # what an undeclared field looks like. A producer cannot populate it — there is no lane.
-        entries = list((submit.get("data") or {}).values()) if isinstance(submit.get("data"), dict) else []
+        # 6 — no wrapper: the pack is `tag → value`, not the retired `{data, payload}` entry.
+        data = submit.get("data")
+        packed = data if isinstance(data, dict) else {}
         checks.append(
             (
-                "nothing but the renderer's own null payload rides a field",
-                [set(e) for e in entries] == [{"data", "payload"}, {"data", "payload"}]
-                and all(e.get("payload") is None for e in entries),
-                f"entries={entries}",
+                "a packed field is a plain value, with no wrapper",
+                set(packed) == {"who", "n"} and not any(isinstance(v, dict) for v in packed.values()),
+                f"packed={packed}",
             )
         )
 
-        # 7 — the confirm signal is consumed: a second click is a second submit, not a stuck state.
+        # 7 — a second press is a second submit, not a stuck state.
         before = len(SEEN)
-        cdp.click(".button")  # a form draws as a div; the button carries the role class
+        cdp.click(".button")  # a bundle draws as a div; the button carries the role class
         wait_for(lambda: len(SEEN) == before + 1)
         checks.append(
             (
-                "the form's confirm resets after a submit",
+                "the bundle sends again on the next press",
                 len(SEEN) == before + 1,
                 f"frames +{len(SEEN) - before}",
             )
@@ -244,7 +235,7 @@ def main() -> int:
         drop = SEEN[-1] if len(SEEN) > before else {}
         checks.append(
             (
-                "a drop uplinks {event, id, data} from the landing point",
+                "a drop uplinks {dest, id, data} from the landing point",
                 drop
                 == {
                     "dest": "gate.dock",

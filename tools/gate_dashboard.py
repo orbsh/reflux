@@ -119,12 +119,12 @@ def socket_phase() -> list[tuple[str, bool, str]]:
                 )
             )
             grammar = [
-                ((node.get("bind") or {}).get("value") or {}).get("default", {}).get("type")
+                ((node.get("source") or {}).get("default") or {}).get("type")
                 for node in specs
             ]
             # The radar is a polar `view` inside a chart: find the coordinate anywhere in its spec.
             radar = json.dumps(
-                [((node.get("bind") or {}).get("value") or {}).get("default") for node in specs], ensure_ascii=False
+                [((node.get("source") or {}).get("default")) for node in specs], ensure_ascii=False
             )
             polar = '"polar"' in radar and '"area"' in radar
             checks.append(
@@ -184,8 +184,8 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             chat_page = json.dumps(turn, ensure_ascii=False)
             checks.append(
                 (
-                    "the chat page has its composer and its rack",
-                    "chat.send" in chat_page and '"rack"' in chat_page,
+                    "the chat page has its composer and its tiles",
+                    "chat.send" in chat_page and '"tiles"' in chat_page,
                     f"bytes={len(chat_page)}",
                 )
             )

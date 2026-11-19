@@ -11,7 +11,7 @@ A refusal that only exists in a unit test is a claim; here it crosses the wire.
 
 **B. The browser phase** puts the same page in real Chromium and types into the composer. It exists
 because a backend that streams correctly into a page that never renders it is still a broken app:
-the rack has to show the bubble, and the bubble has to grow while the frames land.
+the tiles node has to show the bubbles, and the bubble has to grow while the frames land.
 
     python3 tools/gate_chat.py
 
@@ -57,7 +57,7 @@ def status_of(frames: list[dict]) -> str:
     for frame in frames:
         for op in frame:
             if op.get("action") == "set" and op.get("slot") == "status":
-                value = ((op.get("data") or {}).get("bind") or {}).get("value") or {}
+                value = ((op.get("data") or {}).get("source") or {})
                 if isinstance(value.get("default"), str):
                     text = value["default"]
     return text
@@ -259,7 +259,7 @@ def browser_phase() -> list[tuple[str, bool, str]]:
         drawn = wait_for(lambda: "对话" in (cdp.eval("document.body.innerText") or ""))
         checks.append(
             (
-                "the page draws its heading, rack and composer",
+                "the page draws its heading, its tiles and the composer",
                 bool(drawn) and has_input,
                 f"heading={'对话' in body} input={has_input}",
             )
@@ -270,8 +270,9 @@ def browser_phase() -> list[tuple[str, bool, str]]:
         cdp.eval("document.querySelector('input').focus()")
         typed = "浏览器里发的一句话"
         cdp.type_text(typed)
-        # Submit with the button, not with Enter: a form's submit is a click in this vocabulary (the
-        # composer is a `form` + `button` pair), and a bare Enter in a text input is not a submit.
+        # Submit with the button, not with Enter: a bundle sends on a click when its `submit` names
+        # `button` (the composer is one `bundle` with a typed field and that press), and the click is
+        # the only timing this gate can drive without a keyboard race.
         cdp.click_js(
             "[...document.querySelectorAll('.button')].filter(el => (el.innerText || '').trim() === '发送')[0]"
         )
