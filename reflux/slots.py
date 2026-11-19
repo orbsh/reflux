@@ -139,7 +139,7 @@ class Slots:
     (the same names, bound to a delivery so the verbs can send).
 
     Every form — `ctx.slot("chat/status")`, `ctx.slot["status"]`, `ctx.slot.status` — resolves to the
-    same handle type, and a name is recorded on the app when it is used.
+    same handle type, and a name is registered on the app when it is used.
     """
 
     def __init__(self, app: Any = None, ctx: Any = None) -> None:

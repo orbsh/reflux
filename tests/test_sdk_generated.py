@@ -97,7 +97,7 @@ class UnionTest(unittest.TestCase):
     def test_the_regression_the_codegen_had(self):
         """`{"type": "panel"}` used to land on a synthesised copy; the tag is what makes this true."""
         for const, cls in (("frame", "Frame"), ("panel", "Panel"), ("tiles", "Tiles"),
-                           ("select", "Select"), ("dock", "Dock"), ("svg", "Svg")):
+                           ("select", "Select"), ("entry", "Entry"), ("svg", "Svg")):
             with self.subTest(type=const):
                 node = sdk.parse({"type": const, "children": []})
                 self.assertEqual(type(node).__name__, cls)
@@ -157,7 +157,7 @@ class ProfileTest(unittest.TestCase):
         # `class` only reaches the wire through the token lane (`variant=`); there is no free string.
         with self.assertRaises(TypeError):
             sdk.text("x", class_=["free-form"])
-        # `selector` is not hidden: ADR 0031 §4 makes it a record field's name, so it is data.
+        # `selector` is not hidden: ADR 0031 §4 makes it an entry's field name, so it is data.
         self.assertEqual(sdk.dump(sdk.text("x", selector="name"))["attrs"], {"selector": "name"})
 
     def test_the_token_lane_is_a_closed_set_of_names(self):
@@ -275,32 +275,39 @@ class ProfileTest(unittest.TestCase):
         node = sdk.frame(sdk.text("a"), sdk.text("b"))
         self.assertEqual([n["type"] for n in sdk.dump(node)["children"]], ["text", "text"])
         self.assertIsNone(sdk.dump(sdk.frame()).get("children"))  # an empty container is noise, not a frame
-        grid = sdk.tiles(sdk.record(sdk.text("a", selector="name")), columns=[{"key": "name"}],
+        grid = sdk.tiles(sdk.entry(sdk.text("a", selector="name")), fields=[{"key": "name"}],
                          source=Slot("rows"))
         wire = sdk.dump(grid)
-        self.assertEqual([n["type"] for n in wire["children"]], ["record"])
+        self.assertEqual([n["type"] for n in wire["children"]], ["entry"])
         self.assertEqual(wire["children"][0]["children"][0]["attrs"], {"selector": "name"})
 
     def test_a_grid_is_tiles_with_typed_attrs(self):
-        """ADR 0031 §4: `columns` projects a record's fields, `stage`/`step`/`header` are their own shapes."""
+        """ADR 0031 §4 / 0035: `fields` projects an entry's fields; `dir`, `wrap`, `window`, `step`,
+        `header` are their own shapes."""
         node = sdk.tiles(
-            stage="all",
+            dir="row",
+            wrap="nowrap",
+            window={"size": 2},
             step={"timer": 4000},
-            header={"selector": "grid-head", "rows": 2},
-            columns=[{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
+            header={"selector": "grid-head", "layers": 2},
+            fields=[{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
         )
         self.assertEqual(sdk.dump(node)["attrs"], {
-            "columns": [{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
-            "header": {"rows": 2, "selector": "grid-head"},
-            "stage": "all",
+            "dir": "row",
+            "fields": [{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
+            "header": {"layers": 2, "selector": "grid-head"},
             "step": {"timer": 4000},
+            "window": {"size": 2},
+            "wrap": "nowrap",
         })
-        # The stepper's other arm, and the closures: a bad stage or alignment is refused at construction.
-        self.assertEqual(sdk.dump(sdk.tiles(stage="one", step={"slot": "page"}))["attrs"],
-                         {"stage": "one", "step": {"slot": "page"}})
-        for bad in (lambda: sdk.tiles(stage="both"), lambda: sdk.tiles(step={"ticks": 1}),
-                    lambda: sdk.tiles(columns=[{"key": "a", "align": "middle"}]),
-                    lambda: sdk.tiles(header={"selector": "h", "rows": 3})):
+        # The stepper's other arm, and the closures: a bad direction, wrap, window or alignment is
+        # refused at construction.
+        self.assertEqual(sdk.dump(sdk.tiles(wrap="wrap-reverse", step={"slot": "page"}))["attrs"],
+                         {"step": {"slot": "page"}, "wrap": "wrap-reverse"})
+        for bad in (lambda: sdk.tiles(dir="both"), lambda: sdk.tiles(wrap="sideways"),
+                    lambda: sdk.tiles(step={"ticks": 1}), lambda: sdk.tiles(window={"size": 0}),
+                    lambda: sdk.tiles(fields=[{"key": "a", "align": "middle"}]),
+                    lambda: sdk.tiles(header={"selector": "h", "layers": 3})):
             with self.assertRaises(pydantic.ValidationError):
                 bad()
 

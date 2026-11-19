@@ -25,9 +25,9 @@ class TestTheVocabularyIsComplete(unittest.TestCase):
     def test_the_fixture_covers_exactly_the_exposed_types(self) -> None:
         exposed = set(profile.exposed())
         self.assertEqual(set(NODES), exposed, "a type without a node would shrink what the gate draws")
-        # The one wire type with no builder: `template` is the substitution node `tmpl` expands.
-        self.assertNotIn("template", NODES)
-        self.assertEqual(set(closed.arms()) - set(NODES), {"template"})
+        # The one wire type with no builder: `stamp` is the substitution node `tmpl` expands.
+        self.assertNotIn("stamp", NODES)
+        self.assertEqual(set(closed.arms()) - set(NODES), {"stamp"})
 
     def test_the_asset_backed_type_is_named(self) -> None:
         # The one module host needs a deployment artifact; chart/editor/diagram are canvases now.

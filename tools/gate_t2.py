@@ -50,7 +50,7 @@ def tree():
         b.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
         b.tiles(source=Slot("rows"), id="rows"),         # the list slot (append / remove)
         local_text("chan", id="local-echo"),       # the vals plane (inject)
-        {"type": "template", "name": "t1", "data": {"label": "expanded"}},
+        {"type": "stamp", "name": "t1", "data": {"label": "expanded"}},
         id="root",
     )
 

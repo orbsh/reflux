@@ -26,6 +26,10 @@ pub fn path_marker(path: &str) -> Value {
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        None,
         Some(PATH_ID),
         None,
     )
@@ -35,6 +39,10 @@ pub fn path_marker(path: &str) -> Value {
 pub fn title_marker(title: &str) -> Value {
     frame(
         &[text(Some(title), None, None, None, None, None)],
+        None,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -53,6 +61,10 @@ pub fn token_marker(token: &str) -> Value {
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        None,
         Some(TOKEN_ID),
         None,
     )
@@ -62,5 +74,17 @@ pub fn token_marker(token: &str) -> Value {
 pub fn page(path: &str, title: &str, children: &[Value]) -> Value {
     let mut nodes = vec![path_marker(path), title_marker(title)];
     nodes.extend_from_slice(children);
-    frame(&nodes, None, None, None, None, Some(PAGE_ID), None)
+    frame(
+        &nodes,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(PAGE_ID),
+        None,
+    )
 }

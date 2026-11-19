@@ -185,10 +185,16 @@ impl JsType {
 const BIND_ORDER: &[&str] = &["default", "path", "scope", "slot", "type"];
 
 /// Build a `frame` node (the wire type `frame`).
-pub fn frame(children: &[Value], grid: Option<Value>, horizontal: Option<bool>, selector: Option<&str>, source: Option<Bind>, id: Option<&str>, variant: Option<FrameVariant>) -> Value {
+pub fn frame(children: &[Value], accept: Option<Value>, draggable: Option<Value>, grid: Option<Value>, horizontal: Option<bool>, selector: Option<&str>, style: Option<Value>, source: Option<Bind>, sink: Option<Bind>, id: Option<&str>, variant: Option<FrameVariant>) -> Value {
     let mut attrs = Map::new();
+    if let Some(v) = accept {
+        put(&mut attrs, "accept", v.clone());
+    }
     if let Some(v) = variant {
         put(&mut attrs, "class", array(&[s(v.token())]));
+    }
+    if let Some(v) = draggable {
+        put(&mut attrs, "draggable", v.clone());
     }
     if let Some(v) = grid {
         put(&mut attrs, "grid", v.clone());
@@ -199,7 +205,11 @@ pub fn frame(children: &[Value], grid: Option<Value>, horizontal: Option<bool>, 
     if let Some(v) = selector {
         put(&mut attrs, "selector", s(v));
     }
+    if let Some(v) = style {
+        put(&mut attrs, "style", v.clone());
+    }
     let source = source.and_then(emit);
+    let sink = sink.and_then(emit);
     let mut node = Map::new();
     if !attrs.is_empty() {
         put(&mut node, "attrs", Value::Object(attrs));
@@ -209,6 +219,9 @@ pub fn frame(children: &[Value], grid: Option<Value>, horizontal: Option<bool>, 
     }
     if let Some(v) = id {
         put(&mut node, "id", s(v));
+    }
+    if let Some(v) = sink {
+        put(&mut node, "sink", v.clone());
     }
     if let Some(v) = source {
         put(&mut node, "source", v.clone());
@@ -394,29 +407,6 @@ pub fn svg(children: &[Value], height: Option<&str>, selector: Option<&str>, wid
     Value::Object(node)
 }
 
-/// Build a `group` node (the wire type `group`).
-pub fn group(children: &[Value], selector: Option<&str>, style: Option<Value>, id: Option<&str>) -> Value {
-    let mut attrs = Map::new();
-    if let Some(v) = selector {
-        put(&mut attrs, "selector", s(v));
-    }
-    if let Some(v) = style {
-        put(&mut attrs, "style", v.clone());
-    }
-    let mut node = Map::new();
-    if !attrs.is_empty() {
-        put(&mut node, "attrs", Value::Object(attrs));
-    }
-    if !children.is_empty() {
-        put(&mut node, "children", array(children));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    put(&mut node, "type", s("group"));
-    Value::Object(node)
-}
-
 /// Build a `path` node (the wire type `path`).
 pub fn path(value: Option<&str>, horizontal: Option<bool>, selector: Option<&str>, source: Option<Bind>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
@@ -442,10 +432,13 @@ pub fn path(value: Option<&str>, horizontal: Option<bool>, selector: Option<&str
 }
 
 /// Build a `tiles` node (the wire type `tiles`).
-pub fn tiles(children: &[Value], columns: Option<Value>, header: Option<Value>, selector: Option<&str>, stage: Option<&str>, step: Option<Value>, source: Option<Bind>, id: Option<&str>) -> Value {
+pub fn tiles(children: &[Value], dir: Option<Value>, fields: Option<Value>, header: Option<Value>, selector: Option<&str>, step: Option<Value>, window: Option<Value>, wrap: Option<Value>, source: Option<Bind>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
-    if let Some(v) = columns {
-        put(&mut attrs, "columns", v.clone());
+    if let Some(v) = dir {
+        put(&mut attrs, "dir", v.clone());
+    }
+    if let Some(v) = fields {
+        put(&mut attrs, "fields", v.clone());
     }
     if let Some(v) = header {
         put(&mut attrs, "header", v.clone());
@@ -453,11 +446,14 @@ pub fn tiles(children: &[Value], columns: Option<Value>, header: Option<Value>, 
     if let Some(v) = selector {
         put(&mut attrs, "selector", s(v));
     }
-    if let Some(v) = stage {
-        put(&mut attrs, "stage", s(v));
-    }
     if let Some(v) = step {
         put(&mut attrs, "step", v.clone());
+    }
+    if let Some(v) = window {
+        put(&mut attrs, "window", v.clone());
+    }
+    if let Some(v) = wrap {
+        put(&mut attrs, "wrap", v.clone());
     }
     let source = source.and_then(emit);
     let mut node = Map::new();
@@ -477,8 +473,8 @@ pub fn tiles(children: &[Value], columns: Option<Value>, header: Option<Value>, 
     Value::Object(node)
 }
 
-/// Build a `record` node (the wire type `record`).
-pub fn record(children: &[Value], horizontal: Option<bool>, selector: Option<&str>, id: Option<&str>) -> Value {
+/// Build a `entry` node (the wire type `entry`).
+pub fn entry(children: &[Value], horizontal: Option<bool>, selector: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = horizontal {
         put(&mut attrs, "horizontal", Value::Bool(v));
@@ -496,7 +492,7 @@ pub fn record(children: &[Value], horizontal: Option<bool>, selector: Option<&st
     if let Some(v) = id {
         put(&mut node, "id", s(v));
     }
-    put(&mut node, "type", s("record"));
+    put(&mut node, "type", s("entry"));
     Value::Object(node)
 }
 
@@ -654,54 +650,5 @@ pub fn text(value: Option<&str>, format: Option<&str>, selector: Option<&str>, s
         put(&mut node, "source", v.clone());
     }
     put(&mut node, "type", s("text"));
-    Value::Object(node)
-}
-
-/// Build a `grab` node (the wire type `grab`).
-pub fn grab(children: &[Value], kind: Option<&str>, payload: Option<Value>, id: Option<&str>) -> Value {
-    let mut node = Map::new();
-    if !children.is_empty() {
-        put(&mut node, "children", array(children));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    if let Some(v) = kind {
-        put(&mut node, "kind", s(v));
-    }
-    if let Some(v) = payload {
-        put(&mut node, "payload", v.clone());
-    }
-    put(&mut node, "type", s("grab"));
-    Value::Object(node)
-}
-
-/// Build a `dock` node (the wire type `dock`).
-pub fn dock(children: &[Value], accept: Option<Value>, expand: Option<Value>, selector: Option<&str>, sink: Option<Bind>, id: Option<&str>) -> Value {
-    let mut attrs = Map::new();
-    if let Some(v) = accept {
-        put(&mut attrs, "accept", v.clone());
-    }
-    if let Some(v) = expand {
-        put(&mut attrs, "expand", v.clone());
-    }
-    if let Some(v) = selector {
-        put(&mut attrs, "selector", s(v));
-    }
-    let sink = sink.and_then(emit);
-    let mut node = Map::new();
-    if !attrs.is_empty() {
-        put(&mut node, "attrs", Value::Object(attrs));
-    }
-    if !children.is_empty() {
-        put(&mut node, "children", array(children));
-    }
-    if let Some(v) = id {
-        put(&mut node, "id", s(v));
-    }
-    if let Some(v) = sink {
-        put(&mut node, "sink", v.clone());
-    }
-    put(&mut node, "type", s("dock"));
     Value::Object(node)
 }

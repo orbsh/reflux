@@ -33,7 +33,7 @@ def exposed() -> list[str]:
 def hidden_attrs() -> set[str]:
     """The attributes the builders never expose (`class` — the token lane's only path).
 
-    `selector` is not one of them: it is the name a record's field carries (ADR 0031 §4), so a
+    `selector` is not one of them: it is the name an entry's field carries (ADR 0031 §4), so a
     producer writes it like any other attribute.
     """
     return set(load().get("hidden_attrs", [])) | {"class"}

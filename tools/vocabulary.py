@@ -37,7 +37,7 @@ TYPES_PATH = ROOT / "reflux" / "sdk" / "types.py"
 
 SHARED_FIELDS = {"type", "attrs", "source", "sink", "children", "item", "id"}
 # `class` is the token lane's alone: a producer reaches a class by name (`variant=`), never by
-# string. `selector` is *not* here — since ADR 0031 §4 it is the name of a `record`'s field, so it
+# string. `selector` is *not* here — since ADR 0031 §4 it is the name of an `entry`'s field, so it
 # is data a producer must be able to write.
 HIDDEN_ATTRS = {"class"}
 # The two directions, in flow order: in, then out (ADR 0031 §2).
@@ -230,19 +230,26 @@ def is_string_set(fragment: dict, defs: dict) -> bool:
 
 
 def _string_domain(fragment: dict, defs: dict) -> bool:
-    """Is this a closed set of strings — an `enum`, or a `oneOf` of string consts (`DockExpand`)?"""
+    """Is this a closed set of strings — an `enum`, or a branch mix of string enums and consts?
+
+    `Wrap` is `oneOf: [{enum: [wrap, wrap-reverse]}, {const: nowrap}]`: serde cannot derive a
+    `NoWrap` variant, so the third word is a const. The caller still writes `wrap="nowrap"`, so a
+    branch that names its strings either way counts.
+    """
     if _enum_of(fragment, defs) is not None:
         return True
     name = (fragment.get("$ref") or "").rsplit("/", 1)[-1]
     target = defs.get(name) or {}
     branches = target.get("anyOf") or target.get("oneOf") or []
-    return bool(branches) and all(b.get("type") == "string" and "const" in b for b in branches)
+    return bool(branches) and all(
+        b.get("type") == "string" and ("const" in b or isinstance(b.get("enum"), list)) for b in branches
+    )
 
 
 def json_alt(fragment: dict, defs: dict) -> str | None:
     """The wire's own JSON spelling of a keyword the type layer types as a model or an enum.
 
-    `stage: all`, `step: {timer: 4000}`, `header: {selector, rows}`, `columns: [{key}]` are what the
+    `dir: row`, `step: {timer: 4000}`, `header: {selector, layers}`, `fields: [{key}]` are what the
     schema, the ADR's YAML and every hand-written frame say. The builder validates through pydantic,
     which takes either the generated model or its JSON — so the annotation has to offer both, or a
     type checker refuses the documented call. This is `SubmitSet`'s lesson (`submit: enter` next to

@@ -4,15 +4,18 @@
 
     cd ~/world/fluxen && cargo run -q -p stage -- schema
 
-- snapshot: 2026-11-19, sha256 `83ddb31865446b1913b66bb661a6419d6a2b645a94d49a299ae0b5c0ad0824a7`, 49 605 B
-- shape: draft 2020-12, root `oneOf` of 18 arms (`{"properties": {"type": {"const": …}}, "$ref": "#/$defs/…"`), 46 `$defs`
-- vocabulary: ADR 0031 §4 replaced `rack` and `pages` with one node, `tiles` — `stage: all | one` says how
-  much of the slot is on stage, `step: {timer: ms}` or `{slot: name}` says what advances it — and folded
-  the table family (`table`/`thead`/`tbody`/`tr`/`th`/`td`) into it: a grid is `tiles` with
-  `columns: [{key, title?, width?, align?, selectors?}]` and `header: {selector, rows: 1 | 2}` over rows
-  that are the new node `record` (its `id` is the item's key; its fields are its children, each named by
-  its `attrs.selector`, and a field whose children are records is a nested list drawn as child rows —
-  there is no colspan/rowspan)
+- snapshot: 2026-11-19, sha256 `c4d17e282c65552ab127cbea3b48729e8fb37766e3eeb11eb1178480358a7ce4`, 49 888 B
+- shape: draft 2020-12, root `oneOf` of 15 arms (`{"properties": {"type": {"const": …}}, "$ref": "#/$defs/…"`), 44 `$defs`
+- vocabulary: ADR 0034/0035 — one box carries cargo, so `group`, `grab` and `dock` are gone: a frame is
+  `draggable` (its cargo is its own subtree), a landing is `accept` + `sink` (a drop that cannot emit is
+  a load error), and `style` is the surface `group` had. `template` became `stamp`. `tiles` gained an
+  axis of its own: `dir: row | row-reverse | col | col-reverse` (absent = `col`) and
+  `wrap: wrap | wrap-reverse | nowrap` (absent = `wrap`), and a grid is `tiles` with
+  `fields: [{key, title?, width?, align?, selectors?}]` and `header: {selector, layers: 1 | 2}` over
+  rows that are the node `entry` (was `record`; its `id` is the item's key, its fields are its
+  children, each named by its `attrs.selector`, and a field whose children are entries is a nested
+  list drawn as child rows — there is no colspan/rowspan). How much of the slot is on stage is
+  `window: {size: N}` (was `stage: all | one`); what advances it is `step: {timer: ms}` or `{slot: name}`
 - vocabulary, before it: ADR 0032 retired `form` and `textarea` — `bundle` packs fields into one object
   (fields are named by their `tag`, the exit is the bundle's `sink`, the timing its `attrs.submit`), and
   a multi-line text area is `input` with `multiline: true`

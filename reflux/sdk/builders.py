@@ -7,21 +7,26 @@ from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
 
-__all__ = ["bundle", "button", "canvas", "dock", "forcegraph", "frame", "grab", "group", "image", "input", "panel", "path", "record", "select", "svg", "text", "tiles"]
+__all__ = ["bundle", "button", "canvas", "entry", "forcegraph", "frame", "image", "input", "panel", "path", "select", "svg", "text", "tiles"]
 
 def frame(
     *children: Accrete,
+    accept: Accept | dict[str, Any] | None = None,
+    draggable: Draggable | dict[str, Any] | None = None,
     grid: dict[str, Any] | None = None,
     horizontal: bool | None = None,
     selector: str | None = None,
+    style: dict[str, Any] | None = None,
     source: Any = None,
+    sink: Any = None,
     id: str | None = None,
     variant: str | None = None,
 ) -> Frame:
     """Build a `frame` node (the wire type `frame`)."""
-    attrs = token_attrs(drop_none(grid=grid, horizontal=horizontal, selector=selector), variant, 'frame')
+    attrs = token_attrs(drop_none(accept=accept, draggable=draggable, grid=grid, horizontal=horizontal, selector=selector, style=style), variant, 'frame')
     source = as_source(source, constants=False)
-    return parse(drop_none(type='frame', attrs=attrs, source=source, id=id, children=list(children) or None), Frame)
+    sink = as_sink(sink)
+    return parse(drop_none(type='frame', attrs=attrs, source=source, sink=sink, id=id, children=list(children) or None), Frame)
 
 
 def canvas(
@@ -107,17 +112,6 @@ def svg(
     return parse(drop_none(type='svg', attrs=attrs, id=id, children=list(children) or None), Svg)
 
 
-def group(
-    *children: Accrete,
-    selector: str | None = None,
-    style: dict[str, Any] | None = None,
-    id: str | None = None,
-) -> Group:
-    """Build a `group` node (the wire type `group`)."""
-    attrs = drop_none(selector=selector, style=style)
-    return parse(drop_none(type='group', attrs=attrs, id=id, children=list(children) or None), Group)
-
-
 def path(
     value: Any = None,
     *,
@@ -134,29 +128,31 @@ def path(
 
 def tiles(
     *children: Accrete,
-    columns: list[Column | dict[str, Any]] | None = None,
+    dir: Dir | str | None = None,
+    fields: list[Field | dict[str, Any]] | None = None,
     header: Header | dict[str, Any] | None = None,
     selector: str | None = None,
-    stage: Stage | str | None = None,
     step: Step | dict[str, Any] | None = None,
+    window: Window | dict[str, Any] | None = None,
+    wrap: Wrap | str | None = None,
     source: Any = None,
     id: str | None = None,
 ) -> Tiles:
     """Build a `tiles` node (the wire type `tiles`)."""
-    attrs = drop_none(columns=columns, header=header, selector=selector, stage=stage, step=step)
+    attrs = drop_none(dir=dir, fields=fields, header=header, selector=selector, step=step, window=window, wrap=wrap)
     source = as_source(source, constants=False)
     return parse(drop_none(type='tiles', attrs=attrs, source=source, id=id, children=list(children) or None), Tiles)
 
 
-def record(
+def entry(
     *children: Accrete,
     horizontal: bool | None = None,
     selector: str | None = None,
     id: str | None = None,
-) -> Record:
-    """Build a `record` node (the wire type `record`)."""
+) -> Entry:
+    """Build a `entry` node (the wire type `entry`)."""
     attrs = drop_none(horizontal=horizontal, selector=selector)
-    return parse(drop_none(type='record', attrs=attrs, id=id, children=list(children) or None), Record)
+    return parse(drop_none(type='entry', attrs=attrs, id=id, children=list(children) or None), Entry)
 
 
 def button(
@@ -242,28 +238,3 @@ def text(
     attrs = token_attrs(drop_none(format=format, selector=selector), variant, 'text')
     source = as_source(source, default=value)
     return parse(drop_none(type='text', attrs=attrs, source=source, id=id), Text)
-
-
-def grab(
-    *children: Accrete,
-    kind: str | None = None,
-    payload: Any | None = None,
-    id: str | None = None,
-) -> Grab:
-    """Build a `grab` node (the wire type `grab`)."""
-    attrs = None
-    return parse(drop_none(type='grab', attrs=attrs, id=id, children=list(children) or None, kind=kind, payload=payload), Grab)
-
-
-def dock(
-    *children: Accrete,
-    accept: list[str] | None = None,
-    expand: DockExpand | str | None = None,
-    selector: str | None = None,
-    sink: Any = None,
-    id: str | None = None,
-) -> Dock:
-    """Build a `dock` node (the wire type `dock`)."""
-    attrs = drop_none(accept=accept, expand=expand, selector=selector)
-    sink = as_sink(sink)
-    return parse(drop_none(type='dock', attrs=attrs, sink=sink, id=id, children=list(children) or None), Dock)

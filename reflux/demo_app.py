@@ -6,10 +6,10 @@ Four things, one per shape a page needs to be an application:
 
 - **an echo** — an `input` uplinks its buffer on Enter, a `text` reads the slot the handler writes;
 - **a list** — rows live in the `rows` slot and a `tiles` shows it; each row's remove button carries
-  the row's own identity up, and `remove` takes it back by identity. A row is also a `grab`: drag it
-  onto the `dock` below the tiles and the landing point uplinks `{kind, payload}` — the payload is
-  the row's id, so the archive handler resolves it the way the drag never could (the gesture itself
-  reports nothing: only the landing point does);
+  the row's own identity up, and `remove` takes it back by identity. A row also carries cargo: its
+  frame is `draggable`, so dragging it onto the landing frame below the tiles uplinks `{id, tag}` —
+  the dragged frame's own id, so the archive handler resolves it the way the gesture never could
+  (the drag itself reports nothing: only the landing point does);
 - **a bundle** — one submit carries every field it packs (`{tag: value, …}`, ADR 0032) — and it is
   the LOGIN bundle, because credentials are the framework's business: the exit is `reflux:login`,
   the app writes only `verify` and `view`, and no password is ever read by this module;
@@ -76,17 +76,17 @@ def nav_bundle(label: str, dest: Slot) -> Accrete:
 
 
 def row_node(row: dict, ctx: Context) -> Accrete:
-    """One row: draggable cargo, and the form whose submit carries the row's own id up.
+    """One row: a bundle (the ✕ that removes it) around a draggable frame (the cargo).
 
     The two ways out of a row are different mechanisms on purpose: the button is an uplink on the
-    form's id, a drag is silent until a landing point says where it went (ADR 0019). The form stays
-    the row's top node — a slot's `remove` addresses the node it holds, and the ✕ frame carries the
-    same id — so the cargo's identity rides `payload`, and the grab itself has none. One id per tree
-    is the wire's rule; a second copy of `row-1` on the grab is refused before it leaves.
+    bundle's id, a drag is silent until a landing point says where it went (ADR 0034: the cargo is
+    the dragged subtree, and a drop reports the dragged node's own id). So the row's bundle keeps
+    `<row id>` — that is what `remove` addresses — and the cargo frame names itself `<row id>-cargo`,
+    because one id per tree is the wire's rule and the drop has no other field to carry identity in.
     """
     # `remove` is a verb on a slot, so this name is written with the subscript.
     return b.bundle(
-        b.grab(b.text(row["text"]), kind="row", payload={"id": row["id"]}),
+        b.frame(b.text(row["text"]), draggable={"tag": "row"}, id=f"{row['id']}-cargo"),
         b.button("删", sink=ctx.slot.row["remove"]),
         sink=ctx.slot.row["remove"],
         submit=["button"],
@@ -139,9 +139,10 @@ class Demo:
             b.bundle(b.button("加一行", sink=ctx.slot.row.add), sink=ctx.slot.row.add,
                      submit=["button"], id="add-row"),
             b.tiles(source=slots.rows, id="rows"),
-            # The landing point names its event and what it accepts; `accept` is a closed set, so a
-            # grab of any other kind is refused without a frame.
-            b.dock(b.text("拖一行到这里归档"), accept=["row"], sink=ctx.slot("row.archive"), id="archive"),
+            # The landing point names its event and what it accepts; `accept` is one tag (or any),
+            # so cargo of another tag is refused without a frame — and a landing without a `sink`
+            # is a load error, which is why the two always come together.
+            b.frame(b.text("拖一行到这里归档"), accept={"tag": "row"}, sink=ctx.slot("row.archive"), id="archive"),
             b.text(source=slots.archived, id="archived"),
             # The credential form speaks the framework's verb: this app never sees the password,
             # and the answer (a token, a signed-in line) is drawn into the reserved `auth` region.
@@ -194,8 +195,9 @@ class Demo:
         slots_of(ctx).rows.remove(row_id)
 
     def on_archive(self, ctx, frame) -> None:
-        """A drop: the landing point sends the cargo's `{kind, payload}`; the app resolves the id."""
-        row_id = ((frame.get("data") or {}).get("payload") or {}).get("id")
+        """A drop: the landing point sends `{id, tag}` — the dragged frame's own id, and its tag."""
+        cargo = (frame.get("data") or {}).get("id") or ""
+        row_id = cargo.removesuffix("-cargo")
         row = next((r for r in self.rows if r["id"] == row_id), None)
         if row is None:
             return

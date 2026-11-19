@@ -86,8 +86,8 @@ python3 -m reflux.demo_app --port 8000
 ```
 
 Open <http://127.0.0.1:8000/>. It has one of each shape an application needs: an input that echoes,
-a list you can add to and remove from, a form that submits several fields at once, and two routes
-that change both the structure and the address bar.
+a list you can add to, remove from, and drag onto an archive frame, a bundle that submits several
+fields at once, and two routes that change both the structure and the address bar.
 
 Two tools tell you what a running app declared:
 
@@ -114,7 +114,7 @@ def home(ctx, match):
         "/",
         "Hello",
         b.text("Hello", variant="heading-1"),
-        b.input(dest=ctx.slot.name.change, id="name"),   # a dest: the handler's name
+        b.input(sink=ctx.slot.name.change, id="name"),   # a sink: the handler's name
         b.text(source=ctx.slot.echo, id="echo"),          # a slot: the data plane's name
     )
 
@@ -140,7 +140,7 @@ What the pieces are:
   mirrors into the address bar and the tab title, then your content. It is a convention, not a wire type
   — reach for it directly only when you are assembling a page by hand.
 - **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
-  values. `b.text(source=…)` reads a slot and `b.input(dest=…)` speaks to a dest — both take a handle
+  values. `b.text(source=…)` reads a slot and `b.input(sink=…)` speaks to a dest — both take a handle
   from `ctx.slot`, never a string. A handle nests: `ctx.slot.chat.send` is the name `chat.send`, so a
   page's slots and its uplinks read off the same view.
 - **`@app.on(app.slot.name.change)`** is the only way an uplink frame reaches your code — the handle
@@ -169,7 +169,7 @@ else — `app.live()` (a snapshot), `app.device(id)` (one, by the id a handler w
 `app.evict(id=… | where=…, reason=…)` (close them, through the door a disconnect already uses),
 plus the heartbeat that judges a peer dead after `dead_after` seconds of silence.
 
-Signing in is therefore not a framework event. Connect anonymously, draw a login form when you need
+Signing in is therefore not a framework event. Connect anonymously, draw a login bundle when you need
 one (it is a downlink message like any other), register the destination it posts to, and after your
 own verification (`user = check_credentials(...)`, an external service, whatever) hang the result on
 the connection and redraw:
@@ -201,7 +201,7 @@ HTTP framework, and anything bigger belongs behind a real server.
 
 Eight actions. A frame **is** the list of them — a bare JSON array, with nothing wrapped around it. An
 address inside the tree is a `slot` (`""` = the layout root); an uplink's landing point is a `dest`
-(`Outflow.dest`, `bind: {kind: "dest", dest: …}`) — two words, because the directions are not
+(`Outflow.dest`; a `sink` is the `Bind` that names it) — two words, because the directions are not
 symmetric: one writes into a place in the page, the other names a target on the host. `event` stays
 with the DOM and with the host's own events; it never appears on this wire:
 
@@ -324,12 +324,12 @@ A module that is not on disk draws a line saying where the page looked, not an e
 ## Verify
 
 ```
-python3 -m unittest discover -s tests -t .     # 275 tests, no browser
+python3 -m unittest discover -s tests -t .     # 280 tests, no browser
 python3 tools/gate_ingest.py                   # the two boundaries, over a real socket
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
 python3 tools/gate_t3.py                       # the whole vocabulary, drawn and styled
-python3 tools/gate_t4.py                       # typing, clicking, form submits
+python3 tools/gate_t4.py                       # typing, clicking, bundle submits
 python3 tools/gate_t6.py                       # address bar, history, deep links
 python3 tools/gate_t7.py                       # devices: reload and death
 python3 tools/gate_t8.py                       # what a bad frame does (and does not) do

@@ -14,7 +14,7 @@
 
 use reflux_sdk::markers;
 use reflux_sdk::types::{
-    bundle, button, dock, frame, grab, input, text, tiles, Bind, JsType, TextVariant,
+    bundle, button, frame, input, text, tiles, Bind, JsType, TextVariant,
 };
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::{json, Value};
@@ -70,14 +70,25 @@ fn nav_bundle(label: &str, event: &str) -> Value {
     )
 }
 
-/// One row: draggable cargo, and the bundle whose submit carries the row's own id up.
+/// One row: a draggable frame (the cargo) inside the bundle whose submit carries the row id up.
+///
+/// The cargo frame names itself `<id>-cargo`: a drop reports the dragged node's own id, and the
+/// bundle already owns `<id>` — one id per tree, on both sides of the wire (ADR 0034).
 fn row_node(id: &str, value: &str) -> Value {
     let remove = remote_slot("row.remove");
+    let cargo = format!("{id}-cargo");
     let children = [
-        grab(
+        frame(
             &[text(Some(value), None, None, None, None, None)],
-            Some("row"),
-            Some(json!({"id": id})),
+            None,
+            Some(json!({"tag": "row"})),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&cargo),
             None,
         ),
         button(Some("删"), None, None, None, Some(remove.clone()), None),
@@ -108,15 +119,20 @@ fn home() -> Value {
                 None,
                 Some("add-row"),
             ),
-            tiles(&[], None, None, None, None, None, Some(remote_slot(ROWS)), Some("rows")),
+            tiles(&[], None, None, None, None, None, None, None, Some(remote_slot(ROWS)), Some("rows")),
             // The landing point names its event and what it accepts.
-            dock(
+            frame(
                 &[text(Some("拖一行到这里归档"), None, None, None, None, None)],
-                Some(json!(["row"])),
+                Some(json!({"tag": "row"})),
+                None,
+                None,
+                None,
+                None,
                 None,
                 None,
                 Some(remote_slot("row.archive")),
                 Some("archive"),
+                None,
             ),
             text(None, None, None, Some(remote_slot("archived")), Some("archived"), None),
             // The credential bundle speaks the framework's verb: this app never sees the password.
@@ -133,7 +149,19 @@ fn home() -> Value {
                 Some("login"),
             ),
             // The reserved region the framework draws the login surface into.
-            frame(&[], None, None, None, Some(remote_slot(AUTH_SLOT)), Some("auth-region"), None),
+            frame(
+                &[],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(remote_slot(AUTH_SLOT)),
+                None,
+                Some("auth-region"),
+                None,
+            ),
             bundle(
                 &[press("私密", "vault.secret")],
                 None,
@@ -250,6 +278,10 @@ fn login_surface() -> Value {
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        None,
     )
 }
 
@@ -285,6 +317,10 @@ fn main() {
                     Some("local-echo"),
                     None,
                 )],
+                None,
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,

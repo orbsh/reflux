@@ -3,6 +3,7 @@
   "title": "Accrete",
   "oneOf": [
     {
+      "description": "A box (ADR 0027/0034). It reads a slot and it is the only place cargo lives:\n`attrs.draggable` makes it a drag source, `attrs.accept` + `sink` a landing.\nIt takes a fallback id because a landing emits, and the frame's id is the id\nof what was dropped on.",
       "type": "object",
       "properties": {
         "type": {
@@ -86,19 +87,6 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "group"
-        }
-      },
-      "$ref": "#/$defs/Group",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
           "const": "path"
         }
       },
@@ -108,7 +96,7 @@
       ]
     },
     {
-      "description": "One container for a slot's items (ADR 0031 §4): `stage` says how many are on it, `step`\nwhat advances it. `rack` and `pages` were the same node with different steppers.",
+      "description": "One container for a slot's items (ADR 0031 §4): `window` says how many are on it, `step`\nwhat advances it. `rack` and `pages` were the same node with different steppers.",
       "type": "object",
       "properties": {
         "type": {
@@ -122,15 +110,15 @@
       ]
     },
     {
-      "description": "A record — the item a `tiles` with `columns` projects (ADR 0031 §4). Rendered on its own it\nis a block of its fields; the grid is what turns it into a row.",
+      "description": "An entry — the item a `tiles` with `fields` projects (ADR 0031 §4). Rendered on its own it\nis a block of its fields; the grid is what turns it into a row.",
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "const": "record"
+          "const": "entry"
         }
       },
-      "$ref": "#/$defs/Record",
+      "$ref": "#/$defs/Entry",
       "required": [
         "type"
       ]
@@ -201,49 +189,36 @@
       ]
     },
     {
+      "description": "A registered template by name (ADR 0006), spelled `stamp` since ADR 0034.",
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "const": "template"
+          "const": "stamp"
         }
       },
-      "$ref": "#/$defs/Template",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "description": "拖拽的两端（ADR 0019）：手势、飞行态与落点高亮都在渲染器里，两端各一个\n角色——源可以被提起，落点接受释放并发射那一帧。源不领兜底 id：身份只有\n生产者给的才算数（合成的 `grab-N` 进不了帧）；落点领，因为它要发那一帧。",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "grab"
-        }
-      },
-      "$ref": "#/$defs/Grab",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "dock"
-        }
-      },
-      "$ref": "#/$defs/Dock",
+      "$ref": "#/$defs/Stamp",
       "required": [
         "type"
       ]
     }
   ],
   "$defs": {
+    "Accept": {
+      "description": "Which cargo a box takes (ADR 0034): absent `tag` = any, a tag = that one.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "Align": {
-      "description": "Where a cell's content sits along its column. `start` is what a text cell already does, so it is\nthe default and stays off the wire.",
+      "description": "Where a cell's content sits inside its field. `start` is what a text cell already does, so it is\nthe default and stays off the wire.",
       "type": "string",
       "enum": [
         "start",
@@ -492,8 +467,73 @@
         }
       }
     },
-    "Column": {
-      "description": "One column of a grid (ADR 0031 §4). `key` is the record field this column projects — the\n`attrs.selector` of one of the record's children — and it is also what a two-row header derives\nits group from: split on `/`, everything before the last one is the group and the rest is the leaf\n(`price/retail` sits under `price`). Formatting has no spelling yet, so it is not implemented.",
+    "Dir": {
+      "description": "The direction a `tiles`' ITEMS flow in (ADR 0035) — flex's meaning, not \"the shape of an entry\":\n`row` lays the items out left to right, `row-reverse` right to left, `col` top to bottom,\n`col-reverse` bottom to top.\n\nThe words are flex's because a frame author already knows them, down to the `-reverse` spellings\nthat reverse the ORDER without changing the axis. The default is `col`, the one place this\nvocabulary deliberately differs from flex: flex lays out inline content and starts on a line,\nwhile `tiles` lays out a list of items — and an unlabelled list is vertical.",
+      "type": "string",
+      "enum": [
+        "row",
+        "row-reverse",
+        "col",
+        "col-reverse"
+      ]
+    },
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "U",
+        "D",
+        "L",
+        "R"
+      ]
+    },
+    "Draggable": {
+      "description": "The tag of a draggable box's cargo (ADR 0034). Absent = untagged: a target that\nnames no tag takes it, a target that names one does not.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Entry": {
+      "description": "An entry: a group of named data fields, as one item of a list — each field a child node whose\n`attrs.selector` is the field's name (ADR 0031 §4 — an entry is the item of a `tiles` that has\n`fields`).\n\nA field whose direct children are themselves entries holds a LIST of entries, which a grid draws\nas child rows under the row it belongs to. That is the whole of \"hierarchy instead of spans\": the\ndata already says which row a row belongs to, so the markup does not merge cells to say it again.\n\nAn ENTRY, not a record: `record` implies a row, and a row is a direction word. `tiles` runs its\nitems along whichever axis `dir` names (`row | row-reverse | col | col-reverse`), and on the\nhorizontal one the items flow across a row — where \"record\" (a row's worth) would name the\ncontainer, not the thing. `entry` names the thing itself: what a list holds.",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClassAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "children": {
+          "description": "The fields. A child's `attrs.selector` is the field's name, so a field projects by that\nkey rather than by position — reordering fields cannot move a value to another field.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "id": {
+          "description": "The item's key (ADR 0031 §4, \"Every item has a key\"): an entry that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Field": {
+      "description": "One field of a grid (ADR 0031 §4). `key` names the entry field this field projects — the\n`attrs.selector` of one of the entry's children — and it is also what a two-row header derives\nits group from: split on `/`, everything before the last one is the group and the rest is the leaf\n(`price/retail` sits under `price`). Formatting has no spelling yet, so it is not implemented.\n\nA FIELD, not a column: `column` names where a thing sits, and where it sits is `dir`'s business.\n`tiles` has a direction of its own (`row | row-reverse | col | col-reverse`, ADR 0035), and the\nfields run across it with `dir: col` and down it with `dir: row` — so a word that names one of\nthe two would be a lie half the time. `field` names the thing itself.",
       "type": "object",
       "properties": {
         "align": {
@@ -510,7 +550,7 @@
           "type": "string"
         },
         "selectors": {
-          "description": "Extra class tokens for this column's cells: a column is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
+          "description": "Extra class tokens for this field's cells: a field is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
           "type": [
             "array",
             "null"
@@ -536,105 +576,6 @@
       },
       "required": [
         "key"
-      ]
-    },
-    "Direction": {
-      "type": "string",
-      "enum": [
-        "U",
-        "D",
-        "L",
-        "R"
-      ]
-    },
-    "Dock": {
-      "description": "拖拽的落点（ADR 0019）：`children` = 已放下的内容（生产者随后往里追加钉住的\n流）。事件名与落点身份在这一侧定义，于是多个 dock 天然可分；释放时由本节点\n发射，`id` 是它自己的 id，「被拖来的是什么」进 `data`。",
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DockAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sink": {
-          "description": "`bind[\"value\"]`：`event` 上行（事件名就是这里的名字），或 `local` 写槽\n（包装与上行同形，ADR 0010）。带什么货由源（`grab`）给，落点不再附加任何\n元数据——事件名与帧的 `id` 已经唯一确定是哪个落点。",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "DockAttr": {
-      "type": "object",
-      "properties": {
-        "accept": {
-          "description": "收哪些 `grab.kind`。缺席 = 全收（只有一个落点时不必写）；写了就是闭集合\n比对，配不上的拖拽落在这里等于没落（不发射、不高亮）。",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "expand": {
-          "$ref": "#/$defs/DockExpand"
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "DockExpand": {
-      "description": "落点常态的形态（ADR 0019）。闭枚举：两个取值就是两种可用策略，不给自由值。",
-      "oneOf": [
-        {
-          "description": "默认：常态一条细条，拖拽在飞时展开。零宽的盒子没有命中区，所以展开的\n触发面是 `dragstart`（全局），不是悬停——先看得见才落得进去。",
-          "type": "string",
-          "const": "reveal"
-        },
-        {
-          "description": "提前占好位：常态就是完整尺寸，拖拽在飞与悬停只做高亮，不动几何。",
-          "type": "string",
-          "const": "reserved"
-        }
       ]
     },
     "ForceGraph": {
@@ -845,6 +786,17 @@
             "null"
           ]
         },
+        "sink": {
+          "description": "The landing uplink (ADR 0034): where a drop on this box goes — an event name or\na local slot, the same `Bind` `dock` had.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "source": {
           "anyOf": [
             {
@@ -858,8 +810,20 @@
       }
     },
     "FrameAttr": {
+      "description": "A frame is a box: it wraps children, it can read a slot, and (ADR 0034) it is the\nonly thing that can carry cargo — as a source (`draggable`), as a landing\n(`accept` + `sink`), or as both.",
       "type": "object",
       "properties": {
+        "accept": {
+          "description": "What cargo this box takes (ADR 0034). Absent `tag` = takes any. Needs `sink`:\na drop that cannot emit is a frame error at load.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Accept"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "class": {
           "type": [
             "array",
@@ -868,6 +832,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "draggable": {
+          "description": "This box may be dragged away (ADR 0034). Its cargo is its own subtree — there\nis no second payload to keep in step with it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Draggable"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "grid": {
           "type": [
@@ -887,87 +862,25 @@
             "string",
             "null"
           ]
-        }
-      }
-    },
-    "Grab": {
-      "description": "拖拽的源（ADR 0019）：一层**无样式、不占位**的包装（它自己不加 padding、\n边框、背景，也不消费额外尺寸——尺寸全由 children 给），唯一职责是把\n「这件东西可以被拖走」和它的货物说清楚。\n\n拖动本身不上报：`dragstart` 只把「谁在飞、带什么、是什么」写进渲染器的\n页面级拖拽会话，上行发生在落点（`dock`）。",
-      "type": "object",
-      "properties": {
-        "children": {
+        },
+        "style": {
+          "description": "Inline style, written as it is. This is the surface `group` had: a frame can\nsay everything a `group` could.",
           "type": [
-            "array",
+            "object",
             "null"
           ],
-          "items": {
-            "$ref": "#"
+          "additionalProperties": {
+            "type": "string"
           }
-        },
-        "id": {
-          "description": "行身份（可选但强烈建议）：`rack` 的 keyed diff 用**行节点自己**的 id，\n没有就退 `#{idx}` 位置键——中间删一行会让后面所有行重建、本地态丢。\ngrab 就是「一层无样式包装」，可以当行的根节点，所以 id 落在这里。\n渲染器不替它从子节点借 id：那会造出两个同 id 的节点，按 id 定位的行\n操作（append／remove／patch）从此指向不明——身份只能生产者给。",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "kind": {
-          "description": "货物的标签，供落点配对（`dock.attrs.accept`）。缺省 = 没有标签：\n不限定的落点照收，写了 `accept` 的落点不收（配不上就是配不上）。",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "payload": {
-          "description": "货物本身：任意 JSON，原样进上行帧的 `payload`。写的是声明时的快照，\n渲染器不校验它与任何槽是否一致——一致性是生产者的编排责任。"
-        }
-      }
-    },
-    "Group": {
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/StyleAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "children": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       }
     },
     "Header": {
-      "description": "The header of a grid (ADR 0031 §4): the cells carry `selector` — one hook for the whole header,\nsince no header cell is a special element. `rows: 2` puts a group row over a leaf row, both read\noff the columns' keys; there is no second shape to say the same thing.",
+      "description": "The header of a grid (ADR 0031 §4, ADR 0035): the cells carry `selector` — one hook for the whole\nheader, since no header cell is a special element. `layers: 2` puts a group layer over a leaf\nlayer, both read off the fields' keys; there is no second shape to say the same thing.",
       "type": "object",
       "properties": {
-        "rows": {
-          "description": "`1` (default) or `2`. Anything else is a frame error at load, not a layout surprise.",
+        "layers": {
+          "description": "`1` (default) or `2`: how many LINES of header cells there are along the field axis. A\ndirection word (`rows`) named where the header sat, which stopped being true the moment\n`dir: row` made the header a column; a layer is one line whatever axis it runs on.",
           "type": "integer",
           "format": "uint8",
           "maximum": 2,
@@ -1381,39 +1294,6 @@
         }
       }
     },
-    "Record": {
-      "description": "A record: named fields, each one a child node whose `attrs.selector` is the field's name\n(ADR 0031 §4 — a record is the item of a `tiles` that has `columns`).\n\nA field whose direct children are themselves records holds a LIST of records, which a grid draws\nas child rows under the row it belongs to. That is the whole of \"hierarchy instead of spans\": the\ndata already says which row a row belongs to, so the markup does not merge cells to say it again.",
-      "type": "object",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ClassAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "children": {
-          "description": "The fields. A child's `attrs.selector` is the field's name, so a column projects by that\nkey rather than by position — reordering fields cannot move a value to another column.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
-        },
-        "id": {
-          "description": "The item's key (ADR 0031 §4, \"Every item has a key\"): a record that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
     "Scope": {
       "description": "Where a value is authoritative (ADR 0031 §1). The store is chosen by this\nfield, not by a separate variant: `local` lives in the page's own value\nplane, `remote` on the side that owns the session, `both` assigns locally\nand mirrors the change up.",
       "type": "string",
@@ -1523,12 +1403,21 @@
         }
       }
     },
-    "Stage": {
-      "description": "How much of the slot a `tiles` node puts on stage (ADR 0031 §4): every item, laid out the way\nthe frame's CSS says; or one at a time, occupying the whole area — the marquee, and also the\npage. Nothing about the container changes between the two.",
-      "type": "string",
-      "enum": [
-        "all",
-        "one"
+    "Stamp": {
+      "description": "A registered template, instantiated by name (ADR 0006). Renamed from `Template`\n(ADR 0034); the definition side is unchanged.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "data"
       ]
     },
     "Step": {
@@ -1561,35 +1450,6 @@
           ]
         }
       ]
-    },
-    "StyleAttr": {
-      "type": "object",
-      "properties": {
-        "class": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "style": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      }
     },
     "SubmitMode": {
       "description": "When a bundle sends (ADR 0032). The modes combine, so the attribute is a\nset: `[enter, button]` is a chat box, `[change]` packs as the user types.\nThis is timing — a different axis from `scope`, which says where a value\nlands.",
@@ -1653,22 +1513,6 @@
           ]
         }
       }
-    },
-    "Template": {
-      "type": "object",
-      "properties": {
-        "data": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "data"
-      ]
     },
     "Text": {
       "type": "object",
@@ -1796,14 +1640,25 @@
             "type": "string"
           }
         },
-        "columns": {
-          "description": "Absent = each item is a node drawn as it is, one block per item. Present = each item is a\nRECORD and each column projects one of its fields into a cell (ADR 0031 §4).",
+        "dir": {
+          "description": "Which way the ITEMS flow (ADR 0035), in flex's sense. `row` is a strip: items left to right,\nand each entry's fields run down it, in the grid's ROW axis. `col` (default) is a list: items\ntop to bottom, each entry's fields across it, in the grid's COLUMN axis — the table every\nframe already draws. `row-reverse` / `col-reverse` keep the shape and reverse the order the\nitems arrive in.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dir"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fields": {
+          "description": "Absent = each item is a node drawn as it is, one block per item. Present = each item is an\nENTRY and each field projects one of its children into a cell (ADR 0031 §4).",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/Column"
+            "$ref": "#/$defs/Field"
           }
         },
         "header": {
@@ -1823,11 +1678,8 @@
             "null"
           ]
         },
-        "stage": {
-          "$ref": "#/$defs/Stage"
-        },
         "step": {
-          "description": "Absent = nothing steps: every item stays where it is.",
+          "description": "What advances the window. Only meaningful with a `window`: a stepper with nothing to step is\na frame error at load, not a clock that ticks for nobody.",
           "anyOf": [
             {
               "$ref": "#/$defs/Step"
@@ -1836,8 +1688,62 @@
               "type": "null"
             }
           ]
+        },
+        "window": {
+          "description": "Absent = every item is laid out and nothing steers; present = that many consecutive items\nare on stage at once, starting at the cursor (ADR 0031 §4).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Window"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wrap": {
+          "description": "What happens when the items no longer fit on one line (ADR 0035). Default `wrap`, because\na card wall is the shape that has no other spelling. `wrap-reverse` also puts the FIELDS on\nthe other side of the item axis: the header row below the entries, or the header column on\nthe right — the fields axis is the line axis, so reversing the lines reverses where they land.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Wrap"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
+    },
+    "Window": {
+      "description": "How much of the slot a `tiles` node puts on stage at once (ADR 0031 §4). Absent = every item is\nlaid out, the way the frame's CSS says; `{size: 1}` = one at a time, occupying the whole area —\nthe marquee, and also the page; `{size: N}` = a moving window of N consecutive items, which is\nwhat a paged table needs (and what `rack.view.count` used to be). Nothing about the container\nchanges between the three: a window is a count, not a mode.\n\nThere is no default: a frame that says nothing has no window at all, and a window of zero would\nbe a box that can never show anything, so it is refused at decode.",
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "size"
+      ]
+    },
+    "Wrap": {
+      "description": "What the items do when they no longer fit on one line (ADR 0035). `wrap` is absent: a wall of\ncards is the common shape, and `nowrap` is a strip that must stay one strip.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "wrap",
+            "wrap-reverse"
+          ]
+        },
+        {
+          "description": "`nowrap` is a word, not two: the CSS spelling, and one serde cannot derive from `NoWrap`.",
+          "type": "string",
+          "const": "nowrap"
+        }
+      ]
     }
   }
 }

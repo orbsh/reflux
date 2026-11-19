@@ -11,9 +11,10 @@
 }
 
 /* 令牌（profile 的 `tokens`）：生产端只写变体名（`variant="heading-1"`），SDK 低成这里
-   的 class。包在 `@layer reflux` 里：main.css 先声明了 theme/base/layout/element/custom/
-   style，新层名在之后首次出现 → 排在 style 之后，层内最强；而 unlayered 会盖掉渲染器
-   **所有**层（连它的布局与组件外观一起推翻），不可控。 */
+   的 class。包在 `@layer reflux` 里：main.css 先声明了
+   `tokens, reset, components, utilities, custom`，新层名在它之后首次出现 → 排在 `custom`
+   之后，层内最强；而 unlayered 会盖掉渲染器**所有**层（连它的布局与组件外观一起推翻），
+   不可控。 */
 @layer reflux {
   .rx-heading-1 {
     font-size: 1.75em;

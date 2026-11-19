@@ -11,13 +11,13 @@
   `static/` 就不挂）。深链与刷新都由根挂载的 `index.html` 接住，页面自己再向生产者要结构。
 - 帧只有一个方言：`reflux/wire.py`（accrete 的八个 action，**一帧就是这份数组**——没有信封）。`ops`／`ui`／
   `node` 随壳删除，**没有翻译层**。
-- fluxen：`main` @ 1f736ed（ADR 0022 下行叫 `slot`、ADR 0023 上行叫 `dest`；信封归宿主）。`crates/ui_core/src/lib.rs`
+- fluxen：`main` @ cf242e6（ADR 0022 下行叫 `slot`、ADR 0023 上行叫 `dest`；信封归宿主）。`crates/ui_core/src/lib.rs`
   的入口仍多读 `data-path`／`data-codec`，挂载后发布 `window.fluxen.send`。
-- 渲染器包是 fluxen `1f736ed` 的构建（`examples/renderer`，`trunk build --release`），落在
+- 渲染器包是 fluxen `cf242e6` 的构建（`examples/renderer`，`trunk build --release`），落在
   `www/static/vendor/fluxen/`——**这份包不入版本控制**（gitignore），仓里只有 `vendor/pin.json` 与装它的
-  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）。落地的数字是**本机**
-  这次构建的：`ui_leptos-bc0037ed3212b5d6.js`（89 919 B）+ `ui_leptos-dae870ed053d41d5_bg.wasm`（2 979 971 B）
-  + 两个 css（2 469 + 25 033 B），4 件共 3 097 392 B（本机没有 `wasm-opt`，所以没有压缩后的数字）。
+  `tools/vendor.py`。装法一行：`python3 tools/vendor.py fetch`（从 pin 指的 release 取）。落地的数字是**本机**这次
+  构建的：`ui_leptos-7ae5d966066a655a.js`（92 342 B）+ `ui_leptos-6a41deed26215974_bg.wasm`（9 442 980 B）
+  + 两个 css（2 935 + 37 980 B），4 件共 9 586 237 B。
   `versions.json`（rev + 逐文件 sha256/大小）随包生成；trunk／rustc 版本不同字节就不同，CI 为这个 rev 出包后
   以 release 那份为准——**fetch 这条路要等第一次 release 才算验过**。发布那边是 CI：`.github/workflows/renderer.yml`
   每次推 main 都看 pin——该 tag 还没发就用那个 fluxen 修订构建，产出
@@ -38,8 +38,8 @@ python3 -m unittest discover -s tests -t .       # 280 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
-python3 tools/gate_t3.py                         # 18 条：整树画词表 + 令牌的 computed style
-python3 tools/gate_t4.py                         # 8 条：输入/表单上行、id 认领（真按键、真点击）
+python3 tools/gate_t3.py                         # 16 条：整树画词表 + 令牌的 computed style
+python3 tools/gate_t4.py                         # 10 条：输入/bundle 上行、落点与 id 认领（真按键、真点击）
 python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历史 / 后退 / 深链 / 无标记
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
@@ -49,9 +49,9 @@ python3 tools/gate_chat.py                       # 12 条：示例应用的后�
 python3 -m examples.chat.app --port 8100  # 手工起示例应用（AI 对话）
 python3 -m examples.chat.walkthrough --auto   # 示例的快速演示（自己起 app，六个行为各一步）
 python3 -m reflux.cli routes reflux.demo_app       # 路由表（import 的副作用）
-python3 -m reflux.cli uplinks reflux.demo_app:make_app  # 上行落点注册表（名字 / builtin|app / 来源）
+python3 -m reflux.cli dests reflux.demo_app:make_app   # 上行落点注册表（名字 / builtin|app / 来源）
 python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
-python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／表单／两条路由）
+python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／bundle／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
 python3 tools/measure.py --only bytes,cpu        #   只跑其中两段
 ```
@@ -81,7 +81,7 @@ README 里明说的「不做」，要做等于另开一轮。
   （`ingest.check_frame`）。2026-10-29 起连「信封长什么样」都不在这一层判——线上没有信封。
 - **闭集只有一份**：`reflux/sdk/closed.py` 从生成的模型算允许的键（取 alias，减 profile 的 `hidden_attrs`），
   构造期（`wire`）与边界（`ingest`）共用。别在 `ingest.py` 里再写一张类型/属性表。
-- **`profile.expose` 不是线封闭度**：它是构造器面。`template` 节点线上合法（`tmpl`/`inject` 展开的替换节点），
+- **`profile.expose` 不是线封闭度**：它是构造器面。`stamp` 节点线上合法（`tmpl`/`inject` 展开的替换节点），
   只是没有建造器。
 - **槽名在入站判不了**：「这个槽名声明过吗」要会话持着它发出去的树（影子状态），归 SDK 构造期。别为了它给
   session 加一份树。
@@ -121,7 +121,7 @@ README 里明说的「不做」，要做等于另开一轮。
 
 - `canvas` 没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单；`chart`／`editor`／`diagram` 已是它的实例，一并归在这里）。
 - 这三件是**已落地**的，列在这里是为了说明它们不在「未做」里：标记糖（`reflux.sdk.markers` + `sdks/rust/src/markers.rs`
-  手写同一份约定，不进 vocabulary）、`reflux uplinks` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
+  手写同一份约定，不进 vocabulary）、`reflux dests` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
   注册表属于宿主）、`text` 的 `local` 落点与它的 `path` 随行键（`gate_t2` 的 vals 平面检查已从手写 dict 换成构造器）。
 - 示例应用不持久化、不做账号与刷新后的历史（会话挂在连接上，刷新即新对话）；没有工具调用与检索；没有 token 计量与
   限流。`model.OpenAI` 的 SSE 读器用本地 stub 测过，**没有对真端点跑过**（本机没有 key）——别把它当已验收。
@@ -139,7 +139,7 @@ reflux/sdk/_parse.py           手写：parse／dump 边界（dump 补 by_alias�
 reflux/sdk/markers.py          手写：两个保留 id 与 page()（`reflux:path`／`reflux:title`），不进词表
 reflux/app.py                  根挂载 + /static/ + /ws + 注册表 + 一页钩子；draw_page 走 wire
 reflux/server.py               伺服：挂载表（前缀 → 目录）、无缓存、深链交 index.html、/ws 升级
-reflux/demo_app.py             参考应用：回声／列表增删／拖拽归档／表单一次提交／两条路由（T9 的种子）
+reflux/demo_app.py             参考应用：回声／列表增删／拖拽归档／bundle 一次提交／两条路由（T9 的种子）
 reflux/demo.py                 只伺服 www/，不声明页面
 examples/chat/app.py           示例应用：一页对话 + 流式 worker + 单飞/停止/应用层两道门
 examples/chat/model.py         模型缝：Scripted（离线确定性）／OpenAI（SSE，未对真端点验证）
@@ -161,9 +161,9 @@ tools/gen_rust.py              Rust emitter：词表 → sdks/rust/src/types.rs
 tools/gate_t10.py              T10 的门：七帧字节对拍（要 cargo；首次 build 需 crates.io）
 sdks/rust/                     第二语言的 SDK：生成的 src/types.rs + 手写的 src/{wire,markers}.rs 与 src/bin/frames.rs
 tools/gate_t0.py … gate_t10.py   十道门（t2/t3/t4/t6/t9/t10 用浏览器或 cargo，t7 真浏览器 + 离线，t8 页面侧，ingest 真 socket）
-tests/types_fixture.py         28 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
+tests/types_fixture.py         14 个暴露类型的唯一一份最小节点（gate_t3 与离线测试共用）
 tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂载与 /static/ 的规则
-tests/test_cli_events.py       `reflux uplinks` 的表、目标解析的四种拒绝、以及「页面能发的意图都有处理器」
+tests/test_cli_events.py       `reflux dests` 的表、目标解析的四种拒绝、以及「页面能发的意图都有处理器」
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
 tests/test_chat_example.py     示例后端 19 例：窗口、两道门、流式、停止、失败、SSE（本地 stub）
 tools/gate_chat.py             示例的门：真 socket 的九条 + 真浏览器的三条

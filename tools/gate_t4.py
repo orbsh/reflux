@@ -59,11 +59,12 @@ def tree() -> Any:
             submit=["button"],
             id="the-form",
         ),
-        # 3: the drag pair (ADR 0019) — the source carries the cargo, the landing point owns the
-        # handler and what it accepts (its `sink` names the handler). A second source carries a kind the dock refuses.
-        b.grab(b.text("cargo", id="cargo-text"), kind="note", payload={"n": 1}, id="cargo-1"),
-        b.dock(b.text("drop here"), accept=["note"], sink=Slot("gate.dock"), id="dock-1"),
-        b.grab(b.text("refused cargo", id="other-text"), kind="other", id="cargo-2"),
+        # 3: the cargo pair (ADR 0034) — a draggable frame is its own cargo, and the landing frame
+        # owns the handler and what it accepts (its `sink` names the handler). A second source
+        # carries a tag the landing refuses.
+        b.frame(b.text("cargo", id="cargo-text"), draggable={"tag": "note"}, id="cargo-1"),
+        b.frame(b.text("drop here"), accept={"tag": "note"}, sink=Slot("gate.dock"), id="dock-1"),
+        b.frame(b.text("refused cargo", id="other-text"), draggable={"tag": "other"}, id="cargo-2"),
     )
 
 
@@ -87,13 +88,14 @@ def focus(cdp: Cdp, index: int) -> None:
 
 
 # A drag is the browser's gesture: `dragstart` on the source writes the cargo into the renderer's
-# page-level session, and the drop on the landing point is what emits. Synthetic DragEvents carry a
+# page-level session, and the drop on the landing frame is what emits. Synthetic DragEvents carry a
 # real DataTransfer, which is what `dragstart` writes a label into; the cargo itself never travels
-# through it (the session does).
+# through it (the session does). Cargo and landing are addressed by their own DOM ids — a draggable
+# frame is a `frame`, there is no class of its own to select.
 DRAG = """((sourceIndex) => {
-  const grabs = document.querySelectorAll('.grab');
-  const dock = document.querySelector('.dock');
-  const grab = grabs[sourceIndex];
+  const source = ['cargo-1', 'cargo-2'][sourceIndex];
+  const grab = document.getElementById(source);
+  const dock = document.getElementById('dock-1');
   if (!grab || !dock) return 'missing';
   const dt = new DataTransfer();
   const fire = (el, type) => el.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: dt}));
@@ -227,32 +229,33 @@ def main() -> int:
             )
         )
 
-        # 8 — a drop uplinks on the landing point: the dock's event name, the dock's own id, and
-        # the cargo's {id, kind, payload} as data (one field name per thing, ADR 0019).
+        # 8 — a drop uplinks on the landing frame: that frame's event name, its own id, and the
+        # cargo's {id, tag} as data — the cargo does not travel, only its identity and its tag do
+        # (ADR 0034).
         before = len(SEEN)
         cdp.eval(f"{DRAG}(0)")
         wait_for(lambda: len(SEEN) == before + 1)
         drop = SEEN[-1] if len(SEEN) > before else {}
         checks.append(
             (
-                "a drop uplinks {dest, id, data} from the landing point",
+                "a drop uplinks {dest, id, data} from the landing frame",
                 drop
                 == {
                     "dest": "gate.dock",
                     "id": "dock-1",
-                    "data": {"id": "cargo-1", "kind": "note", "payload": {"n": 1}},
+                    "data": {"id": "cargo-1", "tag": "note"},
                 },
                 json.dumps(drop, ensure_ascii=False),
             )
         )
 
-        # 9 — a landing point that names what it accepts refuses the rest: the wrong kind is silent.
+        # 9 — a landing frame that names what it accepts refuses the rest: the wrong tag is silent.
         before = len(SEEN)
         cdp.eval(f"{DRAG}(1)")
         time.sleep(0.4)
         checks.append(
             (
-                "a dock refuses cargo its accept list does not name",
+                "a landing frame refuses cargo whose tag it does not name",
                 len(SEEN) == before,
                 f"frames +{len(SEEN) - before}",
             )

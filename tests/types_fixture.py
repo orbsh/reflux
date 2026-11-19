@@ -4,11 +4,13 @@
 asserts this table is exactly that set, so adding a type to the profile without giving it a node
 fails there rather than quietly shrinking what the gate draws.
 
-The spelling is ADR 0031/0032's, not the retired one: every value rides a channel (`source` in,
-`sink` out) as one `Bind`, a `bundle` packs its fields (each field named by its own `tag`, the exit
-on the bundle's `sink`, the timing in `attrs.submit`), and a multi-line field is `input` with
-`multiline`. The types that used to be separate are folded: `fold`/`popup`/`layer`/`float`/`portal`
-are one `panel` (`place` + `state`), `form` is `bundle`, `textarea` is `input.multiline`.
+The spelling is ADR 0031/0032/0034/0035's, not the retired one: every value rides a channel
+(`source` in, `sink` out) as one `Bind`, a `bundle` packs its fields (each field named by its own
+`tag`, the exit on the bundle's `sink`, the timing in `attrs.submit`), and a multi-line field is
+`input` with `multiline`. The types that used to be separate are folded: `fold`/`popup`/`layer`/
+`float`/`portal` are one `panel` (`place` + `state`), `form` is `bundle`, `textarea` is
+`input.multiline`, `group`/`grab`/`dock` are one `frame` (`style` / `draggable` / `accept` + `sink`),
+and a row of a grid is `entry`.
 
 Two marks, both facts rather than taste:
 
@@ -45,7 +47,21 @@ NODES: dict[str, dict] = {
     # One node, two states (ADR 0027): `children` is the static shape, a `source` binding is the
     # region a slot fills. The fixture takes the static form; the shell's `routes` reader is the
     # other one, and it is what puts a reserved id on the DOM.
-    "frame": {"type": "frame", "children": [text("frame")]},
+    # ADR 0034: a frame is the only box that carries cargo, and the two directions share the box —
+    # as a source (`draggable`, its cargo the subtree itself), as a landing (`accept` + `sink`), or
+    # both. This one is both, so the gate sees each: the drop class, the sink and the style surface
+    # `group` used to have.
+    "frame": {
+        "type": "frame",
+        "id": "t3-frame",
+        "attrs": {
+            "draggable": {"tag": "note"},
+            "accept": {"tag": "note"},
+            "style": {"padding": "2px"},
+        },
+        "sink": {"slot": "gate.dock"},
+        "children": [text("frame")],
+    },
     "canvas": {"type": "canvas", "url": "/module.js"},
     # The native graph (ADR 0018/0029): its renderer is in the wasm, so there is no module host, no
     # role class and no DOM id — the gate proves it by the canvas it mounts (nothing else in this
@@ -84,34 +100,26 @@ NODES: dict[str, dict] = {
             BUTTON,
         ],
     },
-    # The drag pair (ADR 0019): the source carries the cargo, the landing point owns the event name
-    # and what it accepts. A drop is one uplink frame on the dock's own id.
-    "grab": {"type": "grab", "id": "t3-grab", "kind": "note", "payload": {"n": 1}, "children": [text("grab")]},
-    "dock": {
-        "type": "dock",
-        "id": "t3-dock",
-        "attrs": {"accept": ["note"]},
-        "sink": {"slot": "gate.dock"},
-        "children": [text("dock")],
-    },
     "svg": {"type": "svg", "children": [text("svg")]},
-    "group": {"type": "group", "children": [text("group")]},
     "path": {"type": "path", "source": {"default": "M0 0 L1 1"}},
-    # ADR 0031 §4: `rack` and `pages` are this one node with different steppers (`stage`/`step`), and
-    # the table family is *not* markup here — `columns` makes each item a `record` whose fields are
-    # named by their own `attrs.selector`. The header is a hook (one selector for the whole row).
+    # ADR 0031 §4 / 0035: `rack` and `pages` are this one node with different steppers (`step`) and
+    # a `window`, and the table family is *not* markup here — `fields` makes each item an `entry`
+    # whose fields are named by their own `attrs.selector`. `dir` names the axis the ITEMS flow on
+    # (absent = `col`, the table every frame already draws), and the header is a hook (one selector
+    # for the whole line) with `layers` — a count of header lines, not a direction word.
     "tiles": {
         "type": "tiles",
         "attrs": {
-            "columns": [{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
-            "header": {"selector": "gate-grid-head", "rows": 1},
-            "stage": "all",
+            "dir": "col",
+            "fields": [{"key": "name", "title": "Name"}, {"key": "qty", "align": "end"}],
+            "header": {"selector": "gate-grid-head", "layers": 1},
+            "window": {"size": 1},
             "step": {"timer": 4000},
         },
         "source": {"slot": "rows"},
         "children": [
             {
-                "type": "record",
+                "type": "entry",
                 "attrs": {"selector": "gate-row"},
                 "children": [
                     text("name", attrs={"selector": "name"}),
@@ -120,11 +128,11 @@ NODES: dict[str, dict] = {
             }
         ],
     },
-    # A record is one item of a grid: named fields, each a child whose `selector` is the field's name.
-    # No `id` here — an item that does not name itself is keyed by where it arrived (ADR 0031 §4).
-    "record": {
-        "type": "record",
-        "children": [text("record-field", attrs={"selector": "name"})],
+    # An entry is one item of a grid: named fields, each a child whose `selector` is the field's
+    # name. No `id` here — an item that does not name itself is keyed by where it arrived.
+    "entry": {
+        "type": "entry",
+        "children": [text("entry-field", attrs={"selector": "name"})],
     },
     # A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind).
     "button": BUTTON,

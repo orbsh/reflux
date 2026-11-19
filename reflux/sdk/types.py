@@ -9,8 +9,15 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Align", "ButtonAttr", "ClassAttr", "Column", "Direction", "DockExpand", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "SizeAttr", "Stage", "Step1", "Step2", "Step", "StyleAttr", "SubmitMode", "SubmitSet", "Template", "TextAttr", "Theme1", "Theme", "TilesAttr", "Bind", "BundleAttr", "Button", "Canvas", "DockAttr", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "ForceGraph", "Bundle", "Dock", "Frame", "Grab", "Group", "Panel", "Record", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "SizeAttr", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "Bind", "BundleAttr", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Bundle", "Entry", "Frame", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
+
+
+class Accept(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    tag: str | None = None
 
 
 class Align(Enum):
@@ -34,12 +41,33 @@ class ClassAttr(BaseModel):
     selector: str | None = None
 
 
-class Column(BaseModel):
+class Dir(Enum):
+    row = 'row'
+    row_reverse = 'row-reverse'
+    col = 'col'
+    col_reverse = 'col-reverse'
+
+
+class Direction(Enum):
+    U = 'U'
+    D = 'D'
+    L = 'L'
+    R = 'R'
+
+
+class Draggable(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    tag: str | None = None
+
+
+class FieldModel(BaseModel):
     align: Align | None = None
     key: str
     selectors: list[str] | None = Field(
         None,
-        description="Extra class tokens for this column's cells: a column is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
+        description="Extra class tokens for this field's cells: a field is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
     )
     title: str | None = Field(
         None, description="The header text; absent falls back to the key's leaf."
@@ -50,29 +78,29 @@ class Column(BaseModel):
     )
 
 
-class Direction(Enum):
-    U = 'U'
-    D = 'D'
-    L = 'L'
-    R = 'R'
-
-
-class DockExpand(Enum):
-    reveal = 'reveal'
-    reserved = 'reserved'
-
-
 class FrameAttr(BaseModel):
+    accept: Accept | None = Field(
+        None,
+        description='What cargo this box takes (ADR 0034). Absent `tag` = takes any. Needs `sink`:\na drop that cannot emit is a frame error at load.',
+    )
     class_: list[str] | None = Field(None, alias='class')
+    draggable: Draggable | None = Field(
+        None,
+        description='This box may be dragged away (ADR 0034). Its cargo is its own subtree — there\nis no second payload to keep in step with it.',
+    )
     grid: dict[str, Any] | None = None
     horizontal: bool | None = None
     selector: str | None = None
+    style: dict[str, Any] | None = Field(
+        None,
+        description='Inline style, written as it is. This is the surface `group` had: a frame can\nsay everything a `group` could.',
+    )
 
 
 class Header(BaseModel):
-    rows: conint(ge=1, le=2) | None = Field(
+    layers: conint(ge=1, le=2) | None = Field(
         None,
-        description='`1` (default) or `2`. Anything else is a frame error at load, not a layout surprise.',
+        description='`1` (default) or `2`: how many LINES of header cells there are along the field axis. A\ndirection word (`rows`) named where the header sat, which stopped being true the moment\n`dir: row` made the header a column; a layer is one line whatever axis it runs on.',
     )
     selector: str
 
@@ -124,9 +152,10 @@ class SizeAttr(BaseModel):
     width: str | None = None
 
 
-class Stage(Enum):
-    all = 'all'
-    one = 'one'
+class Stamp(BaseModel):
+    data: dict[str, Any]
+    name: str
+    type: Literal['stamp'] = 'stamp'
 
 
 class Step1(BaseModel):
@@ -144,12 +173,6 @@ class Step(RootModel[Step1 | Step2]):
     )
 
 
-class StyleAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    selector: str | None = None
-    style: dict[str, Any] | None = None
-
-
 class SubmitMode(Enum):
     enter = 'enter'
     button = 'button'
@@ -161,12 +184,6 @@ class SubmitSet(RootModel[SubmitMode | list[SubmitMode]]):
         ...,
         description='A bare string or a list on the wire: `submit: enter` and `submit: [enter]`\nsay the same thing, so the one-mode case (nearly every frame) does not have\nto remember the list syntax.',
     )
-
-
-class Template(BaseModel):
-    data: dict[str, Any]
-    name: str
-    type: Literal['template'] = 'template'
 
 
 class TextAttr(BaseModel):
@@ -186,20 +203,22 @@ class Theme(RootModel[Theme1 | Literal['dark']]):
     )
 
 
-class TilesAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    columns: list[Column] | None = Field(
-        None,
-        description='Absent = each item is a node drawn as it is, one block per item. Present = each item is a\nRECORD and each column projects one of its fields into a cell (ADR 0031 §4).',
+class Window(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
     )
-    header: Header | None = Field(
-        None,
-        description='Absent = no header row. The cells carry `selector`, so the frame styles its own header.',
-    )
-    selector: str | None = None
-    stage: Stage | None = None
-    step: Step | None = Field(
-        None, description='Absent = nothing steps: every item stays where it is.'
+    size: conint(ge=1)
+
+
+class Wrap1(Enum):
+    wrap = 'wrap'
+    wrap_reverse = 'wrap-reverse'
+
+
+class Wrap(RootModel[Wrap1 | Literal['nowrap']]):
+    root: Wrap1 | Literal['nowrap'] = Field(
+        ...,
+        description='What the items do when they no longer fit on one line (ADR 0035). `wrap` is absent: a wall of\ncards is the common shape, and `nowrap` is a strip that must stay one strip.',
     )
 
 
@@ -249,16 +268,6 @@ class Canvas(BaseModel):
         description='CDN 上的 ES module 地址（导出 mount/update/resize/unmount 契约）。',
     )
     type: Literal['canvas'] = 'canvas'
-
-
-class DockAttr(BaseModel):
-    accept: list[str] | None = Field(
-        None,
-        description='收哪些 `grab.kind`。缺席 = 全收（只有一个落点时不必写）；写了就是闭集合\n比对，配不上的拖拽落在这里等于没落（不发射、不高亮）。',
-    )
-    class_: list[str] | None = Field(None, alias='class')
-    expand: DockExpand | None = None
-    selector: str | None = None
 
 
 class ForceGraphStyle(BaseModel):
@@ -387,6 +396,35 @@ class Text(BaseModel):
     type: Literal['text'] = 'text'
 
 
+class TilesAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    dir: Dir | None = Field(
+        None,
+        description="Which way the ITEMS flow (ADR 0035), in flex's sense. `row` is a strip: items left to right,\nand each entry's fields run down it, in the grid's ROW axis. `col` (default) is a list: items\ntop to bottom, each entry's fields across it, in the grid's COLUMN axis — the table every\nframe already draws. `row-reverse` / `col-reverse` keep the shape and reverse the order the\nitems arrive in.",
+    )
+    fields: list[FieldModel] | None = Field(
+        None,
+        description='Absent = each item is a node drawn as it is, one block per item. Present = each item is an\nENTRY and each field projects one of its children into a cell (ADR 0031 §4).',
+    )
+    header: Header | None = Field(
+        None,
+        description='Absent = no header row. The cells carry `selector`, so the frame styles its own header.',
+    )
+    selector: str | None = None
+    step: Step | None = Field(
+        None,
+        description='What advances the window. Only meaningful with a `window`: a stepper with nothing to step is\na frame error at load, not a clock that ticks for nobody.',
+    )
+    window: Window | None = Field(
+        None,
+        description='Absent = every item is laid out and nothing steers; present = that many consecutive items\nare on stage at once, starting at the cursor (ADR 0031 §4).',
+    )
+    wrap: Wrap | None = Field(
+        None,
+        description='What happens when the items no longer fit on one line (ADR 0035). Default `wrap`, because\na card wall is the shape that has no other spelling. `wrap-reverse` also puts the FIELDS on\nthe other side of the item axis: the header row below the entries, or the header column on\nthe right — the fields axis is the line axis, so reversing the lines reverses where they land.',
+    )
+
+
 class ForceGraph(BaseModel):
     attrs: SizeAttr | None = None
     id: str | None = None
@@ -412,48 +450,29 @@ class Bundle(BaseModel):
     type: Literal['bundle'] = 'bundle'
 
 
-class Dock(BaseModel):
-    attrs: DockAttr | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    sink: Bind | None = Field(
+class Entry(BaseModel):
+    attrs: ClassAttr | None = None
+    children: list[Accrete] | None = Field(
         None,
-        description='`bind["value"]`：`event` 上行（事件名就是这里的名字），或 `local` 写槽\n（包装与上行同形，ADR 0010）。带什么货由源（`grab`）给，落点不再附加任何\n元数据——事件名与帧的 `id` 已经唯一确定是哪个落点。',
+        description="The fields. A child's `attrs.selector` is the field's name, so a field projects by that\nkey rather than by position — reordering fields cannot move a value to another field.",
     )
-    type: Literal['dock'] = 'dock'
+    id: str | None = Field(
+        None,
+        description='The item\'s key (ADR 0031 §4, "Every item has a key"): an entry that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.',
+    )
+    type: Literal['entry'] = 'entry'
 
 
 class Frame(BaseModel):
     attrs: FrameAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
+    sink: Bind | None = Field(
+        None,
+        description='The landing uplink (ADR 0034): where a drop on this box goes — an event name or\na local slot, the same `Bind` `dock` had.',
+    )
     source: Bind | None = None
     type: Literal['frame'] = 'frame'
-
-
-class Grab(BaseModel):
-    children: list[Accrete] | None = None
-    id: str | None = Field(
-        None,
-        description='行身份（可选但强烈建议）：`rack` 的 keyed diff 用**行节点自己**的 id，\n没有就退 `#{idx}` 位置键——中间删一行会让后面所有行重建、本地态丢。\ngrab 就是「一层无样式包装」，可以当行的根节点，所以 id 落在这里。\n渲染器不替它从子节点借 id：那会造出两个同 id 的节点，按 id 定位的行\n操作（append／remove／patch）从此指向不明——身份只能生产者给。',
-    )
-    kind: str | None = Field(
-        None,
-        description='货物的标签，供落点配对（`dock.attrs.accept`）。缺省 = 没有标签：\n不限定的落点照收，写了 `accept` 的落点不收（配不上就是配不上）。',
-    )
-    payload: Any | None = Field(
-        None,
-        description='货物本身：任意 JSON，原样进上行帧的 `payload`。写的是声明时的快照，\n渲染器不校验它与任何槽是否一致——一致性是生产者的编排责任。',
-    )
-    type: Literal['grab'] = 'grab'
-
-
-class Group(BaseModel):
-    attrs: StyleAttr | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    source: Bind | None = None
-    type: Literal['group'] = 'group'
 
 
 class Panel(BaseModel):
@@ -462,19 +481,6 @@ class Panel(BaseModel):
     id: str | None = None
     source: Bind | None = None
     type: Literal['panel'] = 'panel'
-
-
-class Record(BaseModel):
-    attrs: ClassAttr | None = None
-    children: list[Accrete] | None = Field(
-        None,
-        description="The fields. A child's `attrs.selector` is the field's name, so a column projects by that\nkey rather than by position — reordering fields cannot move a value to another column.",
-    )
-    id: str | None = Field(
-        None,
-        description='The item\'s key (ADR 0031 §4, "Every item has a key"): a record that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.',
-    )
-    type: Literal['record'] = 'record'
 
 
 class Select(BaseModel):
@@ -511,42 +517,40 @@ class Tiles(BaseModel):
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Bundle | Svg | Group | Path | Tiles | Record | Button | Image | Input | Select | Text | Template | Grab | Dock], Field(discriminator='type')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Bundle | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Text | Stamp], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
+Accept.model_rebuild()
 ButtonAttr.model_rebuild()
 ClassAttr.model_rebuild()
-Column.model_rebuild()
+Draggable.model_rebuild()
+FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
 Header.model_rebuild()
 ImageAttr.model_rebuild()
 SizeAttr.model_rebuild()
+Stamp.model_rebuild()
 Step1.model_rebuild()
 Step2.model_rebuild()
-StyleAttr.model_rebuild()
-Template.model_rebuild()
 TextAttr.model_rebuild()
-TilesAttr.model_rebuild()
+Window.model_rebuild()
 Bind.model_rebuild()
 BundleAttr.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()
-DockAttr.model_rebuild()
 ForceGraphStyle.model_rebuild()
 Image.model_rebuild()
 Input.model_rebuild()
 PanelAttr.model_rebuild()
 Path.model_rebuild()
 Text.model_rebuild()
+TilesAttr.model_rebuild()
 ForceGraph.model_rebuild()
 Bundle.model_rebuild()
-Dock.model_rebuild()
+Entry.model_rebuild()
 Frame.model_rebuild()
-Grab.model_rebuild()
-Group.model_rebuild()
 Panel.model_rebuild()
-Record.model_rebuild()
 Select.model_rebuild()
 Svg.model_rebuild()
 Tiles.model_rebuild()

@@ -7,7 +7,7 @@ type is a legal node and reaches the page. The set itself is proven offline
 draws them all at once.
 
 How "each type drew" is measured: most components put a **role class** on their element (`frame`,
-`tiles`, `record`, `case`, `txt`, `select`, …), read off the renderer. `panel` is asserted by
+`tiles`, `entry`, `case`, `text`, `select`, …), read off the renderer. `panel` is asserted by
 behaviour instead — an `inline` panel is a fold: it starts collapsed and its body appears on a
 click — and `button` is asserted where it renders, inside its `bundle`.
 
@@ -37,22 +37,20 @@ PAGE = "/"
 PANEL = "t3-panel"  # the fixture's id: an inline panel is only observable by clicking it open
 
 # The renderer's own role classes, one per type that has one. `panel` and `button` are asserted by
-# behaviour (see the docstring), so they are not here.
+# behaviour (see the docstring), so they are not here. A draggable or accepting `frame` is still a
+# `frame`: cargo is an attribute of the box, not a type of its own.
 ROLE: dict[str, str] = {
     "frame": ".frame",
     "forcegraph": ".fg-host",
     "bundle": ".case",
-    "grab": ".grab",
-    "dock": ".dock",
     "svg": "svg",
-    "group": "g",
     "path": "path",
     "tiles": ".tiles",
-    "record": ".record",
+    "entry": ".entry",
     "image": "img",
     "input": "input",
     "select": ".select",
-    "text": ".txt",
+    "text": ".text",
 }
 
 PROBE = """(() => {
@@ -196,7 +194,7 @@ def main() -> int:
                 f"buttons={seen.get('buttons')} fields={seen.get('in_bundle')}",
             )
         )
-        checks.append(("a record draws its named fields", "record-field" in body, f"record={'record-field' in body}"))
+        checks.append(("an entry draws its named fields", "entry-field" in body, f"entry={'entry-field' in body}"))
         checks.append(("a leaf paints its bound value", "text" in body, f"text={'text' in body}"))
         # The graph is the one exposed type with no DOM id: its renderer is in the wasm, so the proof
         # is the canvas it mounts — nothing else in this tree can make one — plus a drawing buffer
@@ -221,7 +219,7 @@ def main() -> int:
         )
         checks.append(
             (
-                "a tiles header names its columns, and its rows come from the list slot",
+                "a tiles header names its fields, and its rows come from the list slot",
                 seen.get("head") == ["Name", "qty"] and seen.get("rows") == 2,
                 f"head={seen.get('head')} rows={seen.get('rows')}",
             )

@@ -92,12 +92,14 @@ def type_into(cdp: Cdp, index: int, text: str, *, enter: bool = True) -> None:
         press_enter(cdp)
 
 
-# A drag is the browser's gesture: `dragstart` on the source writes the cargo into the renderer's
-# page-level session, and the drop on the landing point is what emits (ADR 0019). Synthetic events
-# carry a real DataTransfer — `dragstart` writes a label into it, and Firefox refuses a drag without.
+# A drag is the browser's gesture: `dragstart` on the source frame writes the cargo into the
+# renderer's page-level session, and the drop on the landing frame is what emits (ADR 0034). The row's
+# cargo is a draggable `frame` named `<row id>-cargo`; the landing frame names itself `archive`.
+# Synthetic events carry a real DataTransfer — `dragstart` writes a label into it, and Firefox refuses
+# a drag without.
 DRAG_FIRST_ROW = """(() => {
-  const grab = document.querySelector('.tiles .grab');
-  const dock = document.querySelector('.dock');
+  const grab = document.querySelector('.tiles [id$="-cargo"]');
+  const dock = document.getElementById('archive');
   if (!grab || !dock) return 'missing';
   const dt = new DataTransfer();
   const fire = (el, type) => el.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: dt}));
@@ -157,14 +159,14 @@ def main() -> int:
             )
         )
 
-        # 4 — the other way out of a row: drag it onto the dock. The gesture itself reports nothing;
-        #     the landing point uplinks `{kind, payload}` and the handler resolves the row's id.
+        # 4 — the other way out of a row: drag it onto the archive frame. The gesture itself reports
+        #     nothing; the landing frame uplinks `{id, tag}` and the handler resolves the row's id.
         before = len(frames(app, "row.archive"))
         cdp.eval(DRAG_FIRST_ROW)
         archived = wait_for(lambda: seen(cdp, "已归档") and rows(cdp) == 1)
         checks.append(
             (
-                "a row dragged onto the dock is archived by the landing point's frame",
+                "a row dragged onto the archive frame is archived by the landing frame's uplink",
                 bool(archived) and len(frames(app, "row.archive")) == before + 1,
                 f"rows={rows(cdp)} frames+{len(frames(app, 'row.archive')) - before} "
                 f"line={'已归档' in body(cdp)}",

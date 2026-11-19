@@ -123,9 +123,9 @@ class TestTheNode(unittest.TestCase):
             frame(hand("create", {"type": "text", "attrs": {"format": "x", "nope": 1}})),
             "'nope' is not an attribute",
         )
-        # `selector` is *not* hidden: a record names its fields with it (ADR 0031 §4), so a grid
+        # `selector` is *not* hidden: an entry names its fields with it (ADR 0031 §4), so a grid
         # written by hand passes the same boundary the builders go through.
-        ingest.check_frame(frame(hand("create", {"type": "record", "children": [
+        ingest.check_frame(frame(hand("create", {"type": "entry", "children": [
             {"type": "text", "attrs": {"selector": "name"}, "source": {"default": "a"}},
         ]})))
 
@@ -186,9 +186,9 @@ class TestTheNode(unittest.TestCase):
         self.assertIn("children[1]", str(caught.exception))
 
     def test_the_substitution_node_is_legal_on_the_wire(self) -> None:
-        # `template` has no builder (the profile's `expose` is the builder surface, not the wire's
+        # `stamp` has no builder (the profile's `expose` is the builder surface, not the wire's
         # closure): it is what `tmpl` expands, and a producer may place one.
-        ingest.check_frame(frame(hand("create", {"type": "template", "name": "t1", "data": {"label": "x"}})))
+        ingest.check_frame(frame(hand("create", {"type": "stamp", "name": "t1", "data": {"label": "x"}})))
 
     def test_every_node_of_the_turn_is_checked(self) -> None:
         ops = [

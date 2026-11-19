@@ -15,9 +15,9 @@ what they do with the reason.
 
 The profile's `hidden_attrs` (`class`) are subtracted here on purpose: they exist in accrete but
 not in a producer's reach, so the builders never emit them and a hand-written frame that does is
-refused. `selector` is *not* hidden: a `record` names each of its fields with its child's
+refused. `selector` is *not* hidden: an `entry` names each of its fields with its child's
 `attrs.selector` (ADR 0031 §4), so it is data a frame must be able to carry. The profile's `expose`
-is *not* consulted — that is the builder surface, not the wire's closure (a `template` node is legal
+is *not* consulted — that is the builder surface, not the wire's closure (a `stamp` node is legal
 on the wire and has no builder).
 """
 
