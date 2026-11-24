@@ -18,7 +18,7 @@ Linux 6.18.57 x86_64 · 16 核 · Python 3.14.7 · 无头 chromium（CDP）
 
 ## 一、一个回合在线上占多少字节
 
-`wire.draw` 出来的一帧，JSON、UTF-8、不含 WebSocket 帧头。回合取自参考应用 `reflux/demo_app.py`
+`wire.draw` 出来的一帧，JSON、UTF-8、不含 WebSocket 帧头。回合取自参考应用 `examples/demo_app.py`
 实际会发的那些。
 
 | 回合 | 字节 | 字符 |

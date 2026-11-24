@@ -18,7 +18,7 @@ import contextlib
 import io
 import unittest
 
-import reflux.demo_app as demo
+from examples import demo_app as demo
 from reflux import Context
 from reflux.sdk import markers
 
@@ -92,7 +92,7 @@ class EventsCommand(unittest.TestCase):
 
     def test_the_source_column_is_where_the_handler_was_written(self) -> None:
         sources = {name: source for name, source, _ in self.app.dests.table()}
-        self.assertEqual(sources["row.add"], "reflux.demo_app.on_add")
+        self.assertEqual(sources["row.add"], "examples.demo_app.on_add")
         self.assertTrue(sources["reflux:hello"].startswith("reflux."), sources["reflux:hello"])
 
     def test_this_app_is_not_the_only_app_the_registry_serves(self) -> None:
@@ -104,7 +104,7 @@ class EventsCommand(unittest.TestCase):
 
 class TargetResolution(unittest.TestCase):
     def test_a_factory_is_called(self) -> None:
-        app = cli.resolve_app("reflux.demo_app:make_app")
+        app = cli.resolve_app("examples.demo_app:make_app")
         self.assertIsInstance(app, App)
         self.assertIn("row.add", app.dests.names())
 
@@ -112,23 +112,23 @@ class TargetResolution(unittest.TestCase):
         mine = App()
         setattr(demo, "app_for_the_test", mine)
         try:
-            self.assertIs(cli.resolve_app("reflux.demo_app:app_for_the_test"), mine)
+            self.assertIs(cli.resolve_app("examples.demo_app:app_for_the_test"), mine)
         finally:
             delattr(demo, "app_for_the_test")
 
     def test_a_target_without_a_colon_is_refused(self) -> None:
         with self.assertRaises(SystemExit) as caught:
-            cli.resolve_app("reflux.demo_app")
+            cli.resolve_app("examples.demo_app")
         self.assertIn("module:attr", str(caught.exception))
 
     def test_a_missing_attribute_is_refused_and_named(self) -> None:
         with self.assertRaises(SystemExit) as caught:
-            cli.resolve_app("reflux.demo_app:no_such_factory")
+            cli.resolve_app("examples.demo_app:no_such_factory")
         self.assertIn("no_such_factory", str(caught.exception))
 
     def test_an_attribute_that_is_not_an_app_is_refused(self) -> None:
         with self.assertRaises(SystemExit) as caught:
-            cli.resolve_app("reflux.demo_app:GO")  # a dict of navigation targets
+            cli.resolve_app("examples.demo_app:GO")  # a dict of navigation targets
         self.assertIn("dict", str(caught.exception))
 
 
@@ -165,7 +165,7 @@ class Printing(unittest.TestCase):
         return code, out.getvalue()
 
     def test_intents_prints_a_header_and_one_line_per_name(self) -> None:
-        code, text = self.run_cli("dests", "reflux.demo_app:make_app")
+        code, text = self.run_cli("dests", "examples.demo_app:make_app")
         self.assertEqual(code, 0)
         lines = [line for line in text.splitlines() if line.strip()]
         self.assertTrue(lines[0].startswith("dest"))
@@ -177,7 +177,7 @@ class Printing(unittest.TestCase):
         self.assertTrue(any(line.startswith("row.remove") for line in lines))
 
     def test_routes_still_works(self) -> None:
-        code, text = self.run_cli("routes", "reflux.demo_app")
+        code, text = self.run_cli("routes", "examples.demo_app")
         self.assertEqual(code, 0)
         self.assertIn("/about", text)
 

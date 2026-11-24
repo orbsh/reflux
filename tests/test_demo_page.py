@@ -16,7 +16,7 @@ import unittest
 
 from reflux.sdk._parse import dump
 
-import reflux.demo_app as _app
+from examples import demo_app as _app
 from examples.demo import page as demo
 from examples.demo import scene
 from tests.fakes import FakeDevice

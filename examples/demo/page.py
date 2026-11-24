@@ -1,6 +1,6 @@
 """The walkthrough page: fluxen's own story, contributed to the reference app as `/demo`.
 
-    python3 -m reflux.demo_app --port 8000      # then /demo, or the nav's 「走查」
+    python3 -m examples.demo_app --port 8000      # then /demo, or the nav's 「走查」
 
 `fluxen/examples/walkthrough.py` is one message box that streams two charts, three radars, a review
 table, two 3D models, a code editor and a growing relationship graph into itself. There the script

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-import reflux.demo_app as demo
+from examples import demo_app as demo
 from reflux import ROUTES_SLOT
 from reflux.app import App, not_found
 from reflux.routes import Routes

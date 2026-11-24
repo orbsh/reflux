@@ -48,10 +48,10 @@ python3 tools/gate_t10.py                        # 8 条：Rust SDK 的七帧与
 python3 tools/gate_chat.py                       # 12 条：示例应用的后端（9 条真 socket + 3 条真浏览器）
 python3 -m examples.chat.app --port 8100  # 手工起示例应用（AI 对话）
 python3 -m examples.chat.walkthrough --auto   # 示例的快速演示（自己起 app，六个行为各一步）
-python3 -m reflux.cli routes reflux.demo_app       # 路由表（import 的副作用）
-python3 -m reflux.cli dests reflux.demo_app:make_app   # 上行落点注册表（名字 / builtin|app / 来源）
-python3 -m reflux.demo --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
-python3 -m reflux.demo_app --port 0              # 起参考应用（回声／列表／bundle／两条路由）
+python3 -m reflux.cli routes examples.demo_app       # 路由表（import 的副作用）
+python3 -m reflux.cli dests examples.demo_app:make_app   # 上行落点注册表（名字 / builtin|app / 来源）
+python3 tools/serve.py --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
+python3 -m examples.demo_app --port 0              # 起参考应用（回声／列表／bundle／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
 python3 tools/measure.py --only bytes,cpu        #   只跑其中两段
 ```
@@ -139,8 +139,8 @@ reflux/sdk/_parse.py           手写：parse／dump 边界（dump 补 by_alias�
 reflux/sdk/markers.py          手写：两个保留 id 与 page()（`reflux:path`／`reflux:title`），不进词表
 reflux/app.py                  根挂载 + /static/ + /ws + 注册表 + 一页钩子；draw_page 走 wire
 reflux/server.py               伺服：挂载表（前缀 → 目录）、无缓存、深链交 index.html、/ws 升级
-reflux/demo_app.py             参考应用：回声／列表增删／拖拽归档／bundle 一次提交／两条路由（T9 的种子）
-reflux/demo.py                 只伺服 www/，不声明页面
+examples/demo_app.py             参考应用：回声／列表增删／拖拽归档／bundle 一次提交／两条路由（T9 的种子）
+tools/serve.py                 只伺服 www/，不声明页面
 examples/chat/app.py           示例应用：一页对话 + 流式 worker + 单飞/停止/应用层两道门
 examples/chat/model.py         模型缝：Scripted（离线确定性）／OpenAI（SSE，未对真端点验证）
 examples/chat/client.py        通用 WS 客户端（walkthrough 与 gate_chat 都用它）

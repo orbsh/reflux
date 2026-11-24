@@ -41,7 +41,7 @@ def compact(obj) -> bytes:
 def python_turns() -> list[tuple[str, dict]]:
     """The reference app's five turns, built with the Python SDK."""
     sys.path.insert(0, str(ROOT))
-    import reflux.demo_app as demo
+    import examples.demo_app as demo
     from reflux import wire
     from reflux.sdk import builders as b
     from reflux.sdk import markers
@@ -81,7 +81,7 @@ wire.create(b.frame(b.text(source=Bind(slot="chan", scope="local", path="/data")
 
 def _ctx():
     """A delivery with no device: these frames are built and compared, never sent."""
-    import reflux.demo_app as demo
+    import examples.demo_app as demo
 
     return demo.make_app().context(None)
 

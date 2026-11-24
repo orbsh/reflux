@@ -45,4 +45,4 @@
 - [x] 重画归设备：`device.draw()` 与 `device.go(url)` — 2026-11-04
 - [x] 示例里挂一个自己的 HTTP 接口（`/status`）— 2026-11-04
 - [x] 事件驱动这一侧不返回：处理器拿 `ctx` — 2026-11-04
-- [x] 走查页进了参考应用：`reflux/demo_app.py` 声明外框与三页，`/demo` 播 fluxen 的 walkthrough（一域一槽、悬浮按钮四态、播放按连接），首页重排成卡片；`token_attrs` 的 `class` 键位按 schema 归位，Rust 夹具随之对齐（`gate_t10` 逐字节相等）— 2026-11-24
+- [x] 走查页进了参考应用：`examples/demo_app.py` 声明外框与三页，`/demo` 播 fluxen 的 walkthrough（一域一槽、悬浮按钮四态、播放按连接），首页重排成卡片；`token_attrs` 的 `class` 键位按 schema 归位，Rust 夹具随之对齐（`gate_t10` 逐字节相等）— 2026-11-24

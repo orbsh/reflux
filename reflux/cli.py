@@ -12,7 +12,7 @@ off one `App` instance, and registering a handler has no import side effect to w
 **target** — `module:attr`, where `attr` is called with no arguments when it is callable and taken as
 it is when it is already an `App`:
 
-    python3 -m reflux.cli dests reflux.demo_app:make_app
+    python3 -m reflux.cli dests examples.demo_app:make_app
     python3 -m reflux.cli dests myapp.main:app
 
 Two rules this verb follows, both about not inventing conventions:
@@ -66,7 +66,7 @@ def resolve_app(target: str) -> App:
     if not sep or not module_name or not attr:
         raise SystemExit(
             f"[dests] expected a target of the form `module:attr` "
-            f"(e.g. reflux.demo_app:make_app), got {target!r}"
+            f"(e.g. examples.demo_app:make_app), got {target!r}"
         )
     try:
         module = importlib.import_module(module_name)
@@ -109,7 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     dests = verbs.add_parser("dests", help="print an app's uplink registry")
     dests.add_argument(
         "target",
-        help="`module:attr` — a factory returning an App, or an App itself (e.g. reflux.demo_app:make_app)",
+        help="`module:attr` — a factory returning an App, or an App itself (e.g. examples.demo_app:make_app)",
     )
     args = parser.parse_args(argv)
     if args.verb == "routes":

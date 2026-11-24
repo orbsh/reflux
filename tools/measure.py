@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Ws, open_page  # noqa: E402
 
 from reflux import ingest, wire  # noqa: E402
-import reflux.demo_app as demo  # noqa: E402
+from examples import demo_app as demo  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent

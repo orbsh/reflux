@@ -30,7 +30,7 @@ The wheel is self-contained: it carries the page (`reflux/www/`) with the pinned
 inside it, so a server started from an installed reflux serves pages without a network request and
 without any build step on your side.
 
-    python3 -c "from reflux.demo_app import make_app; make_app().serve_forever(8000)"
+    python3 -c "from examples.demo_app import make_app; make_app().serve_forever(8000)"
 
 The bundle is put in **while the wheel is built** (`hatch_build.py`): it downloads the release
 `vendor/pin.json` names, verifies that the manifest on disk is that revision, and copies `www/` in as
@@ -82,7 +82,7 @@ the bundle — frames that name those fetch them, so it stays ~3 MB.
 ## Try the reference app
 
 ```
-python3 -m reflux.demo_app --port 8000
+python3 -m examples.demo_app --port 8000
 ```
 
 Open <http://127.0.0.1:8000/>. It has one of each shape an application needs: an input that echoes,
@@ -90,11 +90,11 @@ a list you can add to, remove from, and drag onto an archive frame, a bundle tha
 fields at once, and a shell with a nav over three routes — `/` (that vocabulary, laid out as cards),
 `/about`, and `/demo`.
 
-`/demo` is the walkthrough (`reflux/demo_walkthrough.py`): fluxen's own demo story — two charts, three
+`/demo` is the walkthrough (`examples/demo/page.py`): fluxen's own demo story — two charts, three
 radars, a review table, two 3D models, a code editor and a relationship graph that grows as the story
 goes — played inside this framework. It is four regions that each read one slot, and a floating
 button in the window's corner plays, pauses, resumes and replays it. The story's text, chart specs
-and graph are `reflux/demo_scene.py`; the module hosts it draws with (g2chart, the two viewers, the
+and graph are `examples/demo/scene.py`; the module hosts it draws with (g2chart, the two viewers, the
 editor) are mounted by the page itself, from `www/static/vendor/` or a fluxen checkout
 (`REFLUX_ASSETS` overrides the path), and a page missing one says where it looked instead of drawing
 an empty box.
@@ -102,8 +102,8 @@ an empty box.
 Two tools tell you what a running app declared:
 
 ```
-python3 -m reflux.cli routes reflux.demo_app                  # path → source module → metadata
-python3 -m reflux.cli dests reflux.demo_app:make_app         # dest → kind → handler source
+python3 -m reflux.cli routes examples.demo_app                  # path → source module → metadata
+python3 -m reflux.cli dests examples.demo_app:make_app         # dest → kind → handler source
 ```
 
 ## Your first app

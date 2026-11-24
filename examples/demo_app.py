@@ -1,6 +1,6 @@
 """The reference application: what a reflux app looks like, written with the SDK and `wire`.
 
-    python3 -m reflux.demo_app --port 8000
+    python3 -m examples.demo_app --port 8000
 
 Three pages, a shell around them, and one page per shape an application is made of:
 
@@ -47,19 +47,19 @@ import argparse
 from typing import Protocol
 
 try:  # the page is the repository's example tree, not the framework package
-    from examples.demo import page as walkthrough
+    from .demo import page as walkthrough
 except ModuleNotFoundError as missing:  # a wheel carries `reflux`, so this app runs from a checkout
     raise ModuleNotFoundError(
-        "reflux.demo_app serves the walkthrough page, which lives in the repository's examples/demo/ "
+        "examples.demo_app serves the walkthrough page, which lives in the repository's examples/demo/ "
         "tree; run it from a checkout of reflux"
     ) from missing
-from .app import App, Context
-from .auth import Auth
-from .protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
-from .routes import route
-from .sdk import builders as b
-from .sdk.types import Accrete, Bind, JsType
-from .slots import Slot
+from reflux.app import App, Context
+from reflux.auth import Auth
+from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
+from reflux.routes import route
+from reflux.sdk import builders as b
+from reflux.sdk.types import Accrete, Bind, JsType
+from reflux.slots import Slot
 
 
 def slots_of(ctx: Context) -> "DemoSlots":
@@ -424,7 +424,7 @@ def make_app() -> App:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="reflux.demo_app", description="Serve the demo app.")
+    ap = argparse.ArgumentParser(prog="examples.demo_app", description="Serve the reference app.")
     ap.add_argument("--port", type=int, default=8000, help="0 picks a free port (default: 8000)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--pace", type=float, default=demo_walkthrough.settings.pace,
