@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 from reflux.sdk._parse import dump  # noqa: E402
 from tests.types_fixture import ASSET_BACKED, NODES, text  # noqa: E402
 
@@ -109,15 +109,15 @@ def tokens() -> dict:
     that class is what these checks read back as computed style.
     """
     return dump(
-        b.frame(
-            b.text("Heading one", variant="heading-1"),
-            b.text("Heading two", variant="heading-2"),
-            b.text("Heading three", variant="heading-3"),
-            b.text("muted", variant="muted"),
-            b.text("danger", variant="danger"),
-            b.text("inline code", variant="code"),
-            b.text("plain", id="t3-plain"),
-            b.frame(b.text("card body"), variant="card"),
+        h.frame(
+            h.text("Heading one", variant="heading-1"),
+            h.text("Heading two", variant="heading-2"),
+            h.text("Heading three", variant="heading-3"),
+            h.text("muted", variant="muted"),
+            h.text("danger", variant="danger"),
+            h.text("inline code", variant="code"),
+            h.text("plain", id="t3-plain"),
+            h.frame(h.text("card body"), variant="card"),
         )
     )
 

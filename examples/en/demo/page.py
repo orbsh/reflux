@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from reflux import Context, Match
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk.types import Accrete, Bind
 from reflux.slots import Slot
 
@@ -266,8 +266,8 @@ def control(label: str) -> Accrete:
     label is the state's — which is why this whole node rides a slot instead of being drawn into
     the page.
     """
-    return b.bundle(
-        b.button(label, sink=TOGGLE),
+    return h.bundle(
+        h.button(label, sink=TOGGLE),
         sink=TOGGLE,
         submit="button",
         id="demo-toggle",
@@ -285,12 +285,12 @@ def page(ctx: Context, match: Match) -> None:
     if not ctx.data.get("demo_seeded"):
         ctx.data["demo_seeded"] = True
         s.control.set(control("▶ Play"))
-        s.beat.set(b.text("not started · the button is bottom-right"))
-        s.echo.set(b.text(""))
+        s.beat.set(h.text("not started · the button is bottom-right"))
+        s.echo.set(h.text(""))
     ctx.page(
-        b.frame(
-            b.frame(  # the left column: one region, one slot
-                b.forcegraph(
+        h.frame(
+            h.frame(  # the left column: one region, one slot
+                h.forcegraph(
                     source=s.graph,
                     width="100%",
                     height="100%",
@@ -301,26 +301,26 @@ def page(ctx: Context, match: Match) -> None:
                 style={"min-height": "0", "min-width": "0"},
                 id="demo-graph",
             ),
-            b.frame(  # the right column: what landed, the stream, and the app's answers
-                b.tiles(source=s.pins, dir="row", wrap="wrap", id="pins"),
+            h.frame(  # the right column: what landed, the stream, and the app's answers
+                h.tiles(source=s.pins, dir="row", wrap="wrap", id="pins"),
                 # The stream scrolls inside its own box: the row it holds is taller than any window,
                 # and a page that grows with it drags the graph's canvas along (measured: a 3.9k-tall
                 # forcegraph next to a 600-wide stream).
-                b.frame(
-                    b.tiles(source=s.stream, id="stream"),
+                h.frame(
+                    h.tiles(source=s.stream, id="stream"),
                     grid={"grid-template-rows": "1fr"},
                     style={"overflow": "auto", "min-height": "0"},
                     id="stream-box",
                 ),
-                b.text(source=s.echo, variant="muted", id="echo"),
-                b.frame(accept={"tag": PIN_TAG}, sink=s.pin, style=RAIL, id="rail"),
+                h.text(source=s.echo, variant="muted", id="echo"),
+                h.frame(accept={"tag": PIN_TAG}, sink=s.pin, style=RAIL, id="rail"),
                 grid={"grid-template-rows": "auto 1fr auto"},
                 style={"min-height": "0", "min-width": "0", "position": "relative", "padding-right": "18px"},
                 id="demo-stream-column",
             ),
-            b.frame(  # the control region: fixed to the window, drawn once
-                b.frame(source=s.control, id="demo-control"),
-                b.text(source=s.beat, variant="muted", id="demo-beat"),
+            h.frame(  # the control region: fixed to the window, drawn once
+                h.frame(source=s.control, id="demo-control"),
+                h.text(source=s.beat, variant="muted", id="demo-beat"),
                 grid={"grid-template-columns": "auto auto", "gap": "10px", "align-items": "center"},
                 style=FLOAT,
                 id="demo-playback",
@@ -343,7 +343,7 @@ def band(*children: Accrete, rows: str, columns: str | None = None, id: str) -> 
     grid: dict[str, str] = {"grid-template-rows": rows}
     if columns is not None:
         grid["grid-template-columns"] = columns
-    return b.frame(*children, grid=grid, id=id)
+    return h.frame(*children, grid=grid, id=id)
 
 
 def pin_tile(name: str, title: str) -> Accrete:
@@ -353,8 +353,8 @@ def pin_tile(name: str, title: str) -> Accrete:
     lands is `{id, kind}` — the source adds no size or style of its own, so what the reader sees is
     the chip inside it.
     """
-    return b.frame(
-        b.text(f"≡ drag \u201c{title}\u201d to the right", variant="muted"),
+    return h.frame(
+        h.text(f"≡ drag \u201c{title}\u201d to the right", variant="muted"),
         draggable={"tag": PIN_TAG},
         variant="card",
         id=f"pin-{name}",
@@ -368,27 +368,27 @@ def row(s: Demo) -> Accrete:
     segment at a time: a chart, a model or the editor appears the moment its payload lands, and
     nothing already on screen is rebuilt.
     """
-    return b.frame(
-        b.text(source=s.analytics, format="md", id="say-analytics"),
+    return h.frame(
+        h.text(source=s.analytics, format="md", id="say-analytics"),
         pin_tile("analytics", "Analytics intro"),
-        band(b.canvas(source=s.trend, url=CHART_URL, id="chart-trend"), rows="260px", id="band-trend"),
+        band(h.canvas(source=s.trend, url=CHART_URL, id="chart-trend"), rows="260px", id="band-trend"),
         band(
-            b.canvas(source=s.radar_rd, url=CHART_URL, id="chart-rd"),
-            b.canvas(source=s.radar_mkt, url=CHART_URL, id="chart-mkt"),
-            b.canvas(source=s.radar_ops, url=CHART_URL, id="chart-ops"),
+            h.canvas(source=s.radar_rd, url=CHART_URL, id="chart-rd"),
+            h.canvas(source=s.radar_mkt, url=CHART_URL, id="chart-mkt"),
+            h.canvas(source=s.radar_ops, url=CHART_URL, id="chart-ops"),
             rows="340px",
             columns="repeat(3, minmax(0, 1fr))",
             id="band-radar",
         ),
-        b.text(source=s.summary, format="md", id="say-summary"),
-        b.frame(source=s.review_form, id="review-here"),
-        b.text(source=s.say_car, format="md", id="say-car"),
-        b.canvas(source=s.intro_car, url=SPLAT_URL, width="100%", height="460px", id="car"),
-        b.text(source=s.say_shoe, format="md", id="say-shoe"),
-        b.canvas(source=s.intro_shoe, url=VIEWER_URL, width="100%", height="420px", id="shoe"),
-        b.text(source=s.say_patch, format="md", id="say-patch"),
-        b.canvas(source=s.patch_code, url=EDITOR_URL, width="100%", height="280px", id="editor"),
-        b.text(source=s.say_graph, format="md", id="say-graph"),
+        h.text(source=s.summary, format="md", id="say-summary"),
+        h.frame(source=s.review_form, id="review-here"),
+        h.text(source=s.say_car, format="md", id="say-car"),
+        h.canvas(source=s.intro_car, url=SPLAT_URL, width="100%", height="460px", id="car"),
+        h.text(source=s.say_shoe, format="md", id="say-shoe"),
+        h.canvas(source=s.intro_shoe, url=VIEWER_URL, width="100%", height="420px", id="shoe"),
+        h.text(source=s.say_patch, format="md", id="say-patch"),
+        h.canvas(source=s.patch_code, url=EDITOR_URL, width="100%", height="280px", id="editor"),
+        h.text(source=s.say_graph, format="md", id="say-graph"),
         grid={"gap": "10px"},
         id=ROW_ID,
     )
@@ -413,12 +413,12 @@ def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str
     There is no table/thead/tr/td family (ADR 0031 §4): a `tiles` with `fields` places cells by
     key, and the header is derived from the fields' titles.
     """
-    return b.entry(
-        b.text(str(initial), selector="score"),
-        b.text(name, selector="name"),
-        b.text(dept, selector="dept"),
-        b.text(avg, selector="avg"),
-        b.text(note, selector="note"),
+    return h.entry(
+        h.text(str(initial), selector="score"),
+        h.text(name, selector="name"),
+        h.text(dept, selector="dept"),
+        h.text(avg, selector="avg"),
+        h.text(note, selector="note"),
         id=f"review-{key}",
     )
 
@@ -431,24 +431,24 @@ def review_form(s: Demo) -> Accrete:
     fields. The table is therefore the read-out and the three inputs below it are the form — a
     submit carries `{zw, cj, sy}`, one value per row, whichever kind that row's cell is.
     """
-    return b.bundle(
+    return h.bundle(
         # One vertical box: a bundle is a flex row, so its children side by side squeeze the prose
         # into a column of single words (measured) — the layout inside is the page's to say.
-        b.frame(
-            b.text(
+        h.frame(
+            h.text(
                 "Review: the table above is this run's data (its rows come from a slot). Change one value in each"
                 "of the three fields below (number / check / text) and submit: it goes up as `demo.review`.",
                 format="md",
             ),
-            b.tiles(
+            h.tiles(
                 fields=REVIEW_FIELDS,
                 header={"selector": "review-head"},
                 source=s.review_rows,
                 id="review-table",
             ),
-            b.frame(
+            h.frame(
                 *(
-                    b.input(
+                    h.input(
                         tag=key,
                         selector="score",
                         source=Bind(default=initial, type=kind),
@@ -457,7 +457,7 @@ def review_form(s: Demo) -> Accrete:
                     )
                     for key, kind, initial, name, *_ in scene.REVIEW
                 ),
-                b.button("Submit review", sink=s.review),
+                h.button("Submit review", sink=s.review),
                 grid={"grid-template-columns": "repeat(3, minmax(0, 1fr)) auto", "gap": "8px", "align-items": "center"},
                 id="review-fields",
             ),
@@ -479,7 +479,7 @@ def payload(value: Any) -> Accrete:
     from its slot's node's `source.default` — so this is how a chart spec, a graph snapshot or a
     scene reaches a host.
     """
-    return b.frame(source=Bind(default=value))
+    return h.frame(source=Bind(default=value))
 
 
 def hold(run: Run, seconds: float) -> None:
@@ -524,7 +524,7 @@ def beat_row(ctx: Context, run: Run, s: Demo) -> None:
     with ctx.turn():  # the reader sees the box and its empty segments arrive together
         s.stream.append(row(s))
         for slot in (s.analytics, s.summary, s.say_car, s.say_shoe, s.say_patch, s.say_graph):
-            slot.set(b.text(""))  # a patch needs a node to append into
+            slot.set(h.text(""))  # a patch needs a node to append into
         s.graph.set(payload(scene.graph_payload(run.revealed)))
 
 
@@ -616,18 +616,18 @@ def play(ctx: Context) -> None:
         for index, (label, step) in enumerate(BEATS, start=1):
             run.resume.wait()  # a paused script does not start the next beat
             run.beat, run.label = index, label
-            s.beat.set(b.text(f"{index}/{len(BEATS)} · {label}"))
+            s.beat.set(h.text(f"{index}/{len(BEATS)} · {label}"))
             step(ctx, run, s)
             grow(run, s, label)
             hold(run, settings.hold)
     except Exception as failure:  # a demo's defect is a line on screen, not a dead thread
         run.phase = "done"
         s.control.set(control("↻ Replay"))
-        s.beat.set(b.text(f"error: {type(failure).__name__} · {failure}"))
+        s.beat.set(h.text(f"error: {type(failure).__name__} · {failure}"))
         return
     run.phase = "done"
     s.control.set(control("↻ Replay"))
-    s.beat.set(b.text("done · 30 days of trend, a review that submits, an editor that writes back"))
+    s.beat.set(h.text("done · 30 days of trend, a review that submits, an editor that writes back"))
 
 
 def start(ctx: Context, run: Run) -> None:
@@ -647,7 +647,7 @@ def start(ctx: Context, run: Run) -> None:
     run.revealed = set(scene.GRAPH_SEED)
     run.resume.set()
     s.control.set(control("⏸ Pause"))
-    s.beat.set(b.text(f"0/{len(BEATS)} · start"))
+    s.beat.set(h.text(f"0/{len(BEATS)} · start"))
     spawn(play, (ctx,))
 
 
@@ -662,12 +662,12 @@ def on_toggle(ctx: Context, frame: dict) -> None:
         run.phase = "paused"
         run.resume.clear()
         s.control.set(control("▶ Resume"))
-        s.beat.set(b.text(f"paused · {run.beat}/{len(BEATS)} · {run.label}"))
+        s.beat.set(h.text(f"paused · {run.beat}/{len(BEATS)} · {run.label}"))
         return
     run.phase = "playing"
     run.resume.set()
     s.control.set(control("⏸ Pause"))
-    s.beat.set(b.text(f"{run.beat}/{len(BEATS)} · {run.label}"))
+    s.beat.set(h.text(f"{run.beat}/{len(BEATS)} · {run.label}"))
 
 
 def fields(frame: dict) -> dict:
@@ -686,11 +686,21 @@ def on_pin(ctx: Context, frame: dict) -> None:
     data = fields(frame)
     ident = data.get("id")
     if not ident:
-        s.echo.set(b.text("the landing point got cargo with no id; nothing was recorded"))
+        s.echo.set(h.text("the landing point got cargo with no id; nothing was recorded"))
         return
     kind = data.get("kind") or data.get("tag") or "—"
-    s.pins.append(b.frame(b.text(f"≡ {ident} · {kind}", variant="muted"), variant="card", id=f"pin-{ident}"))
-    s.echo.set(b.text(f"landing point got {ident} ({kind})"))
+    # The chip is described by the payload (an id and a kind), so it is built from data: `h.node` and
+    # `h.frame` are the same constructor — the first reads like "what a pin is", not "make a frame".
+    s.pins.append(
+        h.node(
+            (
+                "frame",
+                {"variant": "card", "id": f"pin-{ident}"},
+                [("text", {"variant": "muted"}, f"≡ {ident} · {kind}")],
+            )
+        )
+    )
+    s.echo.set(h.text(f"landing point got {ident} ({kind})"))
 
 
 def on_save(ctx: Context, frame: dict) -> None:
@@ -699,9 +709,9 @@ def on_save(ctx: Context, frame: dict) -> None:
     data = fields(frame)
     code = data.get("code")
     if not isinstance(code, str):
-        s.echo.set(b.text("the editor wrote back no code; nothing was recorded"))
+        s.echo.set(h.text("the editor wrote back no code; nothing was recorded"))
         return
-    s.echo.set(b.text(f"editor wrote back {len(code)} chars · {data.get('lang') or '—'}"))
+    s.echo.set(h.text(f"editor wrote back {len(code)} chars · {data.get('lang') or '—'}"))
 
 
 def on_review(ctx: Context, frame: dict) -> None:
@@ -709,10 +719,10 @@ def on_review(ctx: Context, frame: dict) -> None:
     s: Walkthrough = slots_of(ctx)
     data = frame.get("data") if isinstance(frame.get("data"), dict) else {}
     if not data:
-        s.echo.set(b.text("it submitted, but with no fields: this frame only packs the form's own named fields"))
+        s.echo.set(h.text("it submitted, but with no fields: this frame only packs the form's own named fields"))
         return
     packed = ", ".join(f"{key}={value!r}" for key, value in data.items())
-    s.echo.set(b.text(f"review submitted: {packed}"))
+    s.echo.set(h.text(f"review submitted: {packed}"))
 
 
 # ---- what an app does with this page --------------------------------------------------------------

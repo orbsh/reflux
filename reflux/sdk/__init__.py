@@ -1,6 +1,7 @@
 """reflux's Python SDK: accrete's wire types, generated from the schema, plus reflux's profile.
 
     from reflux.sdk import frame, text, input, bundle, JsType, parse, dump
+    from reflux.sdk import h                 # the same builders, under the front-end name
     from reflux.sdk import markers
 
 - `types` / `builders` are generated (`python3 tools/gen_sdk.py`) — never edit them.
@@ -9,6 +10,8 @@
   words `path` or `title` — so it is not generated either.
 - `profile` is reflux's selection over that vocabulary, read from `profile/profile.json`.
 - `parse` validates a node; `dump` turns a built node back into the wire's dict.
+- `h` is the vocabulary under its front-end name: `h.frame(...)` for a page written by hand,
+  `h.node(('frame', props, children))` for a page that is data. Same builders, no second dialect.
 
 The constructors are named after the wire's own `type` values, because the vocabulary has exactly
 one source: `frame`, `text`, `input`, `tiles`, … Nothing here invents a second name for a node.
@@ -16,10 +19,10 @@ one source: `frame`, `text`, `input`, `tiles`, … Nothing here invents a second
 
 from __future__ import annotations
 
-from . import markers, profile
+from . import h, markers, profile
 from ._parse import dump, parse
 from .builders import *  # noqa: F401,F403
 from .builders import __all__ as _builders
 from .types import *  # noqa: F401,F403
 
-__all__ = [*_builders, "parse", "dump", "profile", "markers"]
+__all__ = [*_builders, "parse", "dump", "profile", "markers", "h"]

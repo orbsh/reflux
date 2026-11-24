@@ -8,7 +8,7 @@ routing.
 
     @app.dests.register("name.change")
     def name_changed(device, frame):
-        device.emit(wire.set("echo", b.text(frame["data"])))
+        device.emit(wire.set("echo", h.text(frame["data"])))
 
     app.serve(port=8000)
 
@@ -81,7 +81,7 @@ from .protocol import (
     SIGNUP,
 )
 from .routes import DEFAULT, Match, Routes
-from .sdk import builders as b
+from .sdk import builders as h
 from .sdk import markers
 from .sdk._parse import parse
 from .sdk.markers import PAGE_ID, token_marker
@@ -138,9 +138,9 @@ def not_found(path: str) -> Accrete:
     A missing path is not the app's fault, and a blank page is not an answer. An app that wants its
     own 404 registers a `{rest:path}` route: that is an ordinary match, and it wins like any other.
     """
-    return b.frame(
-        b.text("404", variant="heading-1"),
-        b.text(f"没有注册 {path} 这个地址", variant="muted"),
+    return h.frame(
+        h.text("404", variant="heading-1"),
+        h.text(f"没有注册 {path} 这个地址", variant="muted"),
     )
 
 
@@ -152,8 +152,8 @@ def default_shell(ctx: Context) -> Accrete:
     still holds a page — a `frame` that owns the viewport height and one reader of `routes` — and a
     page reaches the client the same way in both apps: `set("routes", …)`.
     """
-    return b.frame(
-        b.frame(source=ctx.slot(ROUTES_SLOT), id=ROUTES_SLOT),
+    return h.frame(
+        h.frame(source=ctx.slot(ROUTES_SLOT), id=ROUTES_SLOT),
         grid={"grid-template-rows": "1fr", "height": "100vh"},
         id="shell",
     )
@@ -599,7 +599,7 @@ class App:
         # The token goes out as a marker the runtime keeps; the line says who is now bound. Then the
         # page is drawn again, because a page may answer differently for a user than for a visitor.
         ctx.slot(AUTH_SLOT).set(
-            b.frame(token_marker(token), b.text(f"已登录 {user}", variant="muted"))
+            h.frame(token_marker(token), h.text(f"已登录 {user}", variant="muted"))
         )
         self._draw(device)
 
@@ -614,7 +614,7 @@ class App:
         device.data.pop("user", None)
         # An EMPTY marker is how the browser's storage hears about it — leaving the node out would
         # say nothing, and the next hello would present a dead token.
-        ctx.slot(AUTH_SLOT).set(b.frame(token_marker(""), self.auth.screen(ctx, "login")))
+        ctx.slot(AUTH_SLOT).set(h.frame(token_marker(""), self.auth.screen(ctx, "login")))
         self._draw(device)
 
     def _refuse_gated(self, device: Device, frame: dict) -> bool:

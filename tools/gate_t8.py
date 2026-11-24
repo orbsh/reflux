@@ -25,13 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 
 PAGE = "/"
 
 
 def tree() -> Any:
-    return b.frame(
+    return h.frame(
         {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.nowhere", "type": "text"}}},
         {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.boom", "type": "text"}}},
         # an emitter for the refused-frame case: bound to the `echo` data slot
@@ -82,10 +82,10 @@ def main() -> int:
         # "half-way" can never reach the page — and the frame after it still must.
         ctx.device.send(
             wire.draw(
-wire.set("echo", b.text("half-way")),
+wire.set("echo", h.text("half-way")),
                 {"action": "create", "slot": "", "data": {"type": "widget"}})
         )
-        ctx.device.send(wire.draw(wire.set("echo", b.text("whole"))))
+        ctx.device.send(wire.draw(wire.set("echo", h.text("whole"))))
 
     with open_page(path=PAGE, app=app, settle=0.5) as (cdp, base):
         device = next(iter(app.live()), None)

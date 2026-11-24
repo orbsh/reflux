@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import Slot, wire  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 
 PAGE = "/"
 
@@ -44,17 +44,17 @@ def field(name: str, *, id: str) -> dict:
 
 
 def tree() -> Any:
-    return b.frame(
+    return h.frame(
         # 0: an event-emitting input with its own identity
         {"type": "input", "id": "name-in", "sink": {"slot": "gate.name"}},
         # 1: the same, with no id — an empty id is not an id
         {"type": "input", "sink": {"slot": "gate.anon"}},
         # 2: a bundle: two tagged fields and the press that packs them. `submit: [button]` says a
         # press is the only timing — Enter in a field commits, it does not uplink.
-        b.bundle(
+        h.bundle(
             field("who", id="who-in"),
             field("n", id="n-in"),
-            b.button("送", sink=Slot("gate.form")),
+            h.button("送", sink=Slot("gate.form")),
             sink=Slot("gate.form"),
             submit=["button"],
             id="the-form",
@@ -62,9 +62,9 @@ def tree() -> Any:
         # 3: the cargo pair (ADR 0034) — a draggable frame is its own cargo, and the landing frame
         # owns the handler and what it accepts (its `sink` names the handler). A second source
         # carries a tag the landing refuses.
-        b.frame(b.text("cargo", id="cargo-text"), draggable={"tag": "note"}, id="cargo-1"),
-        b.frame(b.text("drop here"), accept={"tag": "note"}, sink=Slot("gate.dock"), id="dock-1"),
-        b.frame(b.text("refused cargo", id="other-text"), draggable={"tag": "other"}, id="cargo-2"),
+        h.frame(h.text("cargo", id="cargo-text"), draggable={"tag": "note"}, id="cargo-1"),
+        h.frame(h.text("drop here"), accept={"tag": "note"}, sink=Slot("gate.dock"), id="dock-1"),
+        h.frame(h.text("refused cargo", id="other-text"), draggable={"tag": "other"}, id="cargo-2"),
     )
 
 

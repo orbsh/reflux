@@ -43,11 +43,11 @@ def python_turns() -> list[tuple[str, dict]]:
     sys.path.insert(0, str(ROOT))
     import examples.zh.demo_app as demo
     from reflux import wire
-    from reflux.sdk import builders as b
+    from reflux.sdk import h
     from reflux.sdk.types import Bind
 
     return [
-        ("echo", wire.draw(wire.set("echo", b.text("hello")))),
+        ("echo", wire.draw(wire.set("echo", h.text("hello")))),
         (
             "add row",
             wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
@@ -73,7 +73,7 @@ wire.create(*_page_nodes("/")),  # the app's own page root: markers and all
         (
             "local binding",
             wire.draw(
-wire.create(b.frame(b.text(source=Bind(slot="chan", scope="local", path="/data"), id="local-echo"), id="root"))),
+wire.create(h.frame(h.text(source=Bind(slot="chan", scope="local", path="/data"), id="local-echo"), id="root"))),
         ),
     ]
 

@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 from reflux.sdk.types import Bind  # noqa: E402
 from reflux.slots import Slot  # noqa: E402
 
@@ -42,13 +42,13 @@ def local_text(slot: str, *, id: str):
     holds the Outflow-shaped wrapper an in-page `local` emit writes, so the payload itself is one
     level in. A `Bind` is the whole address, so the scope rides beside the slot.
     """
-    return b.text(source=Bind(slot=slot, scope="local", path="/data"), id=id)
+    return h.text(source=Bind(slot=slot, scope="local", path="/data"), id=id)
 
 
 def tree():
-    return b.frame(
-        b.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
-        b.tiles(source=Slot("rows"), id="rows"),         # the list slot (append / remove)
+    return h.frame(
+        h.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
+        h.tiles(source=Slot("rows"), id="rows"),         # the list slot (append / remove)
         local_text("chan", id="local-echo"),       # the vals plane (inject)
         {"type": "stamp", "name": "t1", "data": {"label": "expanded"}},
         id="root",
@@ -101,16 +101,16 @@ def main() -> int:
         expanded = wait(lambda: "expanded" in (cdp.eval("document.body.innerText") or ""))
         checks.append(("tmpl expands {{label}} inside create", bool(expanded), "expanded" if expanded else "not expanded"))
 
-        send(wire.set("echo", b.text("set-value")))
+        send(wire.set("echo", h.text("set-value")))
         ok = wait(lambda: text_of(cdp, "echo") == "set-value")
         checks.append(("set replaces the node in a data slot", bool(ok), f"echo={text_of(cdp, 'echo')!r}"))
 
-        send(wire.append("rows", b.text("row-1", id="row-1")))
-        send(wire.append("rows", b.text("row-3", id="row-3")))
+        send(wire.append("rows", h.text("row-1", id="row-1")))
+        send(wire.append("rows", h.text("row-3", id="row-3")))
         ok = wait(lambda: rows(cdp) == ["row-1", "row-3"])
         checks.append(("append lands at the tail", bool(ok), f"rows={rows(cdp)}"))
 
-        send(wire.append("rows", b.text("row-2", id="row-2"), position=1))
+        send(wire.append("rows", h.text("row-2", id="row-2"), position=1))
         ok = wait(lambda: rows(cdp) == ["row-1", "row-2", "row-3"])
         checks.append(("append +1 lands before the last row", bool(ok), f"rows={rows(cdp)}"))
 
@@ -133,8 +133,8 @@ def main() -> int:
         # Out of range is refused, never clamped. The following op in the same frame proves the refused one
         # was processed: a frame is applied in order and an undecodable op refuses the whole frame.
         send(
-            wire.append("rows", b.text("ghost", id="ghost"), position=99),
-            wire.append("rows", b.text("row-4", id="row-4")),
+            wire.append("rows", h.text("ghost", id="ghost"), position=99),
+            wire.append("rows", h.text("row-4", id="row-4")),
         )
         ok = wait(lambda: "row-4" in rows(cdp))
         checks.append(
@@ -147,7 +147,7 @@ def main() -> int:
 
         # `empty` is a no-op, and it must still decode: if it did not, the whole frame would be refused and
         # the row after it would never land.
-        send(wire.empty(), wire.append("rows", b.text("row-5", id="row-5")))
+        send(wire.empty(), wire.append("rows", h.text("row-5", id="row-5")))
         ok = wait(lambda: "row-5" in rows(cdp))
         checks.append(("empty decodes and changes nothing", bool(ok), f"rows={rows(cdp)}"))
 

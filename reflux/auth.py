@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
 from .protocol import LOGIN, SIGNUP
-from .sdk import builders as b
+from .sdk import builders as h
 from .sdk.types import Accrete, Bind, JsType
 
 __all__ = ["Auth", "TokenStore", "Tokens", "credentials_of", "default_view", "DEFAULT_IDLE_WINDOW"]
@@ -137,18 +137,18 @@ def default_view(ctx: Any, state: str) -> Accrete:
     by the framework, so an application that declares nothing still has a working surface.
     """
     verb = SIGNUP if state == "signup" else LOGIN
-    lines: list[Accrete] = [b.text("登录", variant="heading-1")]
+    lines: list[Accrete] = [h.text("登录", variant="heading-1")]
     if state == "refused":
-        lines.append(b.text("用户名或密码不对", variant="muted"))
+        lines.append(h.text("用户名或密码不对", variant="muted"))
     # A bundle owns the exit (`sink`) and the timing (`submit`, ADR 0032); each field is named by
     # its own `tag`. The js-kind rides the write side's `Bind` — a tagged field has no address of
     # its own, so that entry names a type and no slot.
-    return b.frame(
+    return h.frame(
         *lines,
-        b.bundle(
-            b.input(tag="username", id="auth-user"),
-            b.input(tag="password", sink=Bind(type=JsType.password), id="auth-pass"),
-            b.button("继续", sink=ctx.slot(verb)),
+        h.bundle(
+            h.input(tag="username", id="auth-user"),
+            h.input(tag="password", sink=Bind(type=JsType.password), id="auth-pass"),
+            h.button("继续", sink=ctx.slot(verb)),
             sink=ctx.slot(verb),
             submit=["enter", "button"],
             id="auth-form",

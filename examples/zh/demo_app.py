@@ -42,7 +42,7 @@ from reflux.auth import Auth
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
 from reflux.server import Request, Response
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk.types import Accrete, Bind, JsType
 from reflux.slots import Slot
 
@@ -60,7 +60,7 @@ def nav_bundle(label: str, dest: Slot) -> Accrete:
     按下就是 bundle 自己的提交：`submit=["button"]` 把这次点击命名为时机，出口也归 bundle 持有，
     所以按钮只说"发这一组"（ADR 0032 §3）。
     """
-    return b.bundle(b.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
+    return h.bundle(h.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict) -> Accrete:
@@ -75,10 +75,10 @@ def row_node(row: dict) -> Accrete:
     而 ✕ 保持自己的尺寸，并在它没占满的高度里居中。
     """
     # `remove` 在槽上是动词，所以这个名字要用下标写。
-    return b.bundle(
-        b.frame(b.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
+    return h.bundle(
+        h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
-        b.frame(b.button("删", sink=slots.row["remove"]),
+        h.frame(h.button("删", sink=slots.row["remove"]),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots.row["remove"],
         submit=["button"],
@@ -109,9 +109,9 @@ def shell(ctx: Context) -> Accrete:
     `min-height: 0`，因为 grid 条目的自动最小尺寸就是它的内容 —— 不写这一条，这一行会随页面一起长高，
     外壳的 `1fr` 就只是个愿望。读槽会滚动，所以一页可以比窗口更高。
     """
-    return b.frame(
-        b.frame(
-            b.text("reflux 参考应用", variant="heading-3"),
+    return h.frame(
+        h.frame(
+            h.text("reflux 参考应用", variant="heading-3"),
             nav_bundle("演示", GO_HOME),
             nav_bundle("关于", GO_ABOUT),
             nav_bundle("走查", GO_DEMO),
@@ -119,7 +119,7 @@ def shell(ctx: Context) -> Accrete:
             grid={"grid-template-columns": "1fr auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
-        b.frame(
+        h.frame(
             source=slots(ROUTES_SLOT),
             id=ROUTES_SLOT,
             style={"min-height": "0", "overflow": "auto"},
@@ -137,15 +137,15 @@ def shell(ctx: Context) -> Accrete:
 def demo_view(ctx, state):
     """演示自己的登录面 —— `view` 这个接缝，字段名与它的页面用的是同一套。
     """
-    lines = [b.text("演示登录", variant="heading-1")]
+    lines = [h.text("演示登录", variant="heading-1")]
     if state == "refused":
-        lines.append(b.text("用户或密码不对", variant="muted"))
-    return b.frame(
+        lines.append(h.text("用户或密码不对", variant="muted"))
+    return h.frame(
         *lines,
-        b.bundle(
-            b.input(tag="user", id="auth-user"),
-            b.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
-            b.button("确认登录", sink=slots(LOGIN)),
+        h.bundle(
+            h.input(tag="user", id="auth-user"),
+            h.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
+            h.button("确认登录", sink=slots(LOGIN)),
             sink=slots(LOGIN),
             submit=["enter", "button"],
             id="auth-form",
@@ -197,7 +197,7 @@ def home_page(ctx, match):
     def echo(value: object) -> None:
         # 一个 `input` 上行时只带值（没有包装）：闭包拿到的就是那个字符串。
         state.echo = value if isinstance(value, str) else ""
-        slots.echo.set(b.text(state.echo))
+        slots.echo.set(h.text(state.echo))
 
     def add_row(value: object) -> None:
         row = {"id": f"row-{state.next_row}", "text": f"第 {state.next_row} 行"}
@@ -208,45 +208,45 @@ def home_page(ctx, match):
     def reveal(value: object) -> None:
         # 只有已登录的点击能到这里：其余的在闭包之前就被门答掉了（`gated`）。
         ctx.data["may_see_secret"] = True
-        slots.secret.set(b.text("机密内容"))
+        slots.secret.set(h.text("机密内容"))
 
     ctx.page(
-        b.frame(
-            b.frame(
-                b.text("演示", variant="heading-1"),
-                b.text("这个应用只用 SDK 写出来：回声、列表、表单、拖拽，加三条路由。", variant="muted"),
+        h.frame(
+            h.frame(
+                h.text("演示", variant="heading-1"),
+                h.text("这个应用只用 SDK 写出来：回声、列表、表单、拖拽，加三条路由。", variant="muted"),
                 grid={"grid-template-rows": "auto auto"},
                 # 标题也是个 grid 条目：它横跨两列，所以两列卡片从它下面开始，而不是在它旁边。
                 style={"grid-column": "1 / -1"},
                 id="home-title",
             ),
-            b.frame(
-                b.frame(
-                    b.text("回声", variant="heading-3"),
-                    b.text(
+            h.frame(
+                h.frame(
+                    h.text("回声", variant="heading-3"),
+                    h.text(
                         "一个 input 在回车时把缓冲上行；上行不带包装，处理器拿到的 `data` 就是那个字符串。",
                         variant="muted",
                     ),
-                    b.input(sink=echo, id="name-input"),
-                    b.text(source=slots.echo, id="echo"),
+                    h.input(sink=echo, id="name-input"),
+                    h.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
                     id="card-echo",
                 ),
-                b.frame(
-                    b.text("列表 · 拖拽", variant="heading-3"),
-                    b.text(
+                h.frame(
+                    h.text("列表 · 拖拽", variant="heading-3"),
+                    h.text(
                         "行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。",
                         variant="muted",
                     ),
-                    b.bundle(b.button("加一行", sink=add_row), sink=add_row,
+                    h.bundle(h.button("加一行", sink=add_row), sink=add_row,
                              submit=["button"], id="add-row"),
-                    b.tiles(source=slots.rows, id="rows"),
+                    h.tiles(source=slots.rows, id="rows"),
                     # 落点说出它的事件和它收什么；`accept` 是一个 tag（或 any），所以别的 tag 的
                     # 货物不发一帧就被拒 —— 而一个没有 `sink` 的落点是加载错误，所以这两样
                     # 总是成对出现。
-                    b.frame(
-                        b.text("拖一行到这里归档"),
+                    h.frame(
+                        h.text("拖一行到这里归档"),
                         accept={"tag": "row"},
                         sink=slots("row.archive"),
                         grid={"place-items": "center"},
@@ -254,7 +254,7 @@ def home_page(ctx, match):
                                "min-height": "72px"},
                         id="archive",
                     ),
-                    b.text(source=slots.archived, id="archived"),
+                    h.text(source=slots.archived, id="archived"),
                     grid=CARD,
                     variant="card",
                     id="card-rows",
@@ -262,23 +262,23 @@ def home_page(ctx, match):
                 grid={"grid-template-rows": "auto auto", "gap": "16px", "align-content": "start"},
                 id="home-left",
             ),
-            b.frame(
-                b.text("登录 · 门", variant="heading-3"),
-                b.text(
+            h.frame(
+                h.text("登录 · 门", variant="heading-3"),
+                h.text(
                     "这张表单说的是框架的动词 `reflux:login`：应用只写 verify 和 view，密码它从来读不到。",
                     variant="muted",
                 ),
                 # 两个字段竖着排在按钮旁边：bundle 是一行 flex，所以这一列是它里面的一个
                 # frame，而那次按下仍是它所属 bundle 的子节点。
-                b.bundle(
-                    b.frame(
-                        b.input(tag="user", id="f-user"),
-                        b.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
+                h.bundle(
+                    h.frame(
+                        h.input(tag="user", id="f-user"),
+                        h.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),
-                    b.frame(
-                        b.button("登录", sink=slots(LOGIN)),
+                    h.frame(
+                        h.button("登录", sink=slots(LOGIN)),
                         style={"flex": "0 0 auto", "align-self": "end"},
                         id="login-press",
                     ),
@@ -286,12 +286,12 @@ def home_page(ctx, match):
                     submit=["enter", "button"],
                     id="login",
                 ),
-                b.frame(source=slots(AUTH_SLOT), id="auth-region"),
+                h.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # 在一句声明后面：访客在这里的点击永远到不了处理器。
-                b.bundle(b.button("私密", sink=gated(reveal)),
+                h.bundle(h.button("私密", sink=gated(reveal)),
                          sink=gated(reveal), submit=["button"], id="vault"),
-                b.text(source=slots.secret, id="secret"),
-                b.bundle(b.button("退出", sink=slots(LOGOUT)), sink=slots(LOGOUT),
+                h.text(source=slots.secret, id="secret"),
+                h.bundle(h.button("退出", sink=slots(LOGOUT)), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
                 variant="card",
@@ -299,8 +299,8 @@ def home_page(ctx, match):
             ),
             # 脚注也是 grid 条目，而且横跨：文本节点没有样式，所以承载位置的是套着它的
             # 一个 frame。
-            b.frame(
-                b.text(
+            h.frame(
+                h.text(
                     "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构"
                     "加上新的路径标记，runtime 把标记镜像进地址栏。",
                     variant="muted",
@@ -324,7 +324,7 @@ def home_page(ctx, match):
     # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
     # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        slots_of(ctx).secret.set(b.text(""))
+        slots_of(ctx).secret.set(h.text(""))
 
 
 @app.route("/about", title="关于")
@@ -332,8 +332,8 @@ def about_page(ctx, match):
     """第二条路由：同一个形状，地址栏、深链或导航都能到。
     """
     ctx.page(
-        b.text("关于", variant="heading-1"),
-        b.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加三条路由 —— /、/about 和走查。"),
+        h.text("关于", variant="heading-1"),
+        h.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加三条路由 —— /、/about 和走查。"),
         nav_bundle("回到演示", GO_HOME),
     )
 
@@ -358,7 +358,7 @@ def on_archive(ctx, frame) -> None:
         return
     state.rows = [r for r in state.rows if r["id"] != row_id]
     slots_of(ctx).rows.remove(row_id)
-    slots_of(ctx).archived.set(b.text(f"已归档：{row['text']}"))
+    slots_of(ctx).archived.set(h.text(f"已归档：{row['text']}"))
 
 
 @app.on(slots(GO_HOME.name))

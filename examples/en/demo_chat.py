@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 
 from reflux import Context
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk.types import Accrete
 from reflux.slots import Slot
 
@@ -99,7 +99,7 @@ def state(ctx: Context) -> Chat:
 
 
 def row(*children: Accrete, id: str) -> Accrete:
-    return b.frame(*children, id=id)
+    return h.frame(*children, id=id)
 
 
 def page(ctx: Context, match) -> None:
@@ -116,22 +116,22 @@ def page(ctx: Context, match) -> None:
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
-        slots.status.set(b.text("ready"))
+        slots.status.set(h.text("ready"))
     ctx.page(
-        b.frame(
-            b.text("Chat", variant="heading-1"),
-            b.text(source=slots.status, variant="muted", id="status"),
-            b.tiles(source=slots.messages, id="messages"),
-            b.frame(
-                b.bundle(
-                    b.input(tag="text", id="composer"),
-                    b.button("Send", sink=slots.chat.send),
+        h.frame(
+            h.text("Chat", variant="heading-1"),
+            h.text(source=slots.status, variant="muted", id="status"),
+            h.tiles(source=slots.messages, id="messages"),
+            h.frame(
+                h.bundle(
+                    h.input(tag="text", id="composer"),
+                    h.button("Send", sink=slots.chat.send),
                     sink=slots.chat.send,
                     submit=["enter", "button"],
                     id="send",
                 ),
-                b.bundle(
-                    b.button("Stop", sink=slots.chat.stop),
+                h.bundle(
+                    h.button("Stop", sink=slots.chat.stop),
                     sink=slots.chat.stop,
                     submit="button",
                     id="stop",
@@ -139,7 +139,7 @@ def page(ctx: Context, match) -> None:
                 grid={"grid-template-columns": "1fr auto", "gap": "8px"},
                 id="composer-row",
             ),
-            b.text("The reply streams in chunks and can be stopped or refused; a failing model becomes a bubble, not a stack trace.", variant="muted"),
+            h.text("The reply streams in chunks and can be stopped or refused; a failing model becomes a bubble, not a stack trace.", variant="muted"),
             id="chat-page",
             grid={"grid-template-rows": "auto auto 1fr auto auto", "height": "100%", "gap": "8px"},
         ),
@@ -167,14 +167,14 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
     """Take one message: refuse it with a reason, or put it on screen and start the reply."""
     slots = slots_of(ctx)
     if not text.strip():
-        slots.status.set(b.text("empty message — nothing was sent"))
+        slots.status.set(h.text("empty message — nothing was sent"))
         return
     if len(text) > MAX_CHARS:
-        slots.status.set(b.text(f"too long: {len(text)} characters > the {MAX_CHARS}-character limit — nothing was sent"))
+        slots.status.set(h.text(f"too long: {len(text)} characters > the {MAX_CHARS}-character limit — nothing was sent"))
         return
     with chat.lock:
         if chat.busy:
-            slots.status.set(b.text("the previous reply is still streaming: press Stop, or wait for it"))
+            slots.status.set(h.text("the previous reply is still streaming: press Stop, or wait for it"))
             return
         chat.busy = True
         chat.stop.clear()
@@ -185,10 +185,10 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
     context = list(chat.turns)  # a snapshot: the window may move while the model is answering
     reply = ctx.slot(f"reply.{seq}")  # a path, because each answer gets its own plane
     with ctx.turn():  # the client sees the two rows, the empty bubble and the status at once
-        slots.messages.append(row(b.text(text), id=f"row-user-{seq}"))
-        slots.messages.append(row(b.text(source=reply), id=f"row-bot-{seq}"))
-        reply.set(b.text(""))
-        slots.status.set(b.text(f"answering… ({chat.model.name})"))
+        slots.messages.append(row(h.text(text), id=f"row-user-{seq}"))
+        slots.messages.append(row(h.text(source=reply), id=f"row-bot-{seq}"))
+        reply.set(h.text(""))
+        slots.status.set(h.text(f"answering… ({chat.model.name})"))
     spawn(stream, (ctx, chat, reply, context))
 
 
@@ -215,21 +215,21 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
     if failure is not None:
         with ctx.turn():
             reply.patch(TEXT_VALUE, f"\n\n⚠️ the model failed: {failure}", op="append")
-            slots.status.set(b.text(f"failed: {type(failure).__name__} · you can send another"))
+            slots.status.set(h.text(f"failed: {type(failure).__name__} · you can send another"))
         return
     if chat.stop.is_set():
         with ctx.turn():
             reply.patch(TEXT_VALUE, " ⏹", op="append")
-            slots.status.set(b.text(f"stopped (the half sentence stayed out of the context) · {chat.total} turns"))
+            slots.status.set(h.text(f"stopped (the half sentence stayed out of the context) · {chat.total} turns"))
         return
     chat.record("assistant", "".join(pieces))
-    slots.status.set(b.text(chat.status()))
+    slots.status.set(h.text(chat.status()))
 
 
 def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        slots_of(ctx).status.set(b.text("this frame carried no text field — nothing was sent"))
+        slots_of(ctx).status.set(h.text("this frame carried no text field — nothing was sent"))
         return
     send(ctx, state(ctx), text)
 
@@ -238,10 +238,10 @@ def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     slots = slots_of(ctx)
     if not chat.busy:
-        slots.status.set(b.text("nothing is streaming"))
+        slots.status.set(h.text("nothing is streaming"))
         return
     chat.stop.set()
-    slots.status.set(b.text("stopping…"))
+    slots.status.set(h.text("stopping…"))
 
 
 def register(app, slots: DemoSlots) -> None:

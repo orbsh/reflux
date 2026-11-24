@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from reflux import CHANNEL, App, Context, Device, Request, Response, Routes, wire
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from tools.wire_probe import Socket
 
 
@@ -56,7 +56,7 @@ def page_app(**kwargs) -> App:
     """An app with one page, so hello is answered with a frame."""
     app = App(**kwargs)
     def single(ctx, path):
-        ctx.page(b.text(f"page{path}"))
+        ctx.page(h.text(f"page{path}"))
 
     app.page = single
     return app
@@ -176,7 +176,7 @@ class TestTheTable(unittest.TestCase):
         app.unmount("/ws")
         app.mount("/socket", CHANNEL)
         def single(ctx, path):
-            ctx.page(b.text("page"))
+            ctx.page(h.text("page"))
 
         app.page = single
         with Served(app) as served:
@@ -317,7 +317,7 @@ class TestDevices(unittest.TestCase):
         with Served(app) as served:
             with Socket(served.port) as ws:
                 device = hello(app, ws)
-                device.emit(wire.set("greeting", b.text("hi")))
+                device.emit(wire.set("greeting", h.text("hi")))
                 frame = ws.recv()
                 self.assertEqual(device.emits, 1)
                 self.assertEqual(json.loads(json.dumps(frame))[0]["slot"], "greeting")
@@ -358,9 +358,9 @@ class TestTheShape(unittest.TestCase):
             # In a real app this is where an external service gets asked; the framework owns none of it.
             if frame["data"].get("name") == "Ada":
                 ctx.data["user"] = {"name": "Ada"}
-                ctx.emit(wire.set("hello", b.text("欢迎回来")))
+                ctx.emit(wire.set("hello", h.text("欢迎回来")))
             else:
-                ctx.emit(wire.set("hello", b.text("名字不认识")))
+                ctx.emit(wire.set("hello", h.text("名字不认识")))
 
         with Served(app) as served:
             with Socket(served.port) as ws:

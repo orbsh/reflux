@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 
 from reflux import DEFAULT, App, Routes, RoutesError, route
-from reflux.sdk import builders as b
+from reflux.sdk import h
 
 
 class TestDeclaringOnTheApp(unittest.TestCase):
@@ -18,7 +18,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
         @app.route("/hello", title="问候")
         def hello(ctx, match):
-            return b.text("hi")
+            return h.text("hi")
 
         self.assertEqual([found.path for found in app.routes], ["/hello"])
         match = app.routes.match("/hello")
@@ -32,7 +32,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
         @app.route("/only-here")
         def only_here(ctx, match):
-            return b.text("x")
+            return h.text("x")
 
         self.assertEqual(len(DEFAULT), before)
         self.assertIsNone(DEFAULT.match("/only-here"))
@@ -43,7 +43,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         @app.route("/")
         @app.route("/home")
         def home(ctx, match):
-            return b.text("home")
+            return h.text("home")
 
         self.assertEqual(sorted(found.path for found in app.routes), ["/", "/home"])
         alias = app.routes.match("/home")
@@ -52,14 +52,14 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
     def test_the_same_path_twice_is_loud(self):
         app = App(routes=Routes())
-        app.route("/taken")(lambda ctx, match: b.text("a"))
+        app.route("/taken")(lambda ctx, match: h.text("a"))
         with self.assertRaises(RoutesError):
-            app.route("/taken")(lambda ctx, match: b.text("b"))
+            app.route("/taken")(lambda ctx, match: h.text("b"))
 
     def test_a_bare_app_reads_the_module_table_and_app_route_does_not(self):
         @route("/module-level")
         def module_level(ctx, match):
-            return b.text("m")
+            return h.text("m")
 
         self.assertIs(App().routes, DEFAULT)
         self.assertIsNotNone(App().routes.match("/module-level"))
@@ -68,11 +68,11 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         app = App(routes=Routes())
 
         def frame(ctx, match, page):
-            return b.frame(page)
+            return h.frame(page)
 
         @app.route("/framed", layout=frame)
         def framed(ctx, match):
-            return b.text("in")
+            return h.text("in")
 
         match = app.routes.match("/framed")
         assert match is not None

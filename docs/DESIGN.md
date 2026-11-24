@@ -79,7 +79,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
  "type": "input"}                                                                   // 取自词表
 ```
 
-这一段是 `wire.draw(wire.create(b.input(sink=Bind(slot="reflux:login", type="password"), id="pw")))` 真打出来的（字段顺序也是线上的顺序）：没有 `attrs`、没有 `children`，是因为这个类型没用上它们——省略就等于默认值。
+这一段是 `wire.draw(wire.create(h.input(sink=Bind(slot="reflux:login", type="password"), id="pw")))` 真打出来的（字段顺序也是线上的顺序）：没有 `attrs`、没有 `children`，是因为这个类型没用上它们——省略就等于默认值。
 
 - **`attrs` 是每类型的白名单**（accrete 那份的形状），取值是枚举或受限值域；reflux 的 profile 在它上面选与设默认。生产端见不到自由 class 字符串——变体的闭集合由 profile 落成 class 令牌；accrete 的线上是允许 class 的，收窄落在 profile 与 SDK 上（见「组件词表」）。
 - **`source` 与 `sink` 是组件与事件流之间的两个方向**：线上各是一条 `Bind`（`{default, path, scope, slot, type}`）——`source` 是值进来的地方（`slot` 指向一个数据槽，`path` 从槽内节点里取子值，`type` 是 js-kind），`sink` 是值出去的地方（上行的落点）；`scope` 说这份值在哪一边作主（`remote` 在会话那一侧、`local` 在页面的值平面、`both` 本地赋值再镜像上去，缺省 `remote`）；没有 `slot` 的 `Bind` 是字面量，`default` 就是值。I4 的落点就在这一行：**要什么状态，组件随事件自己带上来**——`payload` 那张「这次上行带哪几件本地态」的声明表随旧规格退场，送什么由组件的实现定。
@@ -132,7 +132,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - 渲染器侧的槽是**按路径的惰性订阅**：写某个槽只惊动读它的那些组件，不广播全表。这是「增量」从线上延伸到客户端内部的那一段。
 - **两个地址口径上一视同仁**：`source=`（这条槽）和 `sink=`（那个处理器）都只收 `Slot` 句柄，不收字符串——句柄从同一张表 `ctx.slot` 来，指向哪边是 `source`／`sink` 的事，不是调用方的事。名字只写一次，拼错在构造那一行就 `TypeError`，而不是在客户端变成一个永远空的槽或一个没人接的上行。
 - **打包：资产在构建时装进 wheel**（2026-11-05）。`pip install reflux` 得到的服务器必须能直接伺服页面，所以 wheel 里带 `reflux/www/`——`hatch_build.py` 在构建时按 `vendor/pin.json` 取那份 release，校验 `versions.json` 的 rev 与钉住的一致，再把仓库根的 `www/` 整个拷成包内路径。仓库布局不动（`www/` 仍在根），包内那份只存在于 wheel；`PAGE_ROOT` 先认 `reflux/www`，没有再退回仓库根（检出与 editable 安装走后者）。构建需要一次网络，运行永远不需要。`www/static/vendor/` 下除钉住的那份之外（示例的 `g2chart`）不进 wheel——那是示例的事，不是服务器的。
-- **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")`、`ctx.slot["status"]`、`ctx.slot.status` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`b.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。名字会嵌套：`slots.chat.send` 就是 `chat.send`，和 `slots.status` 是 `status` 一样——一份视图读完页面读的槽和它说话的上行，因为两个方向本来就是对偶的（一条槽是页面里的位置，一个 dest 是宿主的处理器，都是名字）。名字原样送上线，框架不解析分隔符，`reply.{seq}` 这种现拼的照样能写。
+- **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")`、`ctx.slot["status"]`、`ctx.slot.status` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`h.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。名字会嵌套：`slots.chat.send` 就是 `chat.send`，和 `slots.status` 是 `status` 一样——一份视图读完页面读的槽和它说话的上行，因为两个方向本来就是对偶的（一条槽是页面里的位置，一个 dest 是宿主的处理器，都是名字）。名字原样送上线，框架不解析分隔符，`reply.{seq}` 这种现拼的照样能写。
 - **四个动词在任何层级都优先**：`set`／`append`／`patch`／`remove` 永远是动词，所以名字末尾撞上它们的走上标——`slots.row["remove"]` 是那个 dest，`slots.row.remove` 是删一行。例外只有这一种，且它出现在页面上就说明那个名字该换一个。
 - **写完几处要一起到，就用 `with ctx.turn():`**：块里的每次发送（`ctx.emit`、`ctx.slot.*` 的动词）进同一帧，出块时一起送。一个回合是一个客户端的所见，客户端看到「行、空气泡、状态行」同时出现，比省几帧更值钱。不嵌套——块里的块得先回答它属于哪一帧，而还没有页面需要两帧。
 - **表在应用上，投递只是给表接上设备**：`app.slot` 是这个应用的名字表，拿到的句柄没有投递上下文，能命名、能声明、不能发；`ctx.slot` 是同一张表接上这一条连接，动词于是能说话。所以 `@app.on(app.slot.go.chat)` 声明的那个名字，页面里写 `dest=names.go.chat` 就是它——不是两份拼写。
@@ -349,10 +349,10 @@ def post_index(ctx, match): ...
 
 ```python
 def shell(ctx):
-    return b.frame(
-        b.text("示例站点", variant="heading-1"),
-        b.bundle(b.button("首页", sink=ctx.slot.go.home), sink=ctx.slot.go.home, submit=["button"]),
-        b.frame(source=ctx.slot.routes, id="routes"),   # 页面就画在这里
+    return h.frame(
+        h.text("示例站点", variant="heading-1"),
+        h.bundle(h.button("首页", sink=ctx.slot.go.home), sink=ctx.slot.go.home, submit=["button"]),
+        h.frame(source=ctx.slot.routes, id="routes"),   # 页面就画在这里
     )
 ```
 
@@ -415,7 +415,7 @@ app.unmount("/ws"); app.mount("/socket", CHANNEL)   # 通道换个路径
 ```python
 @app.on(app.slot.connect)
 def on_connect(device, frame):
-    device.emit(wire.set("hello", b.text(f"来自 {device.path}")))
+    device.emit(wire.set("hello", h.text(f"来自 {device.path}")))
 
 @app.on(app.slot.location)
 def on_location(device, frame):
@@ -486,6 +486,8 @@ def on_disconnect(device, frame):
 - **闭包**（`sink=add_row`，或 `sink=gated(save)`）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{字段: {data}}`），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
 - **名字**（`@app.on(slot)`）：必须先于任何绘制存在的那几类——一个槽有多个来源（同页被工作线程和用户同时写的状态行、走查页被拖拽落点和编辑器回传同时写的 `echo`）、身份不在页面里的（一行一个 id，名字归行持有）、框架自己的动词（`reflux:login`）、跨页或全局的事件。
 门（`auth`）跟落点走：`gated(fn)` 说的是"这个落点只给绑了用户的设备"，声明地点因此在写出落点的那一行，而不是在处理器上。闭包落点不在 `dests` 表里，所以 `cli dests` 看不到它们；检查改成了绘制时的不变量——**画出来的每个 sink 名都必须在绘制它的那台设备上解析得到**（`tests/test_cli_events.py` 用 `FakeDevice` 画一次页面再核）。`tests/test_landings.py` 钉住机制本身：命名、按函数身份去重、按连接隔离、换页换表、`gated` 先于闭包运行、两套落点同页共存。 Rust SDK 跟着给了同一个形状（`sdks/rust/src/landings.rs` 的 `Landings`：`bind(name, closure)` 返回名字、`bind_gated` 带上门、同一个名字两次仍是一个落点）—— 差别只在名字要由调用方写出来，因为 Rust 运行时没有函数名；`gate_t10` 的页面用例通过它取名字，两侧帧仍然逐字节相等。
+
+词表的构造器叫 `h`（`from reflux.sdk import h`，前端惯例的那个名字）：`h.frame(...)` 给人写页面 —— 每个节点类型保留生成的签名，关键字有补全、拼错立刻 `TypeError`；`h.node(('frame', props, children))` 给"页面就是数据"的情形（载荷描述的 chips、从槽里读出来的行、场景表）—— props 仍是那个构造器自己的关键字，所以拼错照样被拒，只是没有补全。两者在同一条构造器上，产物逐字节相同（`tests/test_h.py`）。JavaScript 里 `h('div', …)` 值得存在是因为 JSX 会生成它；这里没有那层编译，所以不提供第三种拼法。
 
 - **状态挂在设备上**：`Chat` 挂在 `ctx.data`（与「socket 就是状态」一致），随连接回收；不持久化、不跨刷新。显示那份（行）在页面树里，模型那份（turn 窗口）在后端——两者只在「停止」时故意分叉。
 - **流式 = 往槽里 append**：回话不是一帧写完，是每块一次 `patch(slot, "/source/default", chunk, op="append")`。实测一句 126 字的回话是 42 帧（`gate_chat` 第 3 条）。这条路走查页早就在用，没有为聊天新增机制。

@@ -17,19 +17,19 @@ from reflux.app import App, Device, into_routes, location_of, query_of
 from reflux.ingest import Refused, check_uplink
 from reflux.protocol import HOST_EVENTS as PROTOCOL_HOST_EVENTS
 from reflux.routes import Routes
-from reflux.sdk import builders as b
+from reflux.sdk import h
 
 from tests.fakes import FakeDevice
 
 
 def page_for(ctx, match):
     """A page that draws which path it is — enough to tell which one landed in the slot."""
-    ctx.page(b.text(f"page:{match.path}"))
+    ctx.page(h.text(f"page:{match.path}"))
 
 
 def shell(ctx) -> object:
     """A frame with one nav line and the routes reader — the shape the slot is written into."""
-    return b.frame(b.text("shell"), b.frame(source=ctx.slot(ROUTES_SLOT), id="routes"), id="shell")
+    return h.frame(h.text("shell"), h.frame(source=ctx.slot(ROUTES_SLOT), id="routes"), id="shell")
 
 
 def app_with_shell(*paths: str, page=None) -> App:
@@ -98,8 +98,8 @@ class TestShell(unittest.TestCase):
 
     def test_a_page_draws_and_a_seed_is_a_send_of_its_own(self):
         def seeding(ctx, match):
-            ctx.emit(wire.set("status", b.text("就绪")))  # a send, not part of the page
-            ctx.page(b.text("page"))  # the page itself
+            ctx.emit(wire.set("status", h.text("就绪")))  # a send, not part of the page
+            ctx.page(h.text("page"))  # the page itself
 
         app = app_with_shell("/", page=seeding)
         device = FakeDevice()
@@ -112,7 +112,7 @@ class TestShell(unittest.TestCase):
 
     def test_a_page_that_produces_no_structure_is_a_loud_producer_defect(self):
         with self.assertRaises(ValueError):
-            into_routes([wire.set("status", b.text("就绪"))])
+            into_routes([wire.set("status", h.text("就绪"))])
 
     def test_an_app_without_a_shell_draws_into_the_default_one(self):
         """No shell declared is a smaller frame, not a second road: the page still lands in `routes`."""
@@ -173,7 +173,7 @@ class TestHostEvents(unittest.TestCase):
     def test_connect_is_raised_after_the_first_frame_is_queued(self):
         app, device = App(), FakeDevice()
         def single(ctx, path):
-            ctx.page(b.text("page"))
+            ctx.page(h.text("page"))
 
         app.page = single  # something to draw, so there is a frame
         seen: list[int] = []

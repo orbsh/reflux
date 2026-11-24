@@ -13,34 +13,34 @@ import unittest
 from pydantic import ValidationError
 
 from reflux import wire
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk._parse import dump, parse
 
 
 class TestShapes(unittest.TestCase):
     def test_create_carries_the_empty_event_and_the_node(self) -> None:
-        node = b.text("hi")
+        node = h.text("hi")
         self.assertEqual(
             wire.create(node),
             {"action": "create", "slot": "", "data": dump(node)},
         )
 
     def test_set_replaces_a_named_slot(self) -> None:
-        node = b.text("hi")
+        node = h.text("hi")
         self.assertEqual(
             wire.set("echo", node),
             {"action": "set", "slot": "echo", "data": dump(node)},
         )
 
     def test_append_leaves_the_default_position_off_the_wire(self) -> None:
-        op = wire.append("rows", b.text("a"))
+        op = wire.append("rows", h.text("a"))
         self.assertEqual(op["action"], "append")
         self.assertEqual(op["slot"], "rows")
         self.assertNotIn("position", op, "position 0 is the default — writing it is noise")
 
     def test_append_carries_a_real_position(self) -> None:
-        self.assertEqual(wire.append("rows", b.text("a"), position=1)["position"], 1)
-        self.assertEqual(wire.append("rows", b.text("a"), position=-1)["position"], -1)
+        self.assertEqual(wire.append("rows", h.text("a"), position=1)["position"], 1)
+        self.assertEqual(wire.append("rows", h.text("a"), position=-1)["position"], -1)
 
     def test_remove_is_by_identity(self) -> None:
         self.assertEqual(
@@ -86,7 +86,7 @@ class TestShapes(unittest.TestCase):
         self.assertEqual(wire.empty(), {"action": "empty"})
 
     def test_a_frame_is_the_action_list(self) -> None:
-        frame = wire.draw(wire.empty(), wire.create(b.text("hi")))
+        frame = wire.draw(wire.empty(), wire.create(h.text("hi")))
         self.assertEqual([op["action"] for op in frame], ["empty", "create"])
         self.assertIsInstance(frame, list, "no envelope: the host wraps its own")
 
@@ -102,9 +102,9 @@ class TestRefusals(unittest.TestCase):
 
     def test_a_position_that_is_not_an_int(self) -> None:
         with self.assertRaises(ValueError):
-            wire.append("rows", b.text("a"), position="1")
+            wire.append("rows", h.text("a"), position="1")
         with self.assertRaises(ValueError):
-            wire.append("rows", b.text("a"), position=True)
+            wire.append("rows", h.text("a"), position=True)
 
     def test_a_node_that_is_not_accrete(self) -> None:
         # An unknown type is the closure's refusal (the shared walk), a bad domain pydantic's —
@@ -119,7 +119,7 @@ class TestRefusals(unittest.TestCase):
 
     def test_empty_slots_and_ids(self) -> None:
         for call in (
-            lambda: wire.set("", b.text("x")),
+            lambda: wire.set("", h.text("x")),
             lambda: wire.remove("rows", ""),
             lambda: wire.inject("", None),
             lambda: wire.tmpl("", "{}"),

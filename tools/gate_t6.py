@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 from reflux.sdk import markers as page_markers  # noqa: E402
 from reflux.sdk._parse import dump  # noqa: E402
 
@@ -42,10 +42,10 @@ def page(path: str, title: str, *, label: str | None = None, markers: bool = Tru
     scenarios need — a label to find the page by, and a page with no markers at all.
     """
     shown = label or f"page {path}"
-    children = [b.text(shown, id="page-label")]
+    children = [h.text(shown, id="page-label")]
     if markers:
         return page_markers.page(path, title, *children)
-    return b.frame(*children, id="page-root")
+    return h.frame(*children, id="page-root")
 
 
 def draw(device, node) -> None:

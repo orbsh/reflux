@@ -19,7 +19,7 @@ from reflux import ingest, wire
 from reflux.app import App, Device
 from reflux.channel import Channel
 from reflux.ingest import Refused
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.slots import Slot
 from reflux.sdk._parse import dump
 from reflux.protocol import MAX_OPS_PER_FRAME
@@ -50,8 +50,8 @@ class TestTheFrame(unittest.TestCase):
     def test_a_legal_frame_passes_untouched(self) -> None:
         good = frame(
             wire.tmpl("t1", '{"type":"text"}'),
-            wire.create(b.frame(b.text("hi", id="a"), b.tiles(source=Slot("rows")))),
-            wire.append("rows", b.text("row", id="r1")),
+            wire.create(h.frame(h.text("hi", id="a"), h.tiles(source=Slot("rows")))),
+            wire.append("rows", h.text("row", id="r1")),
             wire.inject("chan", {"v": 1}),
         )
         ingest.check_frame(good)  # returns: nothing to report
@@ -87,7 +87,7 @@ class TestTheFrame(unittest.TestCase):
         refused(self, frame({"op": "create", "root": {}}), "is not one of the eight actions")
 
     def test_each_actions_field_set(self) -> None:
-        node = dump(b.text("x"))
+        node = dump(h.text("x"))
         cases = [
             ("create grows a field", {"action": "create", "slot": "", "data": node, "root": 1}, "'root'"),
             ("set needs its slot", {"action": "set", "data": node}, "'slot' is required"),
@@ -192,7 +192,7 @@ class TestTheNode(unittest.TestCase):
 
     def test_every_node_of_the_turn_is_checked(self) -> None:
         ops = [
-            {"action": "set", "slot": "echo", "data": dump(b.text("x"))},
+            {"action": "set", "slot": "echo", "data": dump(h.text("x"))},
             {"action": "append", "slot": "rows", "data": {"type": "nope"}},
         ]
         refused(self, frame(*ops), "frame[1] (append).data")
@@ -202,16 +202,16 @@ class TestRowIdentity(unittest.TestCase):
     def test_two_appends_of_one_id_in_one_frame(self) -> None:
         refused(
             self,
-            frame(wire.append("rows", b.text("a", id="r")), wire.append("rows", b.text("b", id="r"))),
+            frame(wire.append("rows", h.text("a", id="r")), wire.append("rows", h.text("b", id="r"))),
             "row id 'r' appears twice in one frame",
         )
 
     def test_different_slots_or_different_ids_are_fine(self) -> None:
-        ingest.check_frame(frame(wire.append("left", b.text("a", id="r")), wire.append("right", b.text("b", id="r"))))
-        ingest.check_frame(frame(wire.append("rows", b.text("a", id="r1")), wire.append("rows", b.text("b", id="r2"))))
+        ingest.check_frame(frame(wire.append("left", h.text("a", id="r")), wire.append("right", h.text("b", id="r"))))
+        ingest.check_frame(frame(wire.append("rows", h.text("a", id="r1")), wire.append("rows", h.text("b", id="r2"))))
 
     def test_rows_without_identity_may_repeat(self) -> None:
-        ingest.check_frame(frame(wire.append("rows", b.text("a")), wire.append("rows", b.text("b"))))
+        ingest.check_frame(frame(wire.append("rows", h.text("a")), wire.append("rows", h.text("b"))))
 
 
 class TestTheUplink(unittest.TestCase):
@@ -286,7 +286,7 @@ class TestTheOutboundDoor(unittest.TestCase):
 
     def test_a_good_frame_queues(self) -> None:
         device = self.make()
-        good = frame(wire.create(b.text("x")))
+        good = frame(wire.create(h.text("x")))
         device.send(good)
         self.assertEqual(device.outbox, [good])
         self.assertEqual(self.stats["refused"], 0)
@@ -302,7 +302,7 @@ class TestTheInboundDoor(unittest.TestCase):
         @app.dests.register("gate.ok")
         def ok(ctx, received):
             seen.append(received)
-            ctx.send(frame(wire.create(b.text("ok"))))
+            ctx.send(frame(wire.create(h.text("ok"))))
 
         channel = ScriptedChannel(
             {"dest": "gate.ok", "data": {"n": 1}, "extra": "hand written"},  # refused: unknown key

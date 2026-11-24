@@ -52,7 +52,7 @@ from reflux.auth import Auth
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
 from reflux.server import Request, Response
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk.types import Accrete, Bind, JsType
 from reflux.slots import Slot
 
@@ -70,7 +70,7 @@ def nav_bundle(label: str, dest: Slot) -> Accrete:
     The press is the bundle's own submit: `submit=["button"]` names the click as the timing, and the
     bundle holds the exit, so the button only says "send this group" (ADR 0032 §3).
     """
-    return b.bundle(b.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
+    return h.bundle(h.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict) -> Accrete:
@@ -87,10 +87,10 @@ def row_node(row: dict) -> Accrete:
     height it does not fill.
     """
     # `remove` is a verb on a slot, so this name is written with the subscript.
-    return b.bundle(
-        b.frame(b.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
+    return h.bundle(
+        h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
-        b.frame(b.button("Remove", sink=slots.row["remove"]),
+        h.frame(h.button("Remove", sink=slots.row["remove"]),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots.row["remove"],
         submit=["button"],
@@ -123,9 +123,9 @@ def shell(ctx: Context) -> Accrete:
     automatic minimum is its content — without it this row grows with the page and the shell's `1fr`
     is only a wish. The reader scrolls, so a page may be taller than the window.
     """
-    return b.frame(
-        b.frame(
-            b.text("reflux reference app", variant="heading-3"),
+    return h.frame(
+        h.frame(
+            h.text("reflux reference app", variant="heading-3"),
             nav_bundle("Demo", GO_HOME),
             nav_bundle("About", GO_ABOUT),
             nav_bundle("Walkthrough", GO_DEMO),
@@ -133,7 +133,7 @@ def shell(ctx: Context) -> Accrete:
             grid={"grid-template-columns": "1fr auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
-        b.frame(
+        h.frame(
             source=slots(ROUTES_SLOT),
             id=ROUTES_SLOT,
             style={"min-height": "0", "overflow": "auto"},
@@ -150,15 +150,15 @@ def shell(ctx: Context) -> Accrete:
 
 def demo_view(ctx, state):
     """The demo's own login surface — the `view` seam, with the field names its page also uses."""
-    lines = [b.text("Demo sign-in", variant="heading-1")]
+    lines = [h.text("Demo sign-in", variant="heading-1")]
     if state == "refused":
-        lines.append(b.text("Wrong username or password", variant="muted"))
-    return b.frame(
+        lines.append(h.text("Wrong username or password", variant="muted"))
+    return h.frame(
         *lines,
-        b.bundle(
-            b.input(tag="user", id="auth-user"),
-            b.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
-            b.button("Sign in", sink=slots(LOGIN)),
+        h.bundle(
+            h.input(tag="user", id="auth-user"),
+            h.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
+            h.button("Sign in", sink=slots(LOGIN)),
             sink=slots(LOGIN),
             submit=["enter", "button"],
             id="auth-form",
@@ -215,7 +215,7 @@ def home_page(ctx, match):
     def echo(value: object) -> None:
         # An `input` uplinks its value alone (no wrapper): the closure is handed that string.
         state.echo = value if isinstance(value, str) else ""
-        slots.echo.set(b.text(state.echo))
+        slots.echo.set(h.text(state.echo))
 
     def add_row(value: object) -> None:
         row = {"id": f"row-{state.next_row}", "text": f"Row {state.next_row}"}
@@ -226,47 +226,47 @@ def home_page(ctx, match):
     def reveal(value: object) -> None:
         # Only a signed-in click gets here: the gate answered the rest before the closure ran.
         ctx.data["may_see_secret"] = True
-        slots.secret.set(b.text("Classified content"))
+        slots.secret.set(h.text("Classified content"))
 
     ctx.page(
-        b.frame(
-            b.frame(
-                b.text("Demo", variant="heading-1"),
-                b.text("This app is written with the SDK alone: an echo, a list, a form, a drag, and four routes.", variant="muted"),
+        h.frame(
+            h.frame(
+                h.text("Demo", variant="heading-1"),
+                h.text("This app is written with the SDK alone: an echo, a list, a form, a drag, and four routes.", variant="muted"),
                 grid={"grid-template-rows": "auto auto"},
                 # The title is a grid item too: it spans both columns, so the two columns of
                 # cards start under it instead of beside it.
                 style={"grid-column": "1 / -1"},
                 id="home-title",
             ),
-            b.frame(
-                b.frame(
-                    b.text("Echo", variant="heading-3"),
-                    b.text(
+            h.frame(
+                h.frame(
+                    h.text("Echo", variant="heading-3"),
+                    h.text(
                         "An `input` uplinks its buffer on Enter; the uplink carries no wrapper, so the handler's `data` is exactly that string.",
                         variant="muted",
                     ),
-                    b.input(sink=echo, id="name-input"),
-                    b.text(source=slots.echo, id="echo"),
+                    h.input(sink=echo, id="name-input"),
+                    h.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
                     id="card-echo",
                 ),
-                b.frame(
-                    b.text("List · drag", variant="heading-3"),
-                    b.text(
+                h.frame(
+                    h.text("List · drag", variant="heading-3"),
+                    h.text(
                         "A row's identity is its id: ✕ removes by id, and a drop archives by id — the gesture itself says nothing; only the landing point speaks.",
                         variant="muted",
                     ),
-                    b.bundle(b.button("Add a row", sink=add_row), sink=add_row,
+                    h.bundle(h.button("Add a row", sink=add_row), sink=add_row,
                              submit=["button"], id="add-row"),
-                    b.tiles(source=slots.rows, id="rows"),
+                    h.tiles(source=slots.rows, id="rows"),
                     # The landing point names its event and what it accepts; `accept` is one tag
                     # (or any), so cargo of another tag is refused without a frame — and a
                     # landing without a `sink` is a load error, which is why the two come
                     # together.
-                    b.frame(
-                        b.text("Drag a row here to archive it"),
+                    h.frame(
+                        h.text("Drag a row here to archive it"),
                         accept={"tag": "row"},
                         sink=slots("row.archive"),
                         grid={"place-items": "center"},
@@ -274,7 +274,7 @@ def home_page(ctx, match):
                                "min-height": "72px"},
                         id="archive",
                     ),
-                    b.text(source=slots.archived, id="archived"),
+                    h.text(source=slots.archived, id="archived"),
                     grid=CARD,
                     variant="card",
                     id="card-rows",
@@ -282,23 +282,23 @@ def home_page(ctx, match):
                 grid={"grid-template-rows": "auto auto", "gap": "16px", "align-content": "start"},
                 id="home-left",
             ),
-            b.frame(
-                b.text("Sign in · the gate", variant="heading-3"),
-                b.text(
+            h.frame(
+                h.text("Sign in · the gate", variant="heading-3"),
+                h.text(
                     "This form speaks the framework's verb `reflux:login`: the app writes only verify and view, and never reads the password.",
                     variant="muted",
                 ),
                 # Two fields stacked beside the button: a bundle is a flex row, so the column is
                 # a frame inside it and the press stays a child of the bundle it belongs to.
-                b.bundle(
-                    b.frame(
-                        b.input(tag="user", id="f-user"),
-                        b.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
+                h.bundle(
+                    h.frame(
+                        h.input(tag="user", id="f-user"),
+                        h.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),
-                    b.frame(
-                        b.button("Sign in", sink=slots(LOGIN)),
+                    h.frame(
+                        h.button("Sign in", sink=slots(LOGIN)),
                         style={"flex": "0 0 auto", "align-self": "end"},
                         id="login-press",
                     ),
@@ -306,12 +306,12 @@ def home_page(ctx, match):
                     submit=["enter", "button"],
                     id="login",
                 ),
-                b.frame(source=slots(AUTH_SLOT), id="auth-region"),
+                h.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # Behind a declaration: a click here from a visitor never reaches the handler.
-                b.bundle(b.button("Secret", sink=gated(reveal)),
+                h.bundle(h.button("Secret", sink=gated(reveal)),
                          sink=gated(reveal), submit=["button"], id="vault"),
-                b.text(source=slots.secret, id="secret"),
-                b.bundle(b.button("Log out", sink=slots(LOGOUT)), sink=slots(LOGOUT),
+                h.text(source=slots.secret, id="secret"),
+                h.bundle(h.button("Log out", sink=slots(LOGOUT)), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
                 variant="card",
@@ -319,8 +319,8 @@ def home_page(ctx, match):
             ),
             # The footnote is a grid item too, and it spans: a text node has no style, so the
             # node that carries the placement is a frame around it.
-            b.frame(
-                b.text(
+            h.frame(
+                h.text(
                     "accrete has no URL-bearing type: a page turns by submitting that form above, the producer"
                     "answers with a new structure plus the new path marker, and the runtime mirrors the marker into the address bar.",
                     variant="muted",
@@ -344,15 +344,15 @@ def home_page(ctx, match):
     # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
     # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        slots_of(ctx).secret.set(b.text(""))
+        slots_of(ctx).secret.set(h.text(""))
 
 
 @app.route("/about", title="About")
 def about_page(ctx, match):
     """The second route: the same shape, reached by the address bar, a deep link, or the nav."""
     ctx.page(
-        b.text("About", variant="heading-1"),
-        b.text("This example app is written with the SDK alone: an echo, a list, a form, and four routes — /, /about, /chat and the walkthrough."),
+        h.text("About", variant="heading-1"),
+        h.text("This example app is written with the SDK alone: an echo, a list, a form, and four routes — /, /about, /chat and the walkthrough."),
         nav_bundle("Back to the demo", GO_HOME),
     )
 
@@ -376,7 +376,7 @@ def on_archive(ctx, frame) -> None:
         return
     state.rows = [r for r in state.rows if r["id"] != row_id]
     slots_of(ctx).rows.remove(row_id)
-    slots_of(ctx).archived.set(b.text(f"Archived: {row['text']}"))
+    slots_of(ctx).archived.set(h.text(f"Archived: {row['text']}"))
 
 
 @app.on(slots(GO_HOME.name))

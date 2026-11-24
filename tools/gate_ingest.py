@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Ws, free_port, report  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 from reflux.protocol import MAX_OPS_PER_FRAME  # noqa: E402
 
 APP = App()
@@ -58,7 +58,7 @@ def send_all_events() -> None:
 
     @APP.on("gate.legal")
     def legal(ctx, frame):
-        ctx.device.send(wire.draw(wire.create(b.frame(b.text("landed", id="ok")))))
+        ctx.device.send(wire.draw(wire.create(h.frame(h.text("landed", id="ok")))))
 
     @APP.on("gate.unknown-type")
     def unknown_type(ctx, frame):
@@ -73,8 +73,8 @@ def send_all_events() -> None:
     def duplicate_row(ctx, frame):
         ctx.device.send(
             wire.draw(
-wire.append("rows", b.text("a", id="r")),
-                wire.append("rows", b.text("b", id="r")))
+wire.append("rows", h.text("a", id="r")),
+                wire.append("rows", h.text("b", id="r")))
         )
 
     @APP.on("gate.over-cap")
@@ -99,7 +99,7 @@ wire.append("rows", b.text("a", id="r")),
 
     @APP.on("gate.alive")
     def alive(ctx, frame):
-        ctx.device.send(wire.draw(wire.set("echo", b.text("alive"))))
+        ctx.device.send(wire.draw(wire.set("echo", h.text("alive"))))
 
 
 def uplink_handlers() -> list[dict]:
@@ -108,7 +108,7 @@ def uplink_handlers() -> list[dict]:
     @APP.on("gate.uplink")
     def uplink(ctx, frame):
         SEEN.append(frame)
-        ctx.device.send(wire.draw(wire.set("echo", b.text(repr(frame["data"])))))
+        ctx.device.send(wire.draw(wire.set("echo", h.text(repr(frame["data"])))))
 
     return SEEN
 
@@ -150,7 +150,7 @@ def main() -> int:
     checks.append(
         (
             "a legal frame lands unchanged",
-            first == [wire.create(b.frame(b.text("landed", id="ok")))],
+            first == [wire.create(h.frame(h.text("landed", id="ok")))],
             json.dumps(first, ensure_ascii=False)[:70] if first else "nothing arrived",
         )
     )
@@ -186,7 +186,7 @@ def main() -> int:
     checks.append(
         (
             "the device survives every refusal",
-            alive == [wire.set("echo", b.text("alive"))],
+            alive == [wire.set("echo", h.text("alive"))],
             json.dumps(alive, ensure_ascii=False)[:70] if alive else "the device stopped answering",
         )
     )

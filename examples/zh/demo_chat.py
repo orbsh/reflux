@@ -28,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 
 from reflux import Context
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk.types import Accrete
 from reflux.slots import Slot
 
@@ -97,7 +97,7 @@ def state(ctx: Context) -> Chat:
 
 
 def row(*children: Accrete, id: str) -> Accrete:
-    return b.frame(*children, id=id)
+    return h.frame(*children, id=id)
 
 
 def page(ctx: Context, match) -> None:
@@ -112,22 +112,22 @@ def page(ctx: Context, match) -> None:
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # 槽比一次 create 活得久：再种一遍就重复了
-        slots.status.set(b.text("就绪"))
+        slots.status.set(h.text("就绪"))
     ctx.page(
-        b.frame(
-            b.text("对话", variant="heading-1"),
-            b.text(source=slots.status, variant="muted", id="status"),
-            b.tiles(source=slots.messages, id="messages"),
-            b.frame(
-                b.bundle(
-                    b.input(tag="text", id="composer"),
-                    b.button("发送", sink=slots.chat.send),
+        h.frame(
+            h.text("对话", variant="heading-1"),
+            h.text(source=slots.status, variant="muted", id="status"),
+            h.tiles(source=slots.messages, id="messages"),
+            h.frame(
+                h.bundle(
+                    h.input(tag="text", id="composer"),
+                    h.button("发送", sink=slots.chat.send),
                     sink=slots.chat.send,
                     submit=["enter", "button"],
                     id="send",
                 ),
-                b.bundle(
-                    b.button("停止", sink=slots.chat.stop),
+                h.bundle(
+                    h.button("停止", sink=slots.chat.stop),
                     sink=slots.chat.stop,
                     submit="button",
                     id="stop",
@@ -135,7 +135,7 @@ def page(ctx: Context, match) -> None:
                 grid={"grid-template-columns": "1fr auto", "gap": "8px"},
                 id="composer-row",
             ),
-            b.text("回答逐块流出，可停止，可拒绝；模型出错变一条气泡，不是一段堆栈。", variant="muted"),
+            h.text("回答逐块流出，可停止，可拒绝；模型出错变一条气泡，不是一段堆栈。", variant="muted"),
             id="chat-page",
             grid={"grid-template-rows": "auto auto 1fr auto auto", "height": "100%", "gap": "8px"},
         ),
@@ -165,14 +165,14 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
     """
     slots = slots_of(ctx)
     if not text.strip():
-        slots.status.set(b.text("空消息没有发出去"))
+        slots.status.set(h.text("空消息没有发出去"))
         return
     if len(text) > MAX_CHARS:
-        slots.status.set(b.text(f"太长：{len(text)} 字 > {MAX_CHARS} 字上限，没有发出去"))
+        slots.status.set(h.text(f"太长：{len(text)} 字 > {MAX_CHARS} 字上限，没有发出去"))
         return
     with chat.lock:
         if chat.busy:
-            slots.status.set(b.text("上一条还在流：按「停止」或等它结束"))
+            slots.status.set(h.text("上一条还在流：按「停止」或等它结束"))
             return
         chat.busy = True
         chat.stop.clear()
@@ -183,10 +183,10 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
     context = list(chat.turns)  # 一份快照：模型作答时窗口可能已经动了
     reply = ctx.slot(f"reply.{seq}")  # 一个路径，因为每次回答有自己的平面
     with ctx.turn():  # 客户端同时看到这两行、空气泡和状态
-        slots.messages.append(row(b.text(text), id=f"row-user-{seq}"))
-        slots.messages.append(row(b.text(source=reply), id=f"row-bot-{seq}"))
-        reply.set(b.text(""))
-        slots.status.set(b.text(f"正在回答…（{chat.model.name}）"))
+        slots.messages.append(row(h.text(text), id=f"row-user-{seq}"))
+        slots.messages.append(row(h.text(source=reply), id=f"row-bot-{seq}"))
+        reply.set(h.text(""))
+        slots.status.set(h.text(f"正在回答…（{chat.model.name}）"))
     spawn(stream, (ctx, chat, reply, context))
 
 
@@ -213,21 +213,21 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
     if failure is not None:
         with ctx.turn():
             reply.patch(TEXT_VALUE, f"\n\n⚠️ 模型出错：{failure}", op="append")
-            slots.status.set(b.text(f"出错：{type(failure).__name__} · 可以再发一条"))
+            slots.status.set(h.text(f"出错：{type(failure).__name__} · 可以再发一条"))
         return
     if chat.stop.is_set():
         with ctx.turn():
             reply.patch(TEXT_VALUE, " ⏹", op="append")
-            slots.status.set(b.text(f"已停止（半句没有进上下文）· {chat.total} 轮"))
+            slots.status.set(h.text(f"已停止（半句没有进上下文）· {chat.total} 轮"))
         return
     chat.record("assistant", "".join(pieces))
-    slots.status.set(b.text(chat.status()))
+    slots.status.set(h.text(chat.status()))
 
 
 def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        slots_of(ctx).status.set(b.text("这一帧里没有文本字段，什么都没发"))
+        slots_of(ctx).status.set(h.text("这一帧里没有文本字段，什么都没发"))
         return
     send(ctx, state(ctx), text)
 
@@ -236,10 +236,10 @@ def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     slots = slots_of(ctx)
     if not chat.busy:
-        slots.status.set(b.text("没有正在进行的回答"))
+        slots.status.set(h.text("没有正在进行的回答"))
         return
     chat.stop.set()
-    slots.status.set(b.text("正在停止…"))
+    slots.status.set(h.text("正在停止…"))
 
 
 def register(app, slots: DemoSlots) -> None:

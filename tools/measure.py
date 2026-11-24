@@ -38,7 +38,7 @@ from cdp import Ws, open_page  # noqa: E402
 
 from reflux import ingest, wire  # noqa: E402
 from examples.zh import demo_app as demo  # noqa: E402
-from reflux.sdk import builders as b  # noqa: E402
+from reflux.sdk import h  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 VERSIONS = REPO / "www" / "static" / "vendor" / "fluxen" / "versions.json"
@@ -83,7 +83,7 @@ def seed_frame() -> list[dict]:
 
 def section_bytes() -> None:
     turns: list[tuple[str, list[dict]]] = [
-        ("echo (`set`)", wire.draw(wire.set("echo", b.text("hello")))),
+        ("echo (`set`)", wire.draw(wire.set("echo", h.text("hello")))),
         (
             "add row (`append`)",
             wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
@@ -91,7 +91,7 @@ def section_bytes() -> None:
         ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
         (
             "bundle submit (`set`)",
-            wire.draw(wire.set("submitted", b.text('已提交 {"pass": "secret", "user": "ada"}'))),
+            wire.draw(wire.set("submitted", h.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         ("page turn (`create` + 2 seeded rows)", seed_frame()),
     ]
@@ -139,7 +139,7 @@ def section_mutations() -> None:
 
         turn(
             "narrow: `set` on a data slot",
-            wire.draw(wire.set("echo", b.text("measured-echo"))),
+            wire.draw(wire.set("echo", h.text("measured-echo"))),
             "measured-echo",
         )
         turn(
@@ -149,7 +149,7 @@ def section_mutations() -> None:
         )
         turn(
             "whole tree: `create`",
-            wire.draw(wire.create(b.frame(b.text("rebuilt-page", id="probe")))),
+            wire.draw(wire.create(h.frame(h.text("rebuilt-page", id="probe")))),
             "rebuilt-page",
         )
 
@@ -259,7 +259,7 @@ def _client(url: str, per_second: int, seconds: float, ready) -> None:
 
 def check_cost() -> list[list[str]]:
     """What the two fences cost per frame — the price M1.5 accepted without a number."""
-    op = wire.set("echo", b.text("pong"))
+    op = wire.set("echo", h.text("pong"))
     frame = wire.draw(op)
     uplink = {"dest": "measure.ping", "id": "x", "data": "v"}
     rounds = 3000
@@ -271,7 +271,7 @@ def check_cost() -> list[list[str]]:
         return (time.perf_counter() - start) / rounds * 1e6
 
     return [
-        ["build one `set` op (`wire.set`)", f"{per_call(lambda: wire.set("echo", b.text('pong'))):.1f} µs", "closed walk + parse + dump"],
+        ["build one `set` op (`wire.set`)", f"{per_call(lambda: wire.set("echo", h.text('pong'))):.1f} µs", "closed walk + parse + dump"],
         ["outbound fence (`ingest.check_frame`)", f"{per_call(lambda: ingest.check_frame(frame)):.1f} µs", "same walk again, at the socket"],
         ["inbound fence (`ingest.check_uplink`)", f"{per_call(lambda: ingest.check_uplink(uplink)):.1f} µs", "shape only, no node"],
     ]
@@ -279,7 +279,7 @@ def check_cost() -> list[list[str]]:
 
 def section_cpu() -> None:
     app = demo.make_app()
-    app.on("measure.ping", lambda ctx, frame: ctx.emit(wire.set("echo", b.text("pong"))))
+    app.on("measure.ping", lambda ctx, frame: ctx.emit(wire.set("echo", h.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()

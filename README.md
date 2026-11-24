@@ -287,8 +287,14 @@ thing it draws are one thought:
 # examples/zh/demo_app.py
 @app.route("/", title="演示")             # "/" and "演示" are the route's: `ctx.page` writes the markers
 def home_page(ctx, match):
-    ctx.page(b.frame(b.text("演示", variant="heading-1"), ...))
+    ctx.page(h.frame(h.text("演示", variant="heading-1"), ...))
 ```
+
+`h` is the vocabulary (`from reflux.sdk import h`), named the way front-end code names it. Two entry
+points, and the difference is where the page comes from: `h.frame(...)` is a page a person writes — each
+node type keeps its generated signature, so keywords complete and a typo is a `TypeError` at the line;
+`h.node(("frame", props, children))` is a page that *is* data — a chip described by a payload, rows read
+from a slot — and its props are still the builder's own keywords, so the refusals survive.
 
 A handler for a page's own event is written beside the frame that sends to it, as a closure. The
 closure is handed the event's value and holds its slots; the framework names it when the page is drawn:
@@ -328,7 +334,7 @@ def register(app, slots):
   every page turn after that writes only that slot, so the nav is never sent twice. Declare no shell
   and the framework supplies one — a single full-screen `routes` — so a page lands in that slot either
   way, which is why `demo_app` could grow a nav without touching a page.
-- **A chart is a canvas with a spec.** `b.canvas(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
+- **A chart is a canvas with a spec.** `h.canvas(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
   the module that draws it is a file, and `app.mount("/assets/g2chart", path)` is how a page gets the
   files its modules need — the walkthrough page does exactly that, for two charts, two viewers and an
   editor. A 3D viewport is the same node with another url: accrete has one module host, and which

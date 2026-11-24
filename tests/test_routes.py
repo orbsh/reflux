@@ -13,7 +13,7 @@ import io
 import unittest
 
 from reflux import Context, cli
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.routes import (
     DEFAULT,
     Routes,
@@ -36,7 +36,7 @@ def drew(page):
 
 def handler(name: str = "h"):
     def run(ctx, match):
-        ctx.page(b.text(f"{name}:{match.path}"))
+        ctx.page(h.text(f"{name}:{match.path}"))
 
     return run
 

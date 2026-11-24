@@ -7,7 +7,7 @@ case, a page and the handler it answers with written as one thought:
     def add_row(value):                 # the value, not a frame
         slots.rows.append(row(...))
 
-    b.button("Add a row", sink=add_row)
+    h.button("Add a row", sink=add_row)
 
 The framework names it at draw time (`<path>.<function>`), registers it on the device being drawn, and
 replaces the draw's table on the next turn. These cases pin that contract.
@@ -20,7 +20,7 @@ import unittest
 from reflux import Auth, wire
 from reflux.app import App, gated
 from reflux.routes import Routes
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from tests.fakes import FakeDevice
 
 
@@ -57,9 +57,9 @@ class AClosureIsALandingPoint(unittest.TestCase):
 
             def add(value):
                 self.calls.append(("add", value))
-                slots.rows.append(b.text(f"row {value}"))
+                slots.rows.append(h.text(f"row {value}"))
 
-            ctx.page(b.frame(b.text("t"), b.button("Add a row", sink=add), id="root"))
+            ctx.page(h.frame(h.text("t"), h.button("Add a row", sink=add), id="root"))
 
         self.device = FakeDevice(app=self.app)
         self.app._draw(self.device)
@@ -92,7 +92,7 @@ class TheTableIsOneDraws(unittest.TestCase):
 
         @app.route("/", title="t")
         def home(ctx, match):
-            ctx.page(b.frame(b.button("a", sink=pick, id="a"), b.button("b", sink=pick, id="b"), id="r"))
+            ctx.page(h.frame(h.button("a", sink=pick, id="a"), h.button("b", sink=pick, id="b"), id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)
@@ -113,8 +113,8 @@ class TheTableIsOneDraws(unittest.TestCase):
                 def hit(value, name=name):
                     pass
 
-                buttons.append(b.button(name, sink=hit, id=name))
-            ctx.page(b.frame(*buttons, id="r"))
+                buttons.append(h.button(name, sink=hit, id=name))
+            ctx.page(h.frame(*buttons, id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)
@@ -125,7 +125,7 @@ class TheTableIsOneDraws(unittest.TestCase):
 
         @app.route("/", title="t")
         def home(ctx, match):
-            ctx.page(b.frame(b.button("x", sink=lambda value: None, id="x"), id="r"))
+            ctx.page(h.frame(h.button("x", sink=lambda value: None, id="x"), id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)
@@ -146,7 +146,7 @@ class TheTableIsOneDraws(unittest.TestCase):
             def hit(value):
                 seen.append((who, value))
 
-            ctx.page(b.frame(b.button("x", sink=hit, id="x"), id="r"))
+            ctx.page(h.frame(h.button("x", sink=hit, id="x"), id="r"))
 
         one, two = FakeDevice(id="one", app=app), FakeDevice(id="two", app=app)
         app._draw(one)
@@ -170,7 +170,7 @@ class GatedLandings(unittest.TestCase):
             def secret(value):
                 self.calls.append(value)
 
-            ctx.page(b.frame(b.button("secret", sink=gated(secret), id="s"), id="r"))
+            ctx.page(h.frame(h.button("secret", sink=gated(secret), id="s"), id="r"))
 
         self.device = FakeDevice(app=self.app)
         self.app._draw(self.device)
@@ -206,7 +206,7 @@ class BothKindsLiveTogether(unittest.TestCase):
             def local(value):
                 seen.append(("local", value))
 
-            ctx.page(b.frame(b.button("local", sink=local, id="l"), id="r"))
+            ctx.page(h.frame(h.button("local", sink=local, id="l"), id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)

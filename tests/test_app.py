@@ -14,7 +14,7 @@ from examples.zh import demo_app as demo
 from reflux import ROUTES_SLOT
 from reflux.app import App, not_found
 from reflux.routes import Routes
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk._parse import dump
 
 from tests.fakes import FakeDevice
@@ -22,7 +22,7 @@ from tests.fakes import FakeDevice
 
 def page_for(ctx, match):
     """A handler that draws which path it was given — enough to see which page came back."""
-    ctx.page(b.text(f"page:{match.path}"))
+    ctx.page(h.text(f"page:{match.path}"))
 
 
 def drawn(device: FakeDevice) -> list[dict]:
@@ -104,7 +104,7 @@ class TestPageResolution(unittest.TestCase):
         app = self.app("/a")  # a table is there; the hook still wins
 
         def single(ctx, path):
-            ctx.page(b.text(f"single:{path}"))  # a page is a node; ops are `ctx.emit`
+            ctx.page(h.text(f"single:{path}"))  # a page is a node; ops are `ctx.emit`
 
         app.page = single
         device = FakeDevice()

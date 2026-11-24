@@ -21,17 +21,17 @@ hangs its own facts on (an identity, a name), and the **channel is a route** in 
 whatever else the app mounts.
 
     from reflux import Request, Response, route, wire
-    from reflux.sdk import builders as b
+    from reflux.sdk import h
 
     @route("/blog/{slug}", title="文章")
     def post(device, match):
-        return b.frame(b.text(match.params["slug"]))
+        return h.frame(h.text(match.params["slug"]))
 
     @app.mount("/health")
     def health(request):
         return "ok"
     device.data["user"] = {"name": "Ada"}          # the business's, never the framework's
-    device.emit(wire.set("greeting", b.text("你好")))
+    device.emit(wire.set("greeting", h.text("你好")))
 """
 
 from . import sdk, wire

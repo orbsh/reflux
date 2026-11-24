@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from reflux import App
-from reflux.sdk import builders as b
+from reflux.sdk import h
 from reflux.sdk import dump
 from reflux.slots import Slot, Slots
 
@@ -31,7 +31,7 @@ class TheSlot(unittest.TestCase):
         self.assertEqual(self.ctx.slot.go.dashboard, self.ctx.slot("go.dashboard"))
 
     def test_a_child_carries_the_delivery(self) -> None:
-        self.ctx.slot.chat.status.set(b.text("x"))
+        self.ctx.slot.chat.status.set(h.text("x"))
         self.assertEqual(self.device.frames[0][0]["slot"], "chat.status")
 
     def test_nesting_keeps_the_verbs_verbs(self) -> None:
@@ -49,7 +49,7 @@ class TheSlot(unittest.TestCase):
 
     def test_a_path_is_carried_through(self) -> None:
         # Hierarchical names are allowed and nothing reads the `/` yet: the name goes out as written.
-        self.ctx.slot("chat/status").set(b.text("就绪"))
+        self.ctx.slot("chat/status").set(h.text("就绪"))
         self.assertEqual(self.device.frames[0][0]["slot"], "chat/status")
 
     def test_the_layout_root_is_not_a_slot(self) -> None:
@@ -63,8 +63,8 @@ class TheSlot(unittest.TestCase):
 
     def test_each_verb_is_one_frame(self) -> None:
         slot = self.ctx.slot["messages"]
-        slot.set(b.text("here"))
-        slot.append(b.text("row"))
+        slot.set(h.text("here"))
+        slot.append(h.text("row"))
         slot.patch("/bind/value/default", "more", op="append")
         slot.remove("row-1")
         self.assertEqual(
@@ -75,15 +75,15 @@ class TheSlot(unittest.TestCase):
 
     def test_a_slot_stands_for_its_name_in_a_node(self) -> None:
         # A handle reaches the wire as its name in the `Bind` the channel carries (ADR 0031 §1–2).
-        node = b.text(source=self.ctx.slot["status"])
+        node = h.text(source=self.ctx.slot["status"])
         assert node.source is not None  # optional on the wire, never on a node built with one
         self.assertEqual(node.source.slot, "status")
 
     def test_a_declaration_is_recorded_on_the_app(self) -> None:
-        self.ctx.slot["status"].set(b.text("x"))
+        self.ctx.slot["status"].set(h.text("x"))
         self.assertEqual(self.app.declared, {"status"})
 
-        self.ctx.slot("chat/reply").set(b.text("y"))
+        self.ctx.slot("chat/reply").set(h.text("y"))
         self.assertEqual(self.app.declared, {"status", "chat/reply"})
 
 
@@ -100,33 +100,33 @@ class TheAddressesInNodes(unittest.TestCase):
         self.ctx = self.app.context(FakeDevice())
 
     def test_a_source_handle_reaches_the_wire_as_its_name(self) -> None:
-        self.assertEqual(b.text(source=self.ctx.slot["status"]).source.slot, "status")
+        self.assertEqual(h.text(source=self.ctx.slot["status"]).source.slot, "status")
 
     def test_a_sink_handle_reaches_the_wire_as_its_name(self) -> None:
-        node = b.bundle(b.button("send", sink=self.ctx.slot("chat.send")), sink=self.ctx.slot("chat.send"))
+        node = h.bundle(h.button("send", sink=self.ctx.slot("chat.send")), sink=self.ctx.slot("chat.send"))
         self.assertEqual(node.sink.slot, "chat.send")
 
     def test_a_bare_value_is_a_constant_on_a_read_and_a_name_on_a_write(self) -> None:
-        self.assertEqual(dump(b.text(source="status"))["source"], {"default": "status", "scope": "remote"})
-        self.assertEqual(dump(b.bundle(sink="chat.send"))["sink"], {"scope": "remote", "slot": "chat.send"})
+        self.assertEqual(dump(h.text(source="status"))["source"], {"default": "status", "scope": "remote"})
+        self.assertEqual(dump(h.bundle(sink="chat.send"))["sink"], {"scope": "remote", "slot": "chat.send"})
 
     def test_a_read_with_no_constant_refuses_a_bare_string(self) -> None:
         # A `tiles` has no `default` in the profile: a bare value there is neither a constant nor a
         # name, so the builder refuses instead of guessing which one was meant.
-        for build in (lambda: b.tiles(source="rows"), lambda: b.frame(source="rows")):
+        for build in (lambda: h.tiles(source="rows"), lambda: h.frame(source="rows")):
             with self.assertRaises(TypeError):
                 build()
 
     def test_the_message_says_where_the_handle_comes_from(self) -> None:
         with self.assertRaises(TypeError) as caught:
-            b.tiles(source="rows")
+            h.tiles(source="rows")
         self.assertIn("ctx.slot('rows')", str(caught.exception))
 
     def test_a_slot_with_no_delivery_can_name_but_not_write(self) -> None:
         handle = Slot("rows")
-        self.assertEqual(b.tiles(source=handle).source.slot, "rows")
+        self.assertEqual(h.tiles(source=handle).source.slot, "rows")
         with self.assertRaises(RuntimeError):
-            handle.append(b.text("row"))
+            handle.append(h.text("row"))
 
 
 class TheTurn(unittest.TestCase):
@@ -140,15 +140,15 @@ class TheTurn(unittest.TestCase):
     def test_writes_inside_a_turn_leave_as_one_frame(self) -> None:
         slots = self.ctx.slot
         with self.ctx.turn():
-            slots.messages.append(b.text("row"))
-            slots.status.set(b.text("就绪"))
+            slots.messages.append(h.text("row"))
+            slots.status.set(h.text("就绪"))
         self.assertEqual(len(self.device.frames), 1)
         self.assertEqual([op["action"] for op in self.device.frames[0]], ["append", "set"])
 
     def test_outside_a_turn_each_write_is_its_own_frame(self) -> None:
         slots = self.ctx.slot
-        slots.messages.append(b.text("row"))
-        slots.status.set(b.text("就绪"))
+        slots.messages.append(h.text("row"))
+        slots.status.set(h.text("就绪"))
         self.assertEqual(len(self.device.frames), 2)
 
     def test_an_empty_turn_sends_nothing(self) -> None:
