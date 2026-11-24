@@ -47,7 +47,7 @@ from reflux.sdk.types import Accrete, Bind, JsType
 from reflux.slots import Slot
 
 from . import demo_slots
-from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_DEMO, GO_HOME, DemoSlots, slots_of
+from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, DemoSlots, slots_of
 
 
 # 一张卡片：带 profile `card` 变体的 frame，子节点竖排，高度由自己撑。
@@ -105,7 +105,7 @@ state = State()
 def shell(ctx: Context) -> Accrete:
     """每一页都画在里面的那个 frame：一个页头，和 `routes` 这个读槽。
 
-    页头说明你在哪里，并带着三个导航 bundle；翻页只替换那个槽，所以导航在每次翻页后都还在。读槽是
+    页头说明你在哪里，并带着五个导航 bundle；翻页只替换那个槽，所以导航在每次翻页后都还在。读槽是
     `min-height: 0`，因为 grid 条目的自动最小尺寸就是它的内容 —— 不写这一条，这一行会随页面一起长高，
     外壳的 `1fr` 就只是个愿望。读槽会滚动，所以一页可以比窗口更高。
     """
@@ -116,7 +116,8 @@ def shell(ctx: Context) -> Accrete:
             nav_bundle("关于", GO_ABOUT),
             nav_bundle("走查", GO_DEMO),
             nav_bundle("对话", GO_CHAT),
-            grid={"grid-template-columns": "1fr auto auto auto auto", "gap": "8px", "align-items": "center"},
+            nav_bundle("计数器", GO_COUNTER),
+            grid={"grid-template-columns": "1fr auto auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
         h.frame(
@@ -365,6 +366,7 @@ def on_archive(ctx, frame) -> None:
 @app.on(slots(GO_ABOUT.name))
 @app.on(slots(GO_DEMO.name))
 @app.on(slots(GO_CHAT.name))
+@app.on(slots(GO_COUNTER.name))
 def on_go(ctx, frame) -> None:
     """一次把客户端送走的提交：新结构，加上新的路径标记。
     """
@@ -398,13 +400,14 @@ def status(request: Request) -> Response:
 
 # 住在各自模块里的两页：导入它们就是在这个应用上声明它们的路由（它们需要
 # `app` 已存在，所以这两行 import 放在这里而不是文件顶部）。
-from . import demo_chat  # noqa: E402
+from . import demo_chat, demo_counter  # noqa: E402
 from .demo import page as walkthrough  # noqa: E402
 
 # 走查页自带四条上行和它画图用的模块宿主；对话页在它声明页面的地方声明它那两条。
 walkthrough.register(app)
 walkthrough.install(app)
 demo_chat.register(app, slots)
+demo_counter.register(app)
 
 
 def make_app() -> App:

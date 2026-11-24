@@ -79,6 +79,7 @@ class EventsCommand(unittest.TestCase):
                 "demo.toggle",
                 "go.about",
                 "go.chat",
+                "go.counter",
                 "go.demo",
                 "go.home",
                 "reflux:hello",
@@ -186,7 +187,7 @@ class Printing(unittest.TestCase):
         self.assertIn("source", lines[0])
         # header + the demo's own names + the two protocol names + the three auth verbs (it declares
         # `auth=`, so the door exists — an app without one has neither the verbs nor a gate)
-        self.assertEqual(len(lines), 1 + 17, "header + every name the demo registers")
+        self.assertEqual(len(lines), 1 + 18, "header + every name the demo registers")
         self.assertTrue(any(line.startswith("row.remove") for line in lines))
 
     def test_routes_still_works(self) -> None:

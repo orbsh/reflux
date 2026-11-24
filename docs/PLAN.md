@@ -50,3 +50,4 @@
 - [x] 示例分成中英两棵树：`examples/zh` 与 `examples/en` 是同一个参考应用写了两遍（界面、注释、函数文档同语言），各有自己的 `Routes()` 因而能同时起服务；页面改由 `register(app)` 以调用式声明路由（避免 `-m` 下的循环 import），`reflux.cli routes` 先找模块里的 `app`；新增 `tests/test_two_trees.py` 六例（结构逐节点相同、两树语言互斥）— 2026-11-24
 - [x] 闭包落点：`sink=fn` / `sink=gated(fn)` 在绘制时被命名（`<路径>.<函数名>`，按函数身份去重），登记在设备上，换页换表；`@app.on` 保留给名字须先于绘制存在的情形（多来源、行的身份、框架动词、跨页事件）。参考应用首页的回声/加行/私密改成闭包，✕/落点/导航仍是名字，并在页面文案里点明界线；`tests/test_landings.py` 十例钉机制 — 2026-11-24
 - [x] 词表构造器改名 `h`（`reflux/sdk/h.py`，`from reflux.sdk import h`）：属性式 `h.frame(...)` 是人写页面的写法，`h.node(('frame', props, children))` 是数据式（元组/列表进、节点出，props 仍走构造器签名）；示例与测试 464 处调用点改名，走查页的 pin chip 改用数据式演示，`tests/test_h.py` 八例 — 2026-11-24
+- [x] 计数器页 + 槽视图：`examples/{zh,en}/demo_counter.py`（装饰器写在 `register(app)` 里、闭包落点、列表槽、状态挂 `ctx.data`、步长输入带解析）；`app.view(name, render)` 让槽写入收值（节点原样通过），`reflux/slots.py` 的 `frame()` 读这条规则；`tests/test_counter.py` 十四例 + 浏览器探针 `tools/probe_counter.py` 验一次真实点击 — 2026-11-24

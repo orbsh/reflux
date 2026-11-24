@@ -137,6 +137,7 @@ class TestTheDemoApp(unittest.TestCase):
                 "demo.toggle",
                 "go.about",
                 "go.chat",
+                "go.counter",
                 "go.demo",
                 "go.home",
                 "reflux:hello",

@@ -488,6 +488,10 @@ class App:
         self.root = Path(root) if root is not None else PAGE_ROOT
         self.dests = Registry(self.context)
         self.declared: set[str] = set()  # every name the app has used: slots, dests, host events
+        # A slot's view: value in, node out, for slots that hold one value rather than a tree. It is
+        # declared once (next to the page that owns the slot) so that writing values — `s.count.set(3)`
+        # — is enough, and the node's id and variant are not repeated at every write.
+        self.views: dict[str, Callable[[Any], Any]] = {}
         self.routes: Routes = routes if routes is not None else DEFAULT
         # page(device, path) -> a node, or the ops of that turn; left None the route table answers
         # (which is the shape of a routed app; one page and no routes sets this instead).
@@ -710,6 +714,25 @@ class App:
         `ctx.slot` is this same table with a device attached.
         """
         return Slots(app=self)
+
+    def view(self, name: "str | Slot", render: Callable[[Any], Any]) -> None:
+        """Say how a slot's values become nodes: `app.view("counter.count", lambda v: h.text(v))`.
+
+        A slot holds a node; most of the time that node is just "this value, drawn like this" — a
+        heading, a muted line, a number — and writing it out at every `set(...)` repeats the id and the
+        variant at every call site. A view is that decision, made once: from then on `slot.set(value)`
+        takes the *value*, and `Slot.set`/`append` frame it through the view.
+
+        It belongs to the app rather than to a handle because a handle is per delivery (`ctx.slot(…)`)
+        and short-lived, while the decision is the page's.
+        """
+        if isinstance(name, Slot):
+            name = name.name
+        self.views[name] = render
+
+    def view_for(self, name: str) -> Callable[[Any], Any] | None:
+        """How this slot's values become nodes, if the app was told (`Slot.view`); None otherwise."""
+        return self.views.get(name)
 
     def declare(self, name: str) -> None:
         """Record a name. Idempotent; `declared` is what `/status` lists."""

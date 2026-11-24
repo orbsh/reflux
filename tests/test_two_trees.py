@@ -20,7 +20,7 @@ from tests.fakes import page_nodes
 CJK = re.compile(r"[\u4e00-\u9fff]")
 ANY = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")  # CJK text or punctuation
 WORD = re.compile(r"[A-Za-z]{3,}")  # a run of letters, i.e. an English word
-PAGES = ("/", "/about", "/chat", "/demo")
+PAGES = ("/", "/about", "/chat", "/counter", "/demo")
 
 
 def ids(nodes: list[dict]) -> list[str]:

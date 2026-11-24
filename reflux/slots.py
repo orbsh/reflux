@@ -36,6 +36,13 @@ from typing import Any
 
 from . import wire
 
+def is_node(value: Any) -> bool:
+    """Is this already a node? A built accrete model, or the wire dict it dumps to."""
+    if hasattr(value, "model_dump"):
+        return True
+    return isinstance(value, dict) and isinstance(value.get("type"), str)
+
+
 __all__ = ["Slot", "Slots"]
 
 
@@ -60,13 +67,37 @@ class Slot:
         self._app = app if app is not None else getattr(ctx, "app", None)
 
     # --- writing: each is one frame ---
-    def set(self, node: Any) -> None:
-        """Replace the node in this slot."""
-        self._emit(wire.set(self.name, node))
+    def set(self, value: Any) -> None:
+        """Replace this slot's node — or its value, when the slot has a view (`Slot.view`)."""
+        self._emit(wire.set(self.name, self.frame(value)))
 
-    def append(self, node: Any, *, position: int = 0) -> None:
-        """Add a row to this list slot."""
-        self._emit(wire.append(self.name, node, position=position))
+    def append(self, value: Any, *, position: int = 0) -> None:
+        """Add a row to this list slot — a node, or a value when the slot has a view."""
+        self._emit(wire.append(self.name, self.frame(value), position=position))
+
+    def frame(self, value: Any) -> Any:
+        """The node this write means: a node passes through, anything else goes through the view.
+
+        A view is declared once (`app.view("counter.count", lambda v: h.text(v))`), so a page writes
+        values and the id/variant live in one place — and a page that wants a node of its own shape
+        still writes one: `slot.set(h.text(...))` is not converted, because it already is the node.
+        That is the rule, and it is read off the value, not off the slot: a slot without a view takes
+        nodes exactly as before.
+        """
+        if is_node(value):
+            return value
+        view = self._app.view_for(self.name) if self._app is not None else None
+        return view(value) if view is not None else value
+
+    def view(self, render: Any) -> "Slot":
+        """Declare how this slot's values become nodes: `Slot("x").view(lambda v: h.text(v))`."""
+        if self._app is None:
+            raise RuntimeError(
+                f"slot {self.name!r} has no app to record a view on: declare it where the app exists "
+                f"(`app.view(name, render)` in the page's `register`)"
+            )
+        self._app.view(self.name, render)
+        return self
 
     def patch(self, path: str, value: Any, *, op: str = "replace") -> None:
         """Write one value inside the node that is already here."""

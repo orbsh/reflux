@@ -57,7 +57,7 @@ from reflux.sdk.types import Accrete, Bind, JsType
 from reflux.slots import Slot
 
 from . import demo_slots
-from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_DEMO, GO_HOME, DemoSlots, slots_of
+from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, DemoSlots, slots_of
 
 
 # A card: a frame with the profile's `card` variant, its children stacked and its own height.
@@ -130,7 +130,8 @@ def shell(ctx: Context) -> Accrete:
             nav_bundle("About", GO_ABOUT),
             nav_bundle("Walkthrough", GO_DEMO),
             nav_bundle("Chat", GO_CHAT),
-            grid={"grid-template-columns": "1fr auto auto auto auto", "gap": "8px", "align-items": "center"},
+            nav_bundle("Counter", GO_COUNTER),
+            grid={"grid-template-columns": "1fr auto auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
         h.frame(
@@ -383,6 +384,7 @@ def on_archive(ctx, frame) -> None:
 @app.on(slots(GO_ABOUT.name))
 @app.on(slots(GO_DEMO.name))
 @app.on(slots(GO_CHAT.name))
+@app.on(slots(GO_COUNTER.name))
 def on_go(ctx, frame) -> None:
     """A submit that moves the client: the new structure and the new path marker."""
     ctx.go(GO[frame["dest"]])
@@ -416,7 +418,7 @@ def status(request: Request) -> Response:
 
 # The two pages that live in their own modules: importing them is what declares their routes on this
 # app (they need `app` to exist, which is why the imports are here and not at the top).
-from . import demo_chat  # noqa: E402
+from . import demo_chat, demo_counter  # noqa: E402
 from .demo import page as walkthrough  # noqa: E402
 
 # Each page declares its own route and uplinks in its own `register`: the module is the page, and the
@@ -424,6 +426,7 @@ from .demo import page as walkthrough  # noqa: E402
 # page module must not import the app — under `python3 -m examples.en.demo_app` the app module runs as
 # `__main__`, and `from .demo_app import app` would build a second copy of it.)
 demo_chat.register(app, slots)
+demo_counter.register(app)
 walkthrough.register(app)
 walkthrough.install(app)
 

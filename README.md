@@ -275,6 +275,8 @@ Each tree is one page per file:
 demo_app.py     the app, its shell, `/` (the vocabulary, as cards) and `/about`; `/status`
 demo_slots.py   every name the app speaks, in one Protocol (the editor's view of them)
 demo_chat.py    "/chat" — a conversation per connection, streamed, stoppable, refusable
+demo_counter.py "/counter" — the API on the most ordinary page there is: a number, three buttons, an
+                input, a capped history; state per connection, handlers as closures
 demo/page.py    "/demo" — fluxen's own walkthrough, played by a floating button
 demo/scene.py   the walkthrough's text, chart specs and graph
 chat_model.py   the model seam: `Scripted` (offline) or an OpenAI-compatible SSE client
@@ -311,6 +313,17 @@ def home_page(ctx, match):
         slots.rows.append(row_node(...))
 
     ctx.page(b.frame(b.input(sink=echo), b.button("加一行", sink=add_row), b.text(source=slots.echo)))
+```
+
+A slot holds a node, and most slots hold one *value* — a number, a line of text. That decision is a
+**view**, declared once beside the page, so the writes take values and the node's id and variant are
+written in one place:
+
+```python
+app.view("counter.count", lambda value: h.text(str(value), variant="heading-1", id="counter-value"))
+
+slots.count.set(3)              # the view makes the node
+slots.count.set(h.text("3"))    # already a node: goes through untouched
 ```
 
 `@app.on(slot)` stays for the landing points whose name must exist before any page is drawn: a slot

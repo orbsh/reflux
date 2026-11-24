@@ -28,7 +28,7 @@ from typing import Any, Protocol
 from reflux.app import Context
 from reflux.slots import Slot
 
-__all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_DEMO", "GO_HOME", "slots_of", "table"]
+__all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_COUNTER", "GO_DEMO", "GO_HOME", "slots_of", "table"]
 
 
 class _Row(Protocol):
@@ -56,6 +56,7 @@ class _Go(Protocol):
     about: Slot
     demo: Slot
     chat: Slot
+    counter: Slot
 
 
 class DemoSlots(Protocol):
@@ -100,7 +101,13 @@ def table(app: Any) -> DemoSlots:
 
 
 # Where a navigation form sends the client. The frame's `dest` is the target's name.
-GO_HOME, GO_ABOUT, GO_DEMO, GO_CHAT = (
-    Slot("go.home"), Slot("go.about"), Slot("go.demo"), Slot("go.chat"),
+GO_HOME, GO_ABOUT, GO_DEMO, GO_CHAT, GO_COUNTER = (
+    Slot("go.home"), Slot("go.about"), Slot("go.demo"), Slot("go.chat"), Slot("go.counter"),
 )
-GO = {GO_HOME.name: "/", GO_ABOUT.name: "/about", GO_DEMO.name: "/demo", GO_CHAT.name: "/chat"}
+GO = {
+    GO_HOME.name: "/",
+    GO_ABOUT.name: "/about",
+    GO_DEMO.name: "/demo",
+    GO_CHAT.name: "/chat",
+    GO_COUNTER.name: "/counter",
+}
