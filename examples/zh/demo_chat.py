@@ -37,9 +37,9 @@ from .demo_slots import DemoSlots, slots_of
 
 __all__ = ["Chat", "MAX_CHARS", "OpenAI", "Scripted", "Turn", "WINDOW", "page", "prompt_of", "register", "send", "settings", "stream"]
 
-TEXT_VALUE = "/source/default"  # pointer into a text node stored in a slot
-MAX_CHARS = 4096  # an application limit, not a wire limit
-WINDOW = 12  # turns of context the model sees; older ones are dropped
+TEXT_VALUE = "/source/default"  # 指向槽里那个文本节点的指针
+MAX_CHARS = 4096  # 应用的限制，不是 wire 的限制
+WINDOW = 12  # 模型看得到的上下文轮数；更旧的丢掉
 
 
 @dataclass
@@ -64,9 +64,9 @@ class Chat:
     window: int = WINDOW
     delay: float = 0.0
     turns: list[Turn] = field(default_factory=list)
-    trimmed: int = 0  # turns dropped out of the window, counted for the status line
-    total: int = 0  # turns ever recorded, so the reader can see the difference
-    seq: int = 0  # reply counter: slot and row names
+    trimmed: int = 0  # 掉出窗口的轮数，供状态行计数
+    total: int = 0  # 一共记录过多少轮，读者才看得出差别
+    seq: int = 0  # 回答计数器：槽名与行名
     busy: bool = False
     stop: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -111,7 +111,7 @@ def page(ctx: Context, match) -> None:
     """
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
-        ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
+        ctx.data["status_seeded"] = True  # 槽比一次 create 活得久：再种一遍就重复了
         slots.status.set(b.text("就绪"))
     ctx.page(
         b.frame(
@@ -180,9 +180,9 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
         seq = chat.seq
 
     chat.record("user", text)
-    context = list(chat.turns)  # a snapshot: the window may move while the model is answering
-    reply = ctx.slot(f"reply.{seq}")  # a path, because each answer gets its own plane
-    with ctx.turn():  # the client sees the two rows, the empty bubble and the status at once
+    context = list(chat.turns)  # 一份快照：模型作答时窗口可能已经动了
+    reply = ctx.slot(f"reply.{seq}")  # 一个路径，因为每次回答有自己的平面
+    with ctx.turn():  # 客户端同时看到这两行、空气泡和状态
         slots.messages.append(row(b.text(text), id=f"row-user-{seq}"))
         slots.messages.append(row(b.text(source=reply), id=f"row-bot-{seq}"))
         reply.set(b.text(""))
@@ -203,7 +203,7 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
             reply.patch(TEXT_VALUE, chunk, op="append")
             if chat.delay:
                 time.sleep(chat.delay)
-    except Exception as exc:  # a model is a remote system: its failure is data, not control flow
+    except Exception as exc:  # 模型是远端系统：它的失败是数据，不是控制流
         failure = exc
     finally:
         with chat.lock:

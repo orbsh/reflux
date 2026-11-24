@@ -18,6 +18,8 @@ from examples.zh import demo_app as zh_app
 from tests.fakes import page_nodes
 
 CJK = re.compile(r"[\u4e00-\u9fff]")
+ANY = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")  # CJK text or punctuation
+WORD = re.compile(r"[A-Za-z]{3,}")  # a run of letters, i.e. an English word
 PAGES = ("/", "/about", "/chat", "/demo")
 
 
@@ -57,6 +59,20 @@ def texts(nodes: list[dict]) -> list[str]:
         walk(node.get("children") or [])
 
     walk(nodes)
+    return out
+
+
+def comments(path: Path) -> list[tuple[int, str]]:
+    """Every comment in a file, full-line or trailing — the prose a reader also reads."""
+    out: list[tuple[int, str]] = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        cut = line.find("#")
+        if cut < 0:
+            continue
+        body = line[cut:]
+        if body.startswith(("# noqa", "# type:", "#!")):
+            continue  # a directive, not prose
+        out.append((number, body))
     return out
 
 
@@ -103,16 +119,18 @@ class Sources(unittest.TestCase):
         root = Path(package.__file__).parent
         return sorted(p for p in root.rglob("*.py") if "__pycache__" not in p.parts)
 
-    def test_the_chinese_tree_speaks_chinese_in_its_docstrings(self) -> None:
-        # A docstring is prose for the reader of that tree: in `examples/zh/` it is Chinese, in
-        # `examples/en/` it is English (the case below). Identifiers and wire words stay as they are.
+    def test_the_chinese_tree_speaks_chinese_in_its_docstrings_and_comments(self) -> None:
+        # Docstrings and comments are prose for the reader of that tree: in `examples/zh/` they are
+        # Chinese, in `examples/en/` English (the case below). Identifiers and wire words stay as
+        # they are, so a line is judged by whether it contains any Chinese at all — a path list in a
+        # comment (`# /、/about`) counts, a sentence of English does not.
         import examples.zh as package
 
         for path in self.tree(package):
-            for number, body in docstrings(path):
-                if not CJK.search(body):
+            for number, body in docstrings(path) + comments(path):
+                if WORD.search(body) and not ANY.search(body):
                     self.fail(
-                        f"{path.relative_to(Path.cwd())}:{number} has an English docstring: {body[:70]}"
+                        f"{path.relative_to(Path.cwd())}:{number} is not Chinese: {body.strip()[:70]}"
                     )
 
     def test_the_english_tree_carries_no_chinese(self) -> None:

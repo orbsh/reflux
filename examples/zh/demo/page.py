@@ -68,9 +68,9 @@ __all__ = [
     "state",
 ]
 
-# ---- the module hosts this page draws with ------------------------------------------------------
+# ---- 这一页画图用的模块宿主 -------------------------------------------
 
-HERE = Path(__file__).resolve().parents[2]  # the repository root: examples/demo/ is two levels down
+HERE = Path(__file__).resolve().parents[2]  # 仓库根：examples/zh/demo/ 在下面两级
 VENDOR = HERE / "www" / "static" / "vendor"
 ASSETS = Path(
     os.environ.get("REFLUX_ASSETS", HERE.parent / "fluxen" / "examples" / "renderer" / "assets")
@@ -97,8 +97,8 @@ CHART = _find("g2chart", "index.js")
 VIEWER = _find("3dbrowser", "index.js")
 SPLAT = _find("splatviewer", "index.js")
 EDITOR = _find("editor", "index.js")
-# The editor module loads its own `../monaco/vs/…` and there is no `index.js` in that tree — the
-# loader's entry is `vs/loader.js`, which is what the probe names.
+# 编辑器模块自己加载 `../monaco/vs/…`，那棵树里没有 `index.js` —— 加载器的
+# 入口是 `vs/loader.js`，探针命名的就是它。
 MONACO = _find("monaco", "vs")
 
 MOUNTS: dict[str, Any] = {
@@ -109,8 +109,8 @@ MOUNTS: dict[str, Any] = {
     "/assets/monaco": MONACO,
 }
 
-# What the page can draw, asked once: a directory that is not on disk mounts nothing and its URL
-# answers 404, so `/status` reports this and a reader can tell a missing file from a blank page.
+# 这一页能画什么，只问一次：不在磁盘上的目录什么都不挂，它的 URL 答 404，
+# 所以 `/status` 报这一项，读者能分辨"文件缺了"和"页面是空的"。
 PRESENT: dict[str, bool] = {
     "chart": CHART is not None,
     "viewer": VIEWER is not None,
@@ -132,10 +132,10 @@ def install(app: Any) -> None:
             app.mount(path, where)
 
 
-# ---- the names ----------------------------------------------------------------------------------
+# ---- 名字 -----------------------------------------------------------------
 
-# The page's four uplinks. A name is a slot and an uplink at once (ADR 0023): the rail's `sink` is
-# `PIN`, and the handler that answers it is registered under the same name.
+# 这一页的四条上行。一个名字既是槽又是上行（ADR 0023）：轨道的 `sink` 就是
+# `PIN`，而回答它的处理器也注册在同一个名字下。
 TOGGLE = Slot("demo.toggle")
 PIN = Slot("demo.pin")
 SAVE = Slot("demo.save")
@@ -149,20 +149,20 @@ class Walkthrough(Protocol):
     `s.stream`，而不是写字符串。
     """
 
-    graph: Slot  # the left column's forcegraph
-    stream: Slot  # the right column's row
-    pins: Slot  # what a drag landed on the rail
-    control: Slot  # the floating button's node
-    beat: Slot  # which beat is running
-    echo: Slot  # the app's answer to the last uplink
-    analytics: Slot  # the intro paragraph
-    trend: Slot  # the 30-day chart spec
+    graph: Slot  # 左列的关系图
+    stream: Slot  # 右列的那一行
+    pins: Slot  # 拖到轨道上落地的东西
+    control: Slot  # 浮动按钮那个节点
+    beat: Slot  # 正走到哪一拍
+    echo: Slot  # 应用对最近一次上行的答复
+    analytics: Slot  # 引言那一段
+    trend: Slot  # 30 天那张图的 spec
     radar_rd: Slot
     radar_mkt: Slot
     radar_ops: Slot
     summary: Slot
-    review_form: Slot  # the table + the form, one node so they arrive in one turn
-    review_rows: Slot  # the table's rows
+    review_form: Slot  # 表与表单：一个节点，所以它们一次到场
+    review_rows: Slot  # 表里的行
     say_car: Slot
     intro_car: Slot
     say_shoe: Slot
@@ -170,7 +170,7 @@ class Walkthrough(Protocol):
     say_patch: Slot
     patch_code: Slot
     say_graph: Slot
-    toggle: Slot  # == TOGGLE: the rail's and the button's sink
+    toggle: Slot  # == TOGGLE：轨道的和按钮的 sink
     pin: Slot
     save: Slot
     review: Slot
@@ -184,9 +184,9 @@ def slots_of(ctx: Context) -> "Walkthrough":
 
 PAGE = "/demo"
 ROW_ID = "demo-row"
-TEXT_VALUE = "/source/default"  # pointer into a text node stored in a slot
-TREND_DATA = "/source/default/data"  # pointer into the trend spec's rows
-PIN_TAG = "snippet"  # the rail only takes cargo tagged this way (ADR 0034)
+TEXT_VALUE = "/source/default"  # 指向槽里那个文本节点的指针
+TREND_DATA = "/source/default/data"  # 指向折线 spec 各数据行的指针
+PIN_TAG = "snippet"  # 轨道只收这样打 tag 的货物（ADR 0034）
 
 
 @dataclass
@@ -194,9 +194,9 @@ class Settings:
     """故事说得多快 —— 部署的选择，从命令行填。
     """
 
-    pace: float = 0.03  # seconds per typewriter chunk (3 characters)
-    hold: float = 0.35  # seconds between beats
-    day: float = 0.12  # seconds per appended day on the trend
+    pace: float = 0.03  # 每个打字机块几秒（每块 3 个字符）
+    hold: float = 0.35  # 拍与拍之间几秒
+    day: float = 0.12  # 折线每追加一天几秒
 
 
 settings = Settings()
@@ -210,11 +210,11 @@ class Run:
     回答不同，而按钮必须知道自己处在哪一种。
     """
 
-    phase: str = "idle"  # idle | playing | paused | done
-    beat: int = 0  # 1-based index of the beat on screen; 0 = nothing drawn yet
+    phase: str = "idle"  # 阶段：idle | playing | paused | done
+    beat: int = 0  # 屏幕上那一拍的序号（从 1 起）；0 = 还没画
     label: str = ""
     revealed: set[str] = field(default_factory=lambda: set(scene.GRAPH_SEED))
-    resume: threading.Event = field(default_factory=threading.Event)  # set = the script may speak
+    resume: threading.Event = field(default_factory=threading.Event)  # 置位 = 剧本可以说话
 
 
 def state(ctx: Context) -> Run:
@@ -227,10 +227,10 @@ def state(ctx: Context) -> Run:
     return run
 
 
-# ---- the page -------------------------------------------------------------------------------
+# ---- 页面 ---------------------------------------------------------------
 
-# The floating control's box. `style` is written inline by the frame itself, so position is the
-# page's to say; `border: var(--border)` is a shorthand token and must not be spelled out.
+# 浮动控件的盒子。`style` 由 frame 自己内联写出，所以位置由页面说；
+# `border: var(--border)` 是简写词元，不能摊开拼。
 FLOAT = {
     "position": "fixed",
     "right": "24px",
@@ -243,14 +243,14 @@ FLOAT = {
     "box-shadow": "0 0.5rem 1.5rem rgba(0, 0, 0, 0.18)",
 }
 
-# The page is exactly one window tall, and it says so in the window's own units. `height: 100%` has
-# nothing to resolve against here: a page is mounted into a node the renderer sizes by its content
-# (`#page-root`, `flex: 1 0 auto`), so a percentage of it is a percentage of the page itself. The 83 px
-# is the shell around this page as measured — two 16 px paddings, the 12 px gap and the 39 px nav row.
+# 这一页正好一个窗口高，而且用窗口自己的单位这么说。`height: 100%` 在这里
+# 没有可解析的对象：页面被挂进一个由内容定尺寸的节点（`#page-root`，
+# `flex: 1 0 auto`），所以它的百分比就是页面自己的百分比。83 px 是这一页外面
+# 那个外壳的实测值 —— 两个 16 px 内边距、12 px 间隙、39 px 的导航行。
 WINDOW = "calc(100vh - 97px)"
 
-# The landing zone: a strip inside the stream column's right edge, over the page and not in it —
-# a drag must not move what is under the pointer.
+# 落区：消息列右边缘里的一条带，压在页面上而不在页面里 ——
+# 拖拽不能移动指针下面的东西。
 RAIL = {
     "position": "absolute",
     "top": "0",
@@ -290,7 +290,7 @@ def page(ctx: Context, match: Match) -> None:
         s.echo.set(b.text(""))
     ctx.page(
         b.frame(
-            b.frame(  # the left column: one region, one slot
+            b.frame(  # 左列：一个区，一个槽
                 b.forcegraph(
                     source=s.graph,
                     width="100%",
@@ -302,11 +302,11 @@ def page(ctx: Context, match: Match) -> None:
                 style={"min-height": "0", "min-width": "0"},
                 id="demo-graph",
             ),
-            b.frame(  # the right column: what landed, the stream, and the app's answers
+            b.frame(  # 右列：落下的东西、消息流、应用的答复
                 b.tiles(source=s.pins, dir="row", wrap="wrap", id="pins"),
-                # The stream scrolls inside its own box: the row it holds is taller than any window,
-                # and a page that grows with it drags the graph's canvas along (measured: a 3.9k-tall
-                # forcegraph next to a 600-wide stream).
+                # 消息流在自己的盒子里滚动：它装的那一行比任何窗口都高，
+                # 而跟着它一起长的页面会把关系图的画布拖走（实测：3.9k 高的
+                # forcegraph 挨着 600 宽的消息流）。
                 b.frame(
                     b.tiles(source=s.stream, id="stream"),
                     grid={"grid-template-rows": "1fr"},
@@ -319,7 +319,7 @@ def page(ctx: Context, match: Match) -> None:
                 style={"min-height": "0", "min-width": "0", "position": "relative", "padding-right": "18px"},
                 id="demo-stream-column",
             ),
-            b.frame(  # the control region: fixed to the window, drawn once
+            b.frame(  # 控制区：固定在窗口上，只画一次
                 b.frame(source=s.control, id="demo-control"),
                 b.text(source=s.beat, variant="muted", id="demo-beat"),
                 grid={"grid-template-columns": "auto auto", "gap": "10px", "align-items": "center"},
@@ -333,7 +333,7 @@ def page(ctx: Context, match: Match) -> None:
     )
 
 
-# ---- the row --------------------------------------------------------------------------------
+# ---- 这一行 -------------------------------------------------------------
 
 def band(*children: Accrete, rows: str, columns: str | None = None, id: str) -> Accrete:
     """一个无边框容器，给它的图表一个确定的尺寸（ADR 0009）。
@@ -401,8 +401,8 @@ REVIEW_FIELDS = [
     {"key": "note", "title": "备注"},
 ]
 
-# What each field kind is called on screen — the wire's `number` / `bool` / `text` are the
-# renderer's words, and a reader's are these.
+# 每种字段在屏幕上叫什么 —— wire 的 `number` / `bool` / `text` 是渲染器的词，
+# 读者的词是下面这些。
 KINDS = {"number": "数字", "bool": "勾选", "text": "文本"}
 
 
@@ -430,8 +430,8 @@ def review_form(s: Demo) -> Accrete:
     `{zw, cj, sy}`，每行一个值，不管那一行那格是什么类型。
     """
     return b.bundle(
-        # One vertical box: a bundle is a flex row, so its children side by side squeeze the prose
-        # into a column of single words (measured) — the layout inside is the page's to say.
+        # 一个竖盒子：bundle 是一行 flex，子节点并排会把散文挤成一列单词（实测）——
+        # 里面的排法是页面的事。
         b.frame(
             b.text(
                 "复核：上表是本轮的数据（行从槽里来），下面三格各自改一个值再提交 —— "
@@ -468,7 +468,7 @@ def review_form(s: Demo) -> Accrete:
     )
 
 
-# ---- the beats ------------------------------------------------------------------------------
+# ---- 各拍 ---------------------------------------------------------------
 
 def payload(value: Any) -> Accrete:
     """一个槽的值，不带任何结构：一个 `frame`，它的 `source.default` **就是**载荷。
@@ -488,7 +488,7 @@ def hold(run: Run, seconds: float) -> None:
     left = seconds
     while left > 0:
         if not run.resume.is_set():
-            run.resume.wait()  # paused: block until the button says otherwise
+            run.resume.wait()  # 暂停：阻塞到按钮改口
         span = min(left, 0.05)
         time.sleep(span)
         left -= span
@@ -519,10 +519,10 @@ def grow(run: Run, s: Demo, label: str) -> None:
 def beat_row(ctx: Context, run: Run, s: Demo) -> None:
     """那一行、它将被写进去的六个文本槽，和图的第一个快照。
     """
-    with ctx.turn():  # the reader sees the box and its empty segments arrive together
+    with ctx.turn():  # 盒子与它空着的几段一起到场，读者看得见
         s.stream.append(row(s))
         for slot in (s.analytics, s.summary, s.say_car, s.say_shoe, s.say_patch, s.say_graph):
-            slot.set(b.text(""))  # a patch needs a node to append into
+            slot.set(b.text(""))  # 追加需要一个能装东西的节点
         s.graph.set(payload(scene.graph_payload(run.revealed)))
 
 
@@ -553,7 +553,7 @@ def beat_summary(ctx: Context, run: Run, s: Demo) -> None:
 
 
 def beat_review(ctx: Context, run: Run, s: Demo) -> None:
-    with ctx.turn():  # the table arrives complete: its frame and its three rows together
+    with ctx.turn():  # 表一次到齐：它的 frame 和三行一起
         s.review_form.set(review_form(s))
         for key, _kind, initial, *cells in scene.REVIEW:
             s.review_rows.append(review_row(key, initial, *cells))
@@ -603,7 +603,7 @@ BEATS: tuple[tuple[str, Callable[[Context, Run, Demo], None]], ...] = (
 )
 
 
-# ---- the player -----------------------------------------------------------------------------
+# ---- 播放器 -------------------------------------------------------------
 
 def spawn(target: Callable[..., None], args: tuple) -> None:
     """把剧本放上线程。模块级的一个接缝，好让测试改成同步执行。
@@ -618,13 +618,13 @@ def play(ctx: Context) -> None:
     s: Walkthrough = slots_of(ctx)
     try:
         for index, (label, step) in enumerate(BEATS, start=1):
-            run.resume.wait()  # a paused script does not start the next beat
+            run.resume.wait()  # 暂停的剧本不会开始下一拍
             run.beat, run.label = index, label
             s.beat.set(b.text(f"{index}/{len(BEATS)} · {label}"))
             step(ctx, run, s)
             grow(run, s, label)
             hold(run, settings.hold)
-    except Exception as failure:  # a demo's defect is a line on screen, not a dead thread
+    except Exception as failure:  # 演示里的缺陷是屏幕上的一行字，不是一条死掉的线程
         run.phase = "done"
         s.control.set(control("↻ 重播"))
         s.beat.set(b.text(f"出错：{type(failure).__name__} · {failure}"))
@@ -722,7 +722,7 @@ def on_review(ctx: Context, frame: dict) -> None:
     s.echo.set(b.text(f"复核已提交：{packed}"))
 
 
-# ---- what an app does with this page --------------------------------------------------------------
+# ---- 一个应用拿这一页做什么 ---------------------------------------------
 
 def register(app: Any) -> None:
     """把这一页挂到应用上：它的路由，和页面所说的那些名字下的四个处理器。

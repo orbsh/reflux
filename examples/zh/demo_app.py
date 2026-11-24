@@ -59,7 +59,7 @@ from . import demo_slots
 from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_DEMO, GO_HOME, DemoSlots, slots_of
 
 
-# A card: a frame with the profile's `card` variant, its children stacked and its own height.
+# 一张卡片：带 profile `card` 变体的 frame，子节点竖排，高度由自己撑。
 CARD = {"grid-auto-rows": "auto", "gap": "10px", "align-content": "start"}
 
 
@@ -83,7 +83,7 @@ def row_node(row: dict) -> Accrete:
     两个 frame 说明这一行怎么分：bundle 是一行 flex，条目都长，于是货物拿走宽度（`flex: 1 1 auto`），
     而 ✕ 保持自己的尺寸，并在它没占满的高度里居中。
     """
-    # `remove` is a verb on a slot, so this name is written with the subscript.
+    # `remove` 在槽上是动词，所以这个名字要用下标写。
     return b.bundle(
         b.frame(b.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
@@ -135,9 +135,9 @@ def shell(ctx: Context) -> Accrete:
         ),
         grid={"grid-template-rows": "auto 1fr", "gap": "16px", "height": "100vh",
               "padding": "18px 24px", "box-sizing": "border-box"},
-        # `width: 100%` would resolve against `#main`, which is a flex item sized by its content —
-        # so a narrow page would hand the shell a narrow width and the header would shrink with it.
-        # The window's own units are the way out (`main.css` prints exactly this failure).
+        # `width: 100%` 会对着 `#main` 解析，而它是按内容定尺寸的 flex 条目 ——
+        # 于是窄页面会把一个窄宽度交给外壳，页头跟着一起缩。
+        # 出路是用窗口自己的单位（`main.css` 里印的就是这个失败）。
         style={"width": "min(1240px, 100vw)", "margin": "0 auto"},
         id="shell",
     )
@@ -168,19 +168,19 @@ def demo_verify(ctx, credentials, mode):
     这就是一次部署要写的全部认证 —— `mode` 是 `login` 或 `signup`，所以创建账号的应用在这里决定这件事。
     密码被核对完就丢掉；这个模块里没有任何地方存它、记它、画它。
     """
-    del ctx, mode  # the demo has no roles and no second kind of account
+    del ctx, mode  # 这个演示没有角色，也没有第二种账号
     if credentials.get("user") == "ada" and credentials.get("pass") == "pw":
         return "user-ada"
     return None
 
 
-# The app itself. It is a module-level declaration so that a handler can be declared where it is
-# written (`@app.on(...)` above it) — the same sugar `@route` uses above the pages.
+# 应用本体。写成模块级声明，是为了处理器可以写在它所在的地方（上面的
+# `@app.on(...)`）—— 与 `@route` 用在页面上方是同一套糖。
 app = App(routes=Routes(), auth=Auth(verify=demo_verify, view=demo_view), shell=shell)
 
-# The app's own table, typed: `@app.on(slots.name.change)` completes, and a name that is not in
-# `DemoSlots` is an error rather than a handler nothing ever sends to. `ctx.slot` is this table with
-# a device attached; `slots_of(ctx)` is where a write comes from.
+# 应用自己的表，带类型：`@app.on(slots.name.change)` 有补全，而不在
+# `DemoSlots` 里的名字是错误，不是一个永远没人发的处理器。`ctx.slot` 是
+# 这张表挂上设备；写入来自 `slots_of(ctx)`。
 slots: DemoSlots = demo_slots.table(app)
 
 
@@ -201,8 +201,7 @@ def home_page(ctx, match):
                 b.text("演示", variant="heading-1"),
                 b.text("这个应用只用 SDK 写出来：回声、列表、表单、拖拽，加三条路由。", variant="muted"),
                 grid={"grid-template-rows": "auto auto"},
-                # The title is a grid item too: it spans both columns, so the two columns of
-                # cards start under it instead of beside it.
+                # 标题也是个 grid 条目：它横跨两列，所以两列卡片从它下面开始，而不是在它旁边。
                 style={"grid-column": "1 / -1"},
                 id="home-title",
             ),
@@ -228,10 +227,9 @@ def home_page(ctx, match):
                     b.bundle(b.button("加一行", sink=slots.row.add), sink=slots.row.add,
                              submit=["button"], id="add-row"),
                     b.tiles(source=slots.rows, id="rows"),
-                    # The landing point names its event and what it accepts; `accept` is one tag
-                    # (or any), so cargo of another tag is refused without a frame — and a
-                    # landing without a `sink` is a load error, which is why the two come
-                    # together.
+                    # 落点说出它的事件和它收什么；`accept` 是一个 tag（或 any），所以别的 tag 的
+                    # 货物不发一帧就被拒 —— 而一个没有 `sink` 的落点是加载错误，所以这两样
+                    # 总是成对出现。
                     b.frame(
                         b.text("拖一行到这里归档"),
                         accept={"tag": "row"},
@@ -255,8 +253,8 @@ def home_page(ctx, match):
                     "这张表单说的是框架的动词 `reflux:login`：应用只写 verify 和 view，密码它从来读不到。",
                     variant="muted",
                 ),
-                # Two fields stacked beside the button: a bundle is a flex row, so the column is
-                # a frame inside it and the press stays a child of the bundle it belongs to.
+                # 两个字段竖着排在按钮旁边：bundle 是一行 flex，所以这一列是它里面的一个
+                # frame，而那次按下仍是它所属 bundle 的子节点。
                 b.bundle(
                     b.frame(
                         b.input(tag="user", id="f-user"),
@@ -274,7 +272,7 @@ def home_page(ctx, match):
                     id="login",
                 ),
                 b.frame(source=slots(AUTH_SLOT), id="auth-region"),
-                # Behind a declaration: a click here from a visitor never reaches the handler.
+                # 在一句声明后面：访客在这里的点击永远到不了处理器。
                 b.bundle(b.button("私密", sink=slots("vault.secret")),
                          sink=slots("vault.secret"), submit=["button"], id="vault"),
                 b.text(source=slots.secret, id="secret"),
@@ -284,8 +282,8 @@ def home_page(ctx, match):
                 variant="card",
                 id="card-login",
             ),
-            # The footnote is a grid item too, and it spans: a text node has no style, so the
-            # node that carries the placement is a frame around it.
+            # 脚注也是 grid 条目，而且横跨：文本节点没有样式，所以承载位置的是套着它的
+            # 一个 frame。
             b.frame(
                 b.text(
                     "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构"
@@ -301,15 +299,15 @@ def home_page(ctx, match):
         ),
     )
 
-    # A slot outlives a `create` (the tree is replaced, the data planes are not), so the rows are
-    # seeded once per connection — on the second visit appending them again would double them. It is
-    # a send like any other, which is why it is `ctx.slot.rows.append(...)` and not part of the tree.
+    # 槽活得比一次 `create` 长（树被替换，数据面不会），所以这些行每条连接只种一次 ——
+    # 第二次进来再追加一遍就会翻倍。它和别的写入一样是一次发送，所以是
+    # `ctx.slot.rows.append(...)`，而不是树的一部分。
     if not ctx.data.get("rows_seeded"):
         ctx.data["rows_seeded"] = True
         for row in state.rows:
             slots_of(ctx).rows.append(row_node(row))
     # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
-    # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
+    # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
         slots_of(ctx).secret.set(b.text(""))
 
@@ -325,11 +323,11 @@ def about_page(ctx, match):
     )
 
 
-# --- handlers: change the app's data, push exactly that change ---------------------------------
+# --- 处理器：改应用的数据，只推那一处改动 ------------------------------------------
 
 @app.on(slots.name.change)
 def on_name(ctx, frame) -> None:
-    # An `input` uplinks its value alone (no wrapper): the frame's `data` is the string.
+    # 一个 `input` 上行时只带值（没有包装）：帧的 `data` 就是那个字符串。
     state.echo = frame["data"] if isinstance(frame["data"], str) else ""
     slots_of(ctx).echo.set(b.text(state.echo))
 
@@ -342,9 +340,9 @@ def on_add(ctx, frame) -> None:
     slots_of(ctx).rows.append(row_node(row))
 
 
-@app.on(slots.row["remove"])  # `remove` is a verb: the name goes by subscript
+@app.on(slots.row["remove"])  # `remove` 是动词：这个名字要用下标访问
 def on_remove(ctx, frame) -> None:
-    row_id = frame.get("id")  # the row's form carried its identity up
+    row_id = frame.get("id")  # 这一行的表单把它的身份带了上来
     state.rows = [row for row in state.rows if row["id"] != row_id]
     slots_of(ctx).rows.remove(row_id)
 
@@ -406,13 +404,12 @@ def status(request: Request) -> Response:
     )
 
 
-# The two pages that live in their own modules: importing them is what declares their routes on this
-# app (they need `app` to exist, which is why the imports are here and not at the top).
+# 住在各自模块里的两页：导入它们就是在这个应用上声明它们的路由（它们需要
+# `app` 已存在，所以这两行 import 放在这里而不是文件顶部）。
 from . import demo_chat  # noqa: E402
 from .demo import page as walkthrough  # noqa: E402
 
-# The walkthrough page brings its own four uplinks and the module hosts it draws with; the chat page
-# declares its two where it declares the page.
+# 走查页自带四条上行和它画图用的模块宿主；对话页在它声明页面的地方声明它那两条。
 walkthrough.register(app)
 walkthrough.install(app)
 demo_chat.register(app, slots)

@@ -66,14 +66,14 @@ class DemoSlots(Protocol):
         一个名字空间：一帧上行的 sink 和回答它的处理器就是同一个名字。
     """
 
-    echo: Slot  # what the input last carried
-    rows: Slot  # the list the tiles node reads
-    archived: Slot  # what the last drop archived — a text slot, written by the dock's handler
-    secret: Slot  # only a signed-in click writes it; every anonymous draw clears it
-    routes: Slot  # the shell's reader — where the page is written
+    echo: Slot  # 输入框最后带来的是什么
+    rows: Slot  # tiles 节点读的那个列表
+    archived: Slot  # 最近一次落点归档了什么 —— 文本槽，由落点处理器写
+    secret: Slot  # 只有已登录的点击才写；每次匿名绘制都清掉
+    routes: Slot  # 外壳的读槽 —— 页面写在这里
 
-    messages: Slot  # the chat page's transcript — a list slot, appended to per bubble
-    status: Slot  # the chat page's status line
+    messages: Slot  # 对话页的记录 —— 列表槽，一条气泡追加一次
+    status: Slot  # 对话页的状态行
 
     name: _Change
     row: _Row
@@ -81,9 +81,9 @@ class DemoSlots(Protocol):
     go: _Go
     chat: _Chat
 
-    def __call__(self, path: str) -> Slot: ...  # `reflux:login`, `reflux:logout`, `reflux:auth`
+    def __call__(self, path: str) -> Slot: ...  # `reflux:login`、`reflux:logout`、`reflux:auth`
 
-    # (the login form's answer is the framework's: it lands in the reserved `auth` region)
+    #（登录表单的答复是框架的：落在保留的 `auth` 区）
 
 
 def slots_of(ctx: Context) -> DemoSlots:
