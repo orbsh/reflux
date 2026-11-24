@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "SizeAttr", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "Bind", "BundleAttr", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Bundle", "Entry", "Frame", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SizeAttr", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "Bind", "BundleAttr", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Bundle", "Entry", "Frame", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -36,7 +36,7 @@ class ClassAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
     horizontal: bool | None = Field(
         None,
-        description='容器自身的排布方向（同 FrameAttr 字段；ADR 0010 缺陷修复：\n此前只有 Case 认识 horizontal，select/rack 的 col 类无法被\n自己的 attrs 推翻——父 case 的 horizontal 只管父 div）。',
+        description="The container's own layout direction (same field as FrameAttr; ADR 0010 defect fix:\npreviously only Case knew about horizontal, so the col class of select/rack could not be\noverridden by its own attrs — the parent case's horizontal only governed the parent div).",
     )
     selector: str | None = None
 
@@ -130,7 +130,7 @@ class LinkShape1(Enum):
 class LinkShape(RootModel[LinkShape1 | Literal['axes'] | Literal['tetra']]):
     root: LinkShape1 | Literal['axes'] | Literal['tetra'] = Field(
         ...,
-        description='图渲染器的旋钮。语义与 canvas 的 `options` 同级：挂载期配置，改它要\n重新挂载（不进 update 腿）。区别只在于这是自家渲染器的词表，所以可以\n类型化、可以被 schema 和 patch 校验。\n边的走向。两种朝向都是"节点上的接口"：连线从一个朝向离开，再从另一端的\n朝向进入，中间用三次曲线接起来。',
+        description='The graph renderer\'s knobs. Same semantics as canvas\'s `options`: mount-time config, changing it takes\na remount (not on the update leg). The only difference is that this is our own renderer\'s vocabulary, so it can be\ntyped and checked by schema and by patch.\nThe direction of an edge. Both orientations are "interfaces on a node": a link leaves from one orientation and enters\nthe other end\'s orientation, joined in between by a cubic curve.',
     )
 
 
@@ -143,6 +143,12 @@ class PanelPlace(Enum):
 class PanelState(Enum):
     toggle = 'toggle'
     bound = 'bound'
+
+
+class ResetMode(Enum):
+    keep = 'keep'
+    clear = 'clear'
+    default = 'default'
 
 
 class SizeAttr(BaseModel):
@@ -199,7 +205,7 @@ class Theme1(Enum):
 class Theme(RootModel[Theme1 | Literal['dark']]):
     root: Theme1 | Literal['dark'] = Field(
         ...,
-        description='图所在的底色。两套配色只差明度：莫兰迪色低彩度，同一套色在浅底上够\n对比就会在深底上糊成一团，反之亦然。',
+        description='The ground colour the graph sits on. The two palettes differ only in lightness: Morandi colours are low-chroma, so a palette with\nenough contrast on a light ground will smear into a blur on a dark one, and vice versa.',
     )
 
 
@@ -238,7 +244,14 @@ class Bind(BaseModel):
 
 class BundleAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
+    reset: ResetMode | None = Field(
+        None, description='What the fields become after a send. Absent = `keep`.'
+    )
     selector: str | None = None
+    sends: int | None = Field(
+        None,
+        description="How many sends this bundle has: absent or `-1` = unlimited, `0` = locked from the start. Each send\ntakes one; at zero the bundle's fields are disabled and it refuses to send (ADR 0032 §5).",
+    )
     submit: SubmitSet | None = Field(
         None, description='When to send. Absent = `[enter]`.'
     )
@@ -257,69 +270,75 @@ class Canvas(BaseModel):
     id: str | None = None
     options: Any | None = Field(
         None,
-        description='模块私有选项的**动态袋**（ADR 0017）：核心不认识的渲染器配置\n（3d-force-graph 的节点/边尺寸、力参数、配色……）打包放这里，\n宿主原样交给模块的 `mount(el, data, host, options)`，一个键都不解释。\n这是"变体不进 accrete"的落点：换渲染器只换 url + options，DSL 不变。\n缺省/Null = `{}`（模块自己套默认值）；与 `url` 同一语义——挂载期配置，\n不进 update 热更新腿（改它要靠重新挂载）。',
+        description='The **dynamic bag** of module-private options (ADR 0017): renderer configuration the core\ndoes not know (3d-force-graph\'s node/link sizes, force parameters, colours…) packed up here,\nwhich the host hands to the module\'s `mount(el, data, host, options)` as it is, interpreting not one key.\nThis is where "variants do not enter accrete" lands: swapping renderers only swaps url + options, the DSL is unchanged.\nAbsent/Null = `{}` (the module applies its own defaults); same semantics as `url` — mount-time config,\nnot on the update hot-reload leg (changing it takes a remount).',
     )
     source: Bind | None = Field(
         None,
-        description='`bind["value"]`：载荷惯例与 Chart/diagram 同族——`kind: source` 指向\n具名数据槽（槽内节点的 `bind.value.default` 原始 JSON 即模块 data 区），\n流式喂数据 = 对该槽 `set`/`patch`（指针 `/bind/value/default/...`）。',
+        description='`bind["value"]`: the payload convention is kin to Chart/diagram — `kind: source` points at\na named data slot (the raw JSON of `bind.value.default` on the node in the slot is the module\'s data area),\nstreaming data in = `set`/`patch` on that slot (pointer `/bind/value/default/...`).',
     )
     url: str = Field(
         ...,
-        description='CDN 上的 ES module 地址（导出 mount/update/resize/unmount 契约）。',
+        description='The address of the ES module on the CDN (exports the mount/update/resize/unmount contract).',
     )
     type: Literal['canvas'] = 'canvas'
 
 
 class ForceGraphStyle(BaseModel):
     auto_fit: bool | None = Field(
-        True, description='首批数据后自动取景到整张图；之后的追加不重排、不飞相机。'
+        True,
+        description='After the first batch of data, fit the view to the whole graph; later appends neither re-layout nor fly the camera.',
     )
     background: str | None = None
-    charge: float | None = Field(-30.0, description='斥力，负值 = 相互推开。')
+    charge: float | None = Field(
+        -30.0, description='Repulsion; a negative value = pushing each other apart.'
+    )
     fit_padding_px: float | None = 40.0
     glow_alpha: float | None = Field(
         0.44999998807907104,
-        description='高亮节点的标记强度：光晕核心与每一圈波纹的峰值不透明度。',
+        description='Marker strength for highlighted nodes: peak opacity of the halo core and of each ripple ring.',
     )
     highlight_reach: bool | None = Field(
         True,
-        description='高亮可达路径（从选中/聚焦节点向外 `reach_hops` 条边），而不是压暗其它部分。',
+        description='Highlight the reachable path (`reach_hops` edges out from the selected/focused node) instead of dimming the rest.',
     )
     label_max_nodes: conint(ge=0) | None = Field(
         150,
-        description='超过这个节点数只画不标（标签层是逐帧投影的 DOM，量大就成噪声）。',
+        description='Above this node count draw only, no labels (the label layer is DOM projected per frame, so at volume it is noise).',
     )
     label_px: float | None = 12.0
-    labels: bool | None = Field(True, description='常显名字标签层。')
+    labels: bool | None = Field(True, description='An always-on name label layer.')
     link_distance: float | None = 30.0
     link_opacity: float | None = 0.800000011920929
     link_shape: LinkShape | None = Field(
         'straight',
-        description='边的走向：`straight` 直连；`axes` 从六个坐标朝向里取最近的一个；\n`tetra` 从正四面体的四个顶点方向里取最近的。',
+        description="Edge direction: `straight` connects directly; `axes` takes the nearest of the six coordinate orientations;\n`tetra` takes the nearest of the regular tetrahedron's four vertex directions.",
         validate_default=True,
     )
     link_strength: float | None = None
     link_width_px: float | None = 2.5
     node_size_px: float | None = Field(
         0.0,
-        description='节点基础半径（屏幕像素）。\n节点半径（屏幕像素）；0 = 由 `node_size_ratio` 推导。',
+        description='Node base radius (screen pixels).\nNode radius (screen pixels); 0 = derived from `node_size_ratio`.',
     )
     node_size_ratio: float | None = Field(
-        2.0, description='节点球直径相对边宽的倍数（默认 2）。'
+        2.0,
+        description='Multiple of the link width for the node sphere diameter (default 2).',
     )
     node_size_step_px: float | None = Field(
         0.6000000238418579,
-        description='每档权重增加的半径（屏幕像素）；档数见 `node_tiers`。',
+        description='Radius added per weight tier (screen pixels); the tier count is `node_tiers`.',
     )
     node_tiers: conint(ge=0, le=255) | None = 3
     palette: list[str] | None = Field(
         [],
-        description='节点配色，按 `kind` 轮取；空 = 用 `theme` 对应的内置莫兰迪方案。',
+        description='Node colours, taken in rotation by `kind`; empty = the built-in Morandi scheme for `theme`.',
     )
-    reach_hops: conint(ge=0) | None = Field(1, description='可达的跳数。')
+    reach_hops: conint(ge=0) | None = Field(
+        1, description='The number of reachable hops.'
+    )
     theme: Theme | None = Field(
         'dark',
-        description='底色：浅底 / 深底。只换配色与面板背景，不改布局。',
+        description='Ground: light / dark. Swaps only palette and panel background, not the layout.',
         validate_default=True,
     )
     velocity_decay: float | None = 0.4000000059604645
@@ -430,7 +449,8 @@ class ForceGraph(BaseModel):
     id: str | None = None
     source: Bind | None = None
     style: ForceGraphStyle | None = Field(
-        None, description='渲染器旋钮，全部有缺省值；缺省时不进 wire。'
+        None,
+        description='Renderer knobs, all with defaults; when default they stay off the wire.',
     )
     theme: Bind | None = Field(
         None, description='Second value: the theme channel (`true`/`"dark"`).'

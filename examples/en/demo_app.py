@@ -158,7 +158,7 @@ def demo_view(ctx, state):
         *lines,
         h.bundle(
             h.input(tag="user", id="auth-user"),
-            h.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
+            h.input(tag="pass", source=Bind(type=JsType.password), id="auth-pass"),
             h.button("Sign in", sink=slots(LOGIN)),
             sink=slots(LOGIN),
             submit=["enter", "button"],
@@ -214,8 +214,10 @@ def home_page(ctx, match):
     slots = slots_of(ctx)
 
     def echo(value: object) -> None:
-        # An `input` uplinks its value alone (no wrapper): the closure is handed that string.
-        state.echo = value if isinstance(value, str) else ""
+        # A bundle submits the object it packed: {field: value}. A frame comes from outside, so
+        # anything unrecognised becomes the empty string instead of an exception.
+        text = value.get("name") if isinstance(value, dict) else None
+        state.echo = text if isinstance(text, str) else ""
         slots.echo.set(h.text(state.echo))
 
     def add_row(value: object) -> None:
@@ -244,10 +246,11 @@ def home_page(ctx, match):
                 h.frame(
                     h.text("Echo", variant="heading-3"),
                     h.text(
-                        "An `input` uplinks its buffer on Enter; the uplink carries no wrapper, so the handler's `data` is exactly that string.",
+                        "A field's exit is the group it sits in: Enter makes the bundle send {field: value} to the "
+                        "bundle's sink, and the field's `tag` is the key.",
                         variant="muted",
                     ),
-                    h.input(sink=echo, id="name-input"),
+                    h.bundle(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
                     h.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
@@ -294,7 +297,7 @@ def home_page(ctx, match):
                 h.bundle(
                     h.frame(
                         h.input(tag="user", id="f-user"),
-                        h.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
+                        h.input(tag="pass", source=Bind(type=JsType.password), id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),

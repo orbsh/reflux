@@ -51,3 +51,26 @@
 - [x] 闭包落点：`sink=fn` / `sink=gated(fn)` 在绘制时被命名（`<路径>.<函数名>`，按函数身份去重），登记在设备上，换页换表；`@app.on` 保留给名字须先于绘制存在的情形（多来源、行的身份、框架动词、跨页事件）。参考应用首页的回声/加行/私密改成闭包，✕/落点/导航仍是名字，并在页面文案里点明界线；`tests/test_landings.py` 十例钉机制 — 2026-11-24
 - [x] 词表构造器改名 `h`（`reflux/sdk/h.py`，`from reflux.sdk import h`）：属性式 `h.frame(...)` 是人写页面的写法，`h.node(('frame', props, children))` 是数据式（元组/列表进、节点出，props 仍走构造器签名）；示例与测试 464 处调用点改名，走查页的 pin chip 改用数据式演示，`tests/test_h.py` 八例 — 2026-11-24
 - [x] 计数器页 + 槽视图：`examples/{zh,en}/demo_counter.py`（装饰器写在 `register(app)` 里、闭包落点、列表槽、状态挂 `ctx.data`、步长输入带解析）；`app.view(name, render)` 让槽写入收值（节点原样通过），`reflux/slots.py` 的 `frame()` 读这条规则；`tests/test_counter.py` 十四例 + 浏览器探针 `tools/probe_counter.py` 验一次真实点击 — 2026-11-24
+
+## 输入统一进 bundle（2026-11-24，已落地）
+
+fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把这件事做成了两条，本仓跟着落地：
+
+- **字段没有自己的出口了**（ADR 0032 §2 重写）：`tag` 是成员身份，没有 `tag` 的 `input`/`select` 不上行；字段的 `sink` 只表示**本地落点**（`scope: local`，值一变就写），`remote`/`both` 又没有 `tag` 的，渲染器记一条警告并丢掉。清空不再由字段做。
+- **组多了两件事**：`attrs.reset`（`keep` 缺省 / `clear` / `default`，发完之后字段变成什么）与 `attrs.sends`（发几次：缺省或 `-1` 不限，`0` 从第一帧就锁住）。
+
+因此本仓的决定（已定）：
+
+- **组的载荷永远是打包对象**，没有裸值特例。单字段的组发 `{tag: value}`，处理器自己取值。
+- **字段的 `tag` 拒绝，不生成**：一个带 `remote` sink 却没有 `tag` 的 `input`/`select` 是"没人收的值"，`parse()` 在构造那一行就 `ValueError`，消息里说清楚"给它一个 `tag`，把 `sink` 放到组上"。不自动从 `id` 推（那会把 UI 标识变成 wire 契约）。组自己的键仍按 `bundle_key` 回退到 `id` —— 那是嵌套组的名字，性质不同。
+- `type` 没有挪成字段属性：fluxen 保留 `Bind.type`（`sink.type` 或 `source.type`，两channel都读），所以本仓不动。
+
+落地的清单：
+
+- [x] `schema/accrete.schema.json` 同步到 fluxen 的导出（`tools/sync_schema.py --write`：`BundleAttr` +`reset` +`sends`，新增 `$defs.ResetMode`），`tools/gen_sdk.py`、`tools/gen_rust.py` 重新生成 —— `h.bundle(..., reset=…, sends=…)` 由此出现。
+- [x] `reflux/sdk/_parse.py`：`parse()` 先跑 `_check_uplinks`，拒绝"remote sink 且无 tag"的字段；本地落点（`scope: local`）仍合法，无线框的值也仍合法。
+- [x] 两棵树的独立输入进组：`demo_app.py` 的回声输入 → `h.bundle(h.input(tag="name"), sink=echo, submit=["enter"])`，`echo` 读 `value["name"]`；`demo_counter.py` 的步长输入 → 同样的组，`set_step` 读 `value["step"]`；两个处理器都只认打包对象（不认识的东西给空串/报错，不当裸值用）。
+- [x] 聊天页的发送组加 `reset="clear"`：发完输入框自己清空，这是 fluxen 这次给的能力，也是那个页面本来该有的样子。
+- [x] 测试与夹具：`tests/test_sdk_generated.py`（带 `tag` 的字段、拒绝无 `tag` 的 remote sink、本地落点仍合法）、`tests/types_fixture.py` 的 `input` 条目补 `tag`、`tests/test_counter.py` 的载荷改成 `{"step": "5"}`。
+- [x] 门与文档：t0/t2/t3/t4/t6/t7/t9/t10/chat/demo 全绿（t4 改成断言"无 `tag` 的字段回车什么都不发、也不清空"，t10 的 Rust 夹具按新签名与新页面同步）；README 的 SDK 段、`docs/DESIGN.md` 的 ADR 0032 段落写了这条规则，`gen_sdk.py --check` 在同步态。
+- [ ] **字段上的 `sink` 要删**（决定已落，实施在 fluxen）：`Input`/`Select` 仍带 `sink`，而 ADR 0032 §2 让它只剩两种借道用途——`type`（`widgets/input.rs` 的 `sink.type`，读侧 `source.type` 亦可）与"不进组字段的本地落点"（开关点击、过滤框击键）。决定与理由写在 fluxen `docs/decisions/0032-a-bundle-packs-fields.md` §2 末段（"The field's `sink` itself is going, too"，2026-11-24），工单 scratch **#470**。本仓随之要做的只有删除：`reflux/sdk/_parse.py` 的 `_check_uplinks` 与 `tests/test_sdk_generated.py` 里那条拒绝用例、`tests/test_auth.py::TheLoginSurface`（密码框不再需要 `source=Bind(type=…)` 借道），以及各处 `h.input(tag=…, source=Bind(type=…))` 收敛成字段属性——等 fluxen 的 schema 到位再动。

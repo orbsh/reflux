@@ -352,10 +352,16 @@ pub fn panel(children: &[Value], direction: Option<Value>, dismiss: Option<bool>
 }
 
 /// Build a `bundle` node (the wire type `bundle`).
-pub fn bundle(children: &[Value], selector: Option<&str>, submit: Option<&[&str]>, sink: Option<Bind>, tag: Option<&str>, id: Option<&str>) -> Value {
+pub fn bundle(children: &[Value], reset: Option<&str>, selector: Option<&str>, sends: Option<i64>, submit: Option<&[&str]>, sink: Option<Bind>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
+    if let Some(v) = reset {
+        put(&mut attrs, "reset", s(v));
+    }
     if let Some(v) = selector {
         put(&mut attrs, "selector", s(v));
+    }
+    if let Some(v) = sends {
+        put(&mut attrs, "sends", Value::from(v));
     }
     if let Some(v) = submit {
         put(&mut attrs, "submit", array(&v.iter().map(|item| s(*item)).collect::<Vec<Value>>()));

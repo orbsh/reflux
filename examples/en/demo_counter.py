@@ -120,9 +120,10 @@ def register(app: Any) -> None:
             record(ctx, "reset")
 
         def set_step(value: object) -> None:
-            # An `input` uplinks its value alone (no wrapper) and it is always a string — so this both
-            # parses it and refuses it.
-            text = value.strip() if isinstance(value, str) else ""
+            # A bundle submits the object it packed ({field: value}), and the value is a string — so this
+            # both parses it and refuses it.
+            raw = value.get("step") if isinstance(value, dict) else None
+            text = raw.strip() if isinstance(raw, str) else ""
             try:
                 step = int(text)
             except ValueError:
@@ -155,7 +156,13 @@ def register(app: Any) -> None:
                 ),
                 h.frame(
                     h.text("Step", variant="muted"),
-                    h.input(sink=set_step, placeholder="1–10, Enter to apply", tag="step", id="counter-step"),
+                    # A field's exit is the group it sits in: `tag` is the key it packs under, `submit` the timing.
+                    h.bundle(
+                        h.input(tag="step", placeholder="1–10, Enter to apply", id="counter-step"),
+                        sink=set_step,
+                        submit=["enter"],
+                        id="counter-step-form",
+                    ),
                     horizontal=True,
                     grid={"grid-template-columns": "auto 1fr", "gap": "8px", "align-items": "center"},
                     variant="card",

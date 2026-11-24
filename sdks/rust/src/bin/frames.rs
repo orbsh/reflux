@@ -63,12 +63,13 @@ fn press(label: &str, sink: &str) -> Value {
 fn nav_bundle(label: &str, event: &str) -> Value {
     bundle(
         &[press(label, event)],
-        None,
+        None,  // reset,
+        None,  // selector,
+        None,  // sends,
         Some(&["button"]),
         Some(remote_slot(event)),
         None,
-        Some(&format!("nav-{event}")),
-    )
+        Some(&format!("nav-{event}")))
 }
 
 /// A card: the `card` variant, and its children stacked at their own heights.
@@ -128,12 +129,13 @@ fn row_node(id: &str, value: &str) -> Value {
     ];
     bundle(
         &children,
-        None,
+        None,  // reset,
+        None,  // selector,
+        None,  // sends,
         Some(&["button"]),
         Some(remove),
         None,
-        Some(id),
-    )
+        Some(id))
 }
 
 fn home() -> Value {
@@ -148,22 +150,31 @@ fn home() -> Value {
         &[
             text(Some("回声"), None, None, None, None, Some(TextVariant::Heading3)),
             text(
-                Some("一个 input 在回车时把缓冲上行；上行不带包装，处理器拿到的 `data` 就是那个字符串。"),
+                Some("一个输入框的出口是它所在的那个组：回车让组把 {字段: 值} 发给组的 sink，字段自己的 `tag` 就是键。"),
                 None,
                 None,
                 None,
                 None,
                 Some(TextVariant::Muted),
             ),
-            input(
-                None,
-                None,
-                None,
+            bundle(
+                &[input(
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some("name"),
+                    Some("name-input"),
+                )],
+                None,  // reset
+                None,  // selector
+                None,  // sends
+                Some(&["enter"]),
                 Some(remote_slot(&echo_sink)),
-                None,
-                None,
-                None,
-                Some("name-input"),
+                None,  // tag
+                Some("echo-form"),
             ),
             text(None, None, None, Some(remote_slot(ECHO)), Some("echo"), None),
         ],
@@ -182,12 +193,13 @@ fn home() -> Value {
             ),
             bundle(
                 &[press("加一行", &add_row_sink)],
-                None,
+                None,  // reset,
+                None,  // selector,
+                None,  // sends,
                 Some(&["button"]),
                 Some(remote_slot(&add_row_sink)),
                 None,
-                Some("add-row"),
-            ),
+                Some("add-row")),
             tiles(&[], None, None, None, None, None, None, None, Some(remote_slot(ROWS)), Some("rows")),
             // The landing point names its event and what it accepts.
             frame(
@@ -224,7 +236,7 @@ fn home() -> Value {
                     frame(
                         &[
                             input(None, None, None, None, None, None, Some("user"), Some("f-user")),
-                            input(None, None, None, Some(remote_type(JsType::Password)), None, None,
+                            input(None, None, Some(remote_type(JsType::Password)), None, None, None,
                                   Some("pass"), Some("f-pass")),
                         ],
                         None,
@@ -252,12 +264,13 @@ fn home() -> Value {
                         None,
                     ),
                 ],
-                None,
+                None,  // reset,
+                None,  // selector,
+                None,  // sends,
                 Some(&["enter", "button"]),
                 Some(remote_slot(LOGIN)),
                 None,
-                Some("login"),
-            ),
+                Some("login")),
             // The reserved region the framework draws the login surface into.
             frame(
                 &[],
@@ -274,21 +287,23 @@ fn home() -> Value {
             ),
             bundle(
                 &[press("私密", &reveal_sink)],
-                None,
+                None,  // reset,
+                None,  // selector,
+                None,  // sends,
                 Some(&["button"]),
                 Some(remote_slot(&reveal_sink)),
                 None,
-                Some("vault"),
-            ),
+                Some("vault")),
             text(None, None, None, Some(remote_slot(SECRET)), Some("secret"), None),
             bundle(
                 &[press("退出", LOGOUT)],
-                None,
+                None,  // reset,
+                None,  // selector,
+                None,  // sends,
                 Some(&["button"]),
                 Some(remote_slot(LOGOUT)),
                 None,
-                Some("logout"),
-            ),
+                Some("logout")),
         ],
         "card-login",
     );
@@ -432,8 +447,8 @@ fn login_surface() -> Value {
                     input(
                         None,
                         None,
-                        None,
                         Some(remote_type(JsType::Password)),
+                        None,
                         None,
                         None,
                         Some("pass"),
@@ -441,12 +456,13 @@ fn login_surface() -> Value {
                     ),
                     press("确认登录", LOGIN),
                 ],
-                None,
+                None,  // reset,
+                None,  // selector,
+                None,  // sends,
                 Some(&["enter", "button"]),
                 Some(remote_slot(LOGIN)),
                 None,
-                Some("auth-form"),
-            ),
+                Some("auth-form")),
         ],
         None,
         None,

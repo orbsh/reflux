@@ -128,6 +128,7 @@ def page(ctx: Context, match) -> None:
                     h.button("Send", sink=slots.chat.send),
                     sink=slots.chat.send,
                     submit=["enter", "button"],
+                    reset="clear",
                     id="send",
                 ),
                 h.bundle(

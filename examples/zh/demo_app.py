@@ -145,7 +145,7 @@ def demo_view(ctx, state):
         *lines,
         h.bundle(
             h.input(tag="user", id="auth-user"),
-            h.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
+            h.input(tag="pass", source=Bind(type=JsType.password), id="auth-pass"),
             h.button("确认登录", sink=slots(LOGIN)),
             sink=slots(LOGIN),
             submit=["enter", "button"],
@@ -196,8 +196,9 @@ def home_page(ctx, match):
     slots = slots_of(ctx)
 
     def echo(value: object) -> None:
-        # 一个 `input` 上行时只带值（没有包装）：闭包拿到的就是那个字符串。
-        state.echo = value if isinstance(value, str) else ""
+        # 一个组提交的是它打包出来的对象：{字段: 值}。帧从外面来，所以不认识的东西给空串，不炸。
+        text = value.get("name") if isinstance(value, dict) else None
+        state.echo = text if isinstance(text, str) else ""
         slots.echo.set(h.text(state.echo))
 
     def add_row(value: object) -> None:
@@ -225,10 +226,11 @@ def home_page(ctx, match):
                 h.frame(
                     h.text("回声", variant="heading-3"),
                     h.text(
-                        "一个 input 在回车时把缓冲上行；上行不带包装，处理器拿到的 `data` 就是那个字符串。",
+                        "一个输入框的出口是它所在的那个组：回车让组把 {字段: 值} 发给组的 sink，"
+                        "字段自己的 `tag` 就是键。",
                         variant="muted",
                     ),
-                    h.input(sink=echo, id="name-input"),
+                    h.bundle(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
                     h.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
@@ -274,7 +276,7 @@ def home_page(ctx, match):
                 h.bundle(
                     h.frame(
                         h.input(tag="user", id="f-user"),
-                        h.input(tag="pass", sink=Bind(type=JsType.password), id="f-pass"),
+                        h.input(tag="pass", source=Bind(type=JsType.password), id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),

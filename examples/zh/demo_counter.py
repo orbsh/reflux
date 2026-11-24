@@ -116,8 +116,9 @@ def register(app: Any) -> None:
             record(ctx, "归零")
 
         def set_step(value: object) -> None:
-            # 一个 `input` 上行时只带值（没有包装），而且永远是字符串 —— 所以这里既解析也拒绝。
-            text = value.strip() if isinstance(value, str) else ""
+            # 组提交的是它打包出来的对象（{字段: 值}），值是字符串 —— 所以这里既解析也拒绝。
+            raw = value.get("step") if isinstance(value, dict) else None
+            text = raw.strip() if isinstance(raw, str) else ""
             try:
                 step = int(text)
             except ValueError:
@@ -149,7 +150,13 @@ def register(app: Any) -> None:
                 ),
                 h.frame(
                     h.text("步长", variant="muted"),
-                    h.input(sink=set_step, placeholder="1–10，回车生效", tag="step", id="counter-step"),
+                    # 输入框的出口是它所在的组：`tag` 是它打包时的键，`submit` 决定何时发。
+                    h.bundle(
+                        h.input(tag="step", placeholder="1–10，回车生效", id="counter-step"),
+                        sink=set_step,
+                        submit=["enter"],
+                        id="counter-step-form",
+                    ),
                     horizontal=True,
                     grid={"grid-template-columns": "auto 1fr", "gap": "8px", "align-items": "center"},
                     variant="card",

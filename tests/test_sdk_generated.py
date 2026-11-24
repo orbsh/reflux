@@ -128,7 +128,7 @@ class UnionTest(unittest.TestCase):
             with self.subTest(value=name):
                 node = sdk.parse({"type": "input", "source": entry})
                 self.assertEqual(sdk.dump(node)["source"], {**entry, "scope": entry.get("scope", "remote")})
-                node = sdk.parse({"type": "input", "sink": entry})
+                node = sdk.parse({"type": "input", "tag": "f", "sink": entry})
                 self.assertEqual(sdk.dump(node)["sink"], {**entry, "scope": entry.get("scope", "remote")})
         # The retired vocabulary is not a second spelling: `kind` is not a field of a value.
         with self.assertRaises(pydantic.ValidationError):
@@ -219,11 +219,20 @@ class ProfileTest(unittest.TestCase):
             sdk.frame(source="title")
 
     def test_both_channels_reach_the_wire(self):
-        self.assertEqual(sdk.dump(sdk.input(sink="save"))["sink"], {"scope": "remote", "slot": "save"})
-        self.assertEqual(sdk.dump(sdk.input(source=Slot("prefill"), sink=Slot("name")))["source"],
+        # A field's `tag` is what makes it a bundle member; without one a remote sink is a value
+        # nobody receives, so the SDK refuses it (ADR 0032 §2, revised 2026-11-24).
+        self.assertEqual(sdk.dump(sdk.input(tag="name", sink="save"))["sink"],
+                         {"scope": "remote", "slot": "save"})
+        self.assertEqual(sdk.dump(sdk.input(tag="name", source=Slot("prefill"), sink=Slot("name")))["source"],
                          {"scope": "remote", "slot": "prefill"})
-        node = sdk.input(sink=sdk.Bind(slot="name", type=sdk.JsType.text))
+        node = sdk.input(tag="name", sink=sdk.Bind(slot="name", type=sdk.JsType.text))
         self.assertEqual(sdk.dump(node)["sink"], {"scope": "remote", "slot": "name", "type": "text"})
+        with self.assertRaises(ValueError) as caught:
+            sdk.input(sink="save")
+        self.assertIn("tag", str(caught.exception), "the refusal says what is missing")
+        # A local landing is still a field's own: it lands as the value changes, inside the page.
+        local = sdk.dump(sdk.input(sink=sdk.Bind(slot="filter", scope="local")))
+        self.assertEqual(local["sink"], {"scope": "local", "slot": "filter"})
         self.assertEqual(sdk.dump(sdk.select(options=Slot("rows")))["options"],
                          {"scope": "remote", "slot": "rows"})
         self.assertEqual(sdk.dump(sdk.input(placeholder="写点什么"))["placeholder"],
@@ -252,7 +261,7 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(sdk.dump(sdk.bundle(submit=["enter", "button"]))["attrs"],
                          {"submit": ["enter", "button"]})
         # A field's values ride the channels: placeholder is a read, sink a write.
-        field = sdk.dump(sdk.input(placeholder="写点什么", sink="note"))
+        field = sdk.dump(sdk.input(tag="note", placeholder="写点什么", sink="note"))
         self.assertEqual(field["placeholder"], {"default": "写点什么", "scope": "remote"})
         self.assertEqual(field["sink"], {"scope": "remote", "slot": "note"})
         # `multiline` is a layout of `input`, not a type of its own.

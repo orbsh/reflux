@@ -62,7 +62,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_step_multiplies_the_press(self) -> None:
         app, device = build()
-        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": "5"})
+        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "5"}})
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "5")
         click(app, device, "down")
@@ -70,14 +70,14 @@ class ThePage(unittest.TestCase):
 
     def test_a_step_that_is_not_a_number_is_refused_out_loud(self) -> None:
         app, device = build()
-        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": "five"})
+        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "five"}})
         self.assertIn("five", writes(device, "counter.hint")[-1], "the reader is told what was wrong")
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "1", "and the step did not move")
 
     def test_the_step_is_clamped(self) -> None:
         app, device = build()
-        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": "99"})
+        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "99"}})
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "10")
 

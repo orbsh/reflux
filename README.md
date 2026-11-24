@@ -123,15 +123,16 @@ def home(ctx, match):
     return markers.page(
         "/",
         "Hello",
-        b.text("Hello", variant="heading-1"),
-        b.input(sink=ctx.slot.name.change, id="name"),   # a sink: the handler's name
-        b.text(source=ctx.slot.echo, id="echo"),          # a slot: the data plane's name
+        h.text("Hello", variant="heading-1"),
+        # a field's exit is its group: the bundle holds the sink, the field only names its key
+        h.bundle(h.input(tag="name", id="name"), sink=ctx.slot.name.change),
+        h.text(source=ctx.slot.echo, id="echo"),          # a slot: the data plane's name
     )
 
 
 @app.on(app.slot.name.change)
 def on_name(ctx, frame):
-    ctx.slot["echo"].set(b.text(str(frame["data"])))   # one frame: set the `echo` slot
+    ctx.slot["echo"].set(h.text(str(frame["data"])))   # one frame: set the `echo` slot
 
 
 if __name__ == "__main__":
@@ -149,9 +150,11 @@ What the pieces are:
 - **`markers.page(path, title, *children)`** is what `ctx.page` builds: the two markers the page runtime
   mirrors into the address bar and the tab title, then your content. It is a convention, not a wire type
   — reach for it directly only when you are assembling a page by hand.
-- **`b.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
-  values. `b.text(source=…)` reads a slot and `b.input(sink=…)` speaks to a dest — both take a handle
-  from `ctx.slot`, never a string. A handle nests: `ctx.slot.chat.send` is the name `chat.send`, so a
+- **`h.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
+  values. `h.text(source=…)` reads a slot and `h.bundle(…, sink=…)` speaks to a dest — both take a
+  handle from `ctx.slot`, never a string. A field has no exit of its own: `tag` makes it a member of
+  the enclosing bundle, and the bundle owns the address (`attrs.submit` says when, `attrs.reset` what
+  its fields become afterwards, `attrs.sends` how many times it may send). A handle nests: `ctx.slot.chat.send` is the name `chat.send`, so a
   page's slots and its uplinks read off the same view.
 - **`@app.on(app.slot.name.change)`** is the only way an uplink frame reaches your code — the handle
   is the app's own table, so the page that sends to the dest and the handler that answers it are one
@@ -189,7 +192,7 @@ the connection and redraw:
 def on_login(ctx, frame):
     user = check_credentials(frame["data"])     # yours; may call an external service
     if user is None:
-        ctx.emit(wire.set("form.error", b.text("wrong password")))
+        ctx.emit(wire.set("form.error", h.text("wrong password")))
         return
     device.data["user"] = user
     device.draw()                               # one frame, now with an identity
@@ -306,13 +309,21 @@ closure is handed the event's value and holds its slots; the framework names it 
 def home_page(ctx, match):
     slots = slots_of(ctx)
 
-    def echo(value):                      # an `input` uplinks its value alone
-        slots.echo.set(b.text(value))
+    def echo(value):                      # a bundle submits its pack: {tag: value}
+        slots.echo.set(h.text(value.get("name", "")))
 
     def add_row(value):
         slots.rows.append(row_node(...))
 
-    ctx.page(b.frame(b.input(sink=echo), b.button("加一行", sink=add_row), b.text(source=slots.echo)))
+    ctx.page(
+        h.frame(
+            h.bundle(h.input(tag="name"), sink=echo, submit=["enter"]),
+            # the renderer draws a button only when it carries a sink, and reads that sink as nothing
+            # more than "I am this group's confirm key" — the press sends the bundle's own sink
+            h.bundle(h.button("加一行", sink=add_row), sink=add_row, submit=["button"]),
+            h.text(source=slots.echo),
+        )
+    )
 ```
 
 A slot holds a node, and most slots hold one *value* — a number, a line of text. That decision is a

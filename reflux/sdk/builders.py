@@ -88,14 +88,16 @@ def panel(
 
 def bundle(
     *children: Accrete,
+    reset: ResetMode | str | None = None,
     selector: str | None = None,
+    sends: int | None = None,
     submit: list[str] | str | None = None,
     sink: Any = None,
     tag: str | None = None,
     id: str | None = None,
 ) -> Bundle:
     """Build a `bundle` node (the wire type `bundle`)."""
-    attrs = drop_none(selector=selector, submit=as_set(submit))
+    attrs = drop_none(reset=reset, selector=selector, sends=sends, submit=as_set(submit))
     sink = as_sink(sink)
     return parse(drop_none(type='bundle', attrs=attrs, sink=sink, id=id, children=list(children) or None, tag=tag), Bundle)
 

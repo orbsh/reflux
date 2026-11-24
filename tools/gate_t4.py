@@ -4,8 +4,9 @@
 The timing and the payload belong to the renderer, so the gate asserts the renderer's real
 contract — read out of `ui_leptos`, not assumed:
 
-- an `input` emits on **Enter** (there is no blur handler anywhere in that crate), and an empty
-  value does not fire at all;
+- a field has **no uplink of its own** (ADR 0032 §2, revised 2026-11-24): a tag-less `input` sends
+  nothing on Enter, and nothing clears it — the box keeps what was typed. (A *remote* sink on such a
+  field is refused by the SDK, `_check_uplinks`, so it cannot reach the page at all.);
 - a tagged `input` inside a `bundle` only commits into the bundle's pack — the uplink is the
   bundle's, one frame carrying `{tag: value}` for every field it packs;
 - a `bundle` sends when `attrs.submit` names the timing and that timing happens: here only
@@ -45,10 +46,13 @@ def field(name: str, *, id: str) -> dict:
 
 def tree() -> Any:
     return h.frame(
-        # 0: an event-emitting input with its own identity
-        {"type": "input", "id": "name-in", "sink": {"slot": "gate.name"}},
-        # 1: the same, with no id — an empty id is not an id
-        {"type": "input", "sink": {"slot": "gate.anon"}},
+        # 0: a field with no `tag` — the shape that used to uplink through its own `sink` and now
+        # has nothing to send with. (The SDK refuses a *remote* sink without a tag outright, so the
+        # dead shape cannot even be built; what the gate proves is the other half — a field with no
+        # tag sends nothing, and nothing clears it.)
+        {"type": "input", "id": "name-in"},
+        # 1: the same, with no id — and just as silent.
+        {"type": "input"},
         # 2: a bundle: two tagged fields and the press that packs them. `submit: [button]` says a
         # press is the only timing — Enter in a field commits, it does not uplink.
         h.bundle(
@@ -137,43 +141,33 @@ def main() -> int:
             print("the fixture never drew: expected four inputs")
             return 1
 
-        # 1 — Enter on an input is the uplink, and the frame is exactly {dest, id, data}.
+        # 1 — Enter in a tag-less field sends nothing: its uplink is the bundle's, and it has none.
         focus(cdp, 0)
         cdp.type_text("hello")
         press_enter(cdp)
-        wait_for(lambda: len(SEEN) == 1)
-        first = SEEN[0] if SEEN else {}
+        time.sleep(0.5)
         checks.append(
             (
-                "an input's Enter uplinks {dest, id, data}",
-                first == {"dest": "gate.name", "id": "name-in", "data": "hello"},
-                json.dumps(first, ensure_ascii=False),
+                "a field without a tag has no uplink: Enter sends nothing",
+                len(SEEN) == 0,
+                f"frames={len(SEEN)}",
             )
         )
 
-        # 2 — an empty value does not fire (the renderer's own rule), and the input cleared itself.
-        before = len(SEEN)
+        # 2 — and nothing clears it: clearing is the bundle's `reset`, not a rule of the widget.
+        kept = cdp.eval("document.querySelectorAll('input')[0].value")
+        checks.append(("the box keeps what was typed", kept == "hello", f"value={kept!r}"))
+
+        # 3 — the id-less field is silent for the same reason (its id is not what was missing).
+        focus(cdp, 1)
+        cdp.type_text("anon")
         press_enter(cdp)
         time.sleep(0.4)
         checks.append(
             (
-                "an empty input does not fire on Enter",
-                len(SEEN) == before,
-                f"frames +{len(SEEN) - before}",
-            )
-        )
-
-        # 3 — no id on the node, no `id` key on the frame.
-        focus(cdp, 1)
-        cdp.type_text("anon")
-        press_enter(cdp)
-        wait_for(lambda: len(SEEN) == 2)
-        second = SEEN[1] if len(SEEN) > 1 else {}
-        checks.append(
-            (
-                "an input without an id sends no id key",
-                second == {"dest": "gate.anon", "data": "anon"},
-                json.dumps(second, ensure_ascii=False),
+                "the id-less field is silent too",
+                len(SEEN) == 0,
+                f"frames={len(SEEN)}",
             )
         )
 

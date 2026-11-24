@@ -142,7 +142,9 @@ NODES: dict[str, dict] = {
     # No `source` prefill: the renderer starts an input from its js-kind's default ("" for text)
     # and reads neither `default` nor `source` for display — measured, and the reason the profile
     # no longer offers a constant source for `input`.
-    "input": {"type": "input", "sink": {"slot": "gate.input"}},
+    # A field's uplink is its bundle's, and `tag` is what makes it a member (ADR 0032 §2, revised):
+    # a remote sink with no tag is a value nobody receives, and the SDK refuses it.
+    "input": {"type": "input", "tag": "gate.input", "sink": {"slot": "gate.input"}},
     # The option rows are a list plane: `options` is the wire's own field, and the renderer
     # currently reads the list off the primary `source` — so the fixture names the slot on both,
     # which is legal either way and lets the live gate see the rows.
