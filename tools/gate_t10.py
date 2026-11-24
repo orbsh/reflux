@@ -41,17 +41,16 @@ def compact(obj) -> bytes:
 def python_turns() -> list[tuple[str, dict]]:
     """The reference app's five turns, built with the Python SDK."""
     sys.path.insert(0, str(ROOT))
-    import examples.demo_app as demo
+    import examples.zh.demo_app as demo
     from reflux import wire
     from reflux.sdk import builders as b
-    from reflux.sdk import markers
     from reflux.sdk.types import Bind
 
     return [
         ("echo", wire.draw(wire.set("echo", b.text("hello")))),
         (
             "add row",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}, _ctx()))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
         ("remove row", wire.draw(wire.remove("rows", "row-1"))),
         (
@@ -64,12 +63,12 @@ def python_turns() -> list[tuple[str, dict]]:
         (
             "page turn",
             wire.draw(
-wire.create(markers.page("/", "演示", *demo.demo.home(_ctx()))),
-                *[wire.append("rows", demo.row_node(row, _ctx())) for row in demo.demo.rows]),
+wire.create(*_page_nodes("/")),  # the app's own page root: markers and all
+                *[wire.append("rows", demo.row_node(row)) for row in demo.state.rows]),
         ),
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.
-        ("about page", wire.draw(wire.create(markers.page("/about", "关于", *demo.demo.about())))),
+        ("about page", wire.draw(wire.create(*_page_nodes("/about")))),
         # The `local` scope and its `path` rider: a client-side slot, addressed one level in.
         (
             "local binding",
@@ -81,9 +80,17 @@ wire.create(b.frame(b.text(source=Bind(slot="chan", scope="local", path="/data")
 
 def _ctx():
     """A delivery with no device: these frames are built and compared, never sent."""
-    import examples.demo_app as demo
+    import examples.zh.demo_app as demo
 
     return demo.make_app().context(None)
+
+
+def _page_nodes(path: str) -> list[dict]:
+    """The nodes the app sends for `path`: its route, drawn once into a fake device."""
+    import examples.zh.demo_app as demo
+    from tests.fakes import page_nodes
+
+    return page_nodes(demo.make_app(), path)
 
 
 def rust_frames() -> list[bytes]:

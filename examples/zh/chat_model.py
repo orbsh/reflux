@@ -1,16 +1,15 @@
-"""The model seam: one conversation in, a stream of chunks out.
+"""模型接缝：一段对话进去，一串分块出来。
 
-Two implementations, because an example has to run on a bare `python3`:
+两个实现，因为示例要能在光秃秃的 `python3` 上跑：
 
-- `Scripted` — offline and deterministic. Its reply states what the *backend* just did (turn count,
-  window size, chunk delay), so a demo run reads as documentation rather than as canned prose.
-- `OpenAI` — an OpenAI-compatible `/chat/completions` client over SSE. Configured by environment
-  (`OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`) and **not exercised against a live endpoint
-  in this repo**: the SSE reader is tested against a local stub (`tests/test_chat_example.py`), which
-  is the part that can be wrong independently of the provider.
+- `Scripted` —— 离线、确定。它的回话把**后端**刚做了什么说出来（第几轮、窗口多大、块间多慢），
+  所以一次演示读起来像文档，而不是罐头文案。
+- `OpenAI` —— OpenAI 兼容的 `/chat/completions` 流式客户端（SSE）。由环境变量配置
+  （`OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL`），**本仓没有对真实端点跑过**：SSE 读取器是
+  拿本地桩测的（`tests/test_chat_example.py`），因为那一半能独立于厂商出错。
 
-The seam is deliberately one method. A chat backend needs three things from a model — context in,
-chunks out, failure visible — and nothing here knows how a chunk becomes a frame.
+接缝故意只有这一个方法。聊天后端需要模型给三样东西——上下文进去、分块出来、失败看得见——而这里
+没有任何一处知道「一块怎么变成一帧」。
 """
 
 from __future__ import annotations
@@ -23,19 +22,19 @@ from typing import Iterable, Iterator, Protocol
 
 __all__ = ["CHUNK", "Model", "OpenAI", "Scripted", "Turn", "parse_sse"]
 
-CHUNK = 3  # characters per chunk for the scripted model — about one CJK token
+CHUNK = 3  # 脚本模型每块几个字符——约等于一个中文词元
 
 
 @dataclass(frozen=True)
 class Turn:
-    """One message in a conversation. `role` is `user` or `assistant`."""
+    """对话里的一条消息。`role` 是 `user` 或 `assistant`。"""
 
     role: str
     text: str
 
 
 class Model(Protocol):
-    """What the app needs from a model: a name for the status line, and a stream of chunks."""
+    """应用需要模型提供的东西：状态行上的一个名字，和一串分块。"""
 
     name: str
 
@@ -43,23 +42,23 @@ class Model(Protocol):
 
 
 class Scripted:
-    """Offline, deterministic, no key: the default, so a demo run is one command.
+    """离线、确定、不要 key：缺省实现，所以演示就一条命令。
 
-    The reply is a function of the context — turn number, the last question, the window — not a
-    fixed string, so a walkthrough that sends three messages reads three different replies.
+    回话是上下文的函数——第几轮、上一句问的什么、窗口多大——不是固定字符串，所以走三句的走查会
+    读到三段不同的回答。
     """
 
     name = "scripted"
 
     def __init__(self, window: int = 12) -> None:
-        self.window = window  # only used to describe the window in the reply; pacing is the app's
+        self.window = window  # 只用来在回话里描述窗口；节奏是应用的事
 
     def reply(self, context: list[Turn]) -> Iterator[str]:
         yield from scripted_reply(context, self.window)
 
 
 def scripted_reply(context: list[Turn], window: int) -> Iterator[str]:
-    """The scripted model's answer, chunk by chunk. Pure, so a test can assert on it."""
+    """脚本模型的回答，一块一块给。纯函数，所以测试可以直接断言它。"""
     asked = next((turn.text for turn in reversed(context) if turn.role == "user"), "")
     turns = sum(1 for turn in context if turn.role == "user")
     body = (
@@ -73,9 +72,9 @@ def scripted_reply(context: list[Turn], window: int) -> Iterator[str]:
 
 
 class OpenAI:
-    """An OpenAI-compatible streaming client. Stdlib only; proxies come from the environment.
+    """OpenAI 兼容的流式客户端。只用标准库；代理从环境变量来。
 
-    `reply` yields the provider's own deltas — chunk sizes belong to the model, not to us.
+    `reply` 产出的是厂商自己的增量——块多大是模型的事，不是我们的事。
     """
 
     name = "openai"
@@ -113,11 +112,11 @@ class OpenAI:
 
 
 def parse_sse(lines: Iterable[bytes]) -> Iterator[str]:
-    """The text of each `data:` event that carries a delta; `[DONE]` ends the run.
+    """每个带增量的 `data:` 事件里的文本；`[DONE]` 结束整段。
 
-    Kept separate from the request so the reader can be tested against a stub: providers differ in
-    how they frame events (`event:`, comments, blank lines), not in `data: {...}` — and a
-    `choices[0].delta.content` that is absent or null is a role-only or finish-only event, not text.
+    与请求分开，是为了这个读取器能对着桩测：厂商的差别在怎么包事件（`event:`、注释行、空行），
+    不在 `data: {...}` —— 而 `choices[0].delta.content` 缺失或为 null 的事件是只带角色、只带结束的，
+    不是文本。
     """
     for raw in lines:
         line = raw.decode("utf-8", errors="replace").strip()
@@ -129,7 +128,7 @@ def parse_sse(lines: Iterable[bytes]) -> Iterator[str]:
         try:
             event = json.loads(data)
         except ValueError:
-            continue  # a keep-alive or a provider's own prose; not a delta
+            continue  # keep-alive 或厂商自己的说明文字；不是增量
         choices = event.get("choices") or []
         if not choices:
             continue

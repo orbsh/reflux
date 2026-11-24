@@ -1,11 +1,11 @@
-"""Example applications, written the way the docs say to write one.
+"""The reference application, in two languages.
 
-`app/` is the whole thing — the app object, one module per page, the model behind the chat page, and a
-`walkthrough` you can run instead of opening a browser:
+    python3 -m examples.zh.demo_app --port 8000     # 中文版：界面、注释、函数文档都是中文
+    python3 -m examples.en.demo_app --port 8001     # English: UI, comments and docstrings, all English
 
-    python3 -m examples.app --port 8100             # the app
-    python3 -m examples.app.walkthrough --auto      # the same walk, no browser
-
-It sits beside the package rather than inside it (an example is a user of the framework, not part of
-it), and runs from the repo root: an example that cannot be run in one command is a snippet.
+`examples/zh/` and `examples/en/` are the same application written twice — not one tree with a
+translation table. A reader opens the tree for their language and finds nothing else in it. Each tree
+declares its own route table, so the two apps can serve the same paths at the same time.
 """
+
+__all__ = ["en", "zh"]

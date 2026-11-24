@@ -1,4 +1,4 @@
-"""The chat example's backend, offline: no browser, no WebSocket, no model provider.
+"""The chat page's backend, offline: no browser, no WebSocket, no model provider.
 
 `tools/gate_chat.py` covers the same behaviour over a real socket; these cases pin the parts that are
 pure — the window, the refusals, the chunk stream, the failure surface, and the SSE reader (against a
@@ -12,14 +12,15 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from examples.app import chat
-from examples.app.model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
+from examples.zh import demo_app
+from examples.zh import demo_chat as chat
+from examples.zh.chat_model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
 from tests.fakes import FakeDevice
 
 
 def context(device: FakeDevice, frame: dict | None = None):
     """A delivery built the way the app builds one — handlers take the context, not the device."""
-    return chat.app.context(device, frame)
+    return demo_app.make_app().context(device, frame)
 
 
 def status_text(device: FakeDevice) -> str:
@@ -238,7 +239,7 @@ class OneExchange(unittest.TestCase):
 class Frames(unittest.TestCase):
     def test_the_page_draws_and_seeds_its_slot_once(self):
         device = FakeDevice()
-        match = chat.app.routes.match("/chat")
+        match = demo_app.make_app().routes.match("/chat")
         ctx = context(device)
         self.assertIsNone(chat.page(ctx, match))  # a page handler says nothing by returning
         page = ctx.take_page()
@@ -251,8 +252,8 @@ class Frames(unittest.TestCase):
 
     def test_the_page_is_one_route_of_the_application(self):
         """A second address is the table's business now, not this page's: `/chat` or nothing."""
-        self.assertEqual([route.path for route in chat.app.routes], ["/", "/chat"])
-        self.assertIsNone(chat.app.routes.match("/nope"))
+        self.assertEqual([route.path for route in demo_app.make_app().routes], ["/", "/about", "/chat", "/demo"])
+        self.assertIsNone(demo_app.make_app().routes.match("/nope"))
 
     def test_prompt_unwraps_the_renderers_field_shape(self):
         self.assertEqual(chat.prompt_of({"data": {"text": {"data": "你好"}}}), "你好")

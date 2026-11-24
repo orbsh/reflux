@@ -1,29 +1,24 @@
-"""The chat page: a conversation per connection, streamed, stoppable, and honest about failures.
+"""对话页：一条连接一段对话，流式、可停、对失败诚实。
 
-Six pieces of backend behaviour, one per section — each asserted in `tests/test_chat_example.py`
-(offline, no socket) and in `tools/gate_chat.py` (real server, real WebSocket):
+这是参考应用里唯一一页讲**后端**而不是讲词表的，它有六件行为，一件一节 —— 每一件都在
+`tests/test_chat_example.py`（离线、不开 socket）与 `tools/gate_chat.py`（真服务器、真 WebSocket）里断言：
 
-1. **state per connection** — the conversation hangs off the `Device`, not off the app: the socket
-   *is* the state, so a refresh is a new conversation and nothing leaks when a client goes away. The
-   transcript is also the page tree's (the rows), so the backend only keeps what the model needs:
-   turns, and how many of them the window holds.
-2. **streaming** — a worker thread per reply appends chunks with
-   `reply.patch("/source/default", chunk, op="append")` — a `Slot`, not a name in a string. The frame queue is the device's, so
-   one client's slow write never holds a model call or another device.
-3. **single flight** — a second message while one is streaming is refused *with a reason on the
-   status line*, not silently dropped: the composer is not disabled, so the second send is a real
-   event and deserves a real answer.
-4. **stop** — `chat.stop` sets an event the worker checks at chunk boundaries. A stopped reply is
-   **not** added to the context even though part of it is on screen: half a sentence is worse for the
-   next turn than no sentence, and the status line says so.
-5. **a failing model is a bubble** — the exception becomes text in the reply slot plus a status line;
-   it never travels up the frame path (a raised handler would only be logged, and the user would see a
-   reply that silently stopped mid-sentence).
-6. **application limits** — empty and oversized messages are refused here, not at the ingest
-   boundary: that boundary checks the *shape* of a frame; how long a prompt may be is this app's.
+1. **状态随连接** —— 对话挂在 `Device`（`ctx.data`）上，不挂在应用上：socket 本身就是状态，所以刷新
+   就是一段新对话，客户端走了也什么都不会漏。对话内容同时就是页面树里那些行，所以后端只留模型需要的：
+   轮次，以及窗口装得下几条。
+2. **流式** —— 每次回答一个工作线程，用 `reply.patch("/source/default", chunk, op="append")` 追加分块 ——
+   是 `Slot`，不是字符串里的名字。帧队列是设备自己的，所以一个客户端写得慢既挡不住模型调用，也挡不住另一个设备。
+3. **单飞** —— 一段还在流时来的第二条消息会被**带着理由拒掉、写在状态行上**，不是悄悄丢掉：输入框没有被禁用，
+   所以第二次发送是真实事件，就该得到真实答复。
+4. **停止** —— `chat.stop` 置一个事件，工作线程在块边界检查它。停掉的回答**不**进上下文，即使它的一部分已经在
+   屏幕上：半句话对下一轮比没有话更糟，状态行会这么说。
+5. **模型失败是一条气泡** —— 异常变成回答槽里的文字加一行状态；它从不沿帧路径往上抛（抛出去的处理器只会被记
+   日志，用户看到的是一段说到一半无声停住的回答）。
+6. **应用自己的限制** —— 空消息与超长消息在这里拒，不在 ingest 边界拒：那道边界检查帧的**形状**，而一条提示
+   能有多长是这个应用的事。
 
-The knobs (`model`, `delay`, `window`) live in `settings`, which `main()` fills from the command line.
-Nothing is threaded through a factory: a page module is a declaration, and its settings are settings.
+旋钮（`model`、`delay`、`window`）在 `settings` 里，由参考应用的 `main()` 从命令行填 —— 整个应用只有一处，
+因为只有一个应用。
 """
 
 from __future__ import annotations
@@ -32,16 +27,15 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from reflux import Context, Match
+from reflux import Context
 from reflux.sdk import builders as b
 from reflux.sdk.types import Accrete
 from reflux.slots import Slot
 
-from .app import app, names
-from .model import Model, Scripted, Turn
-from .names import Names
+from .chat_model import Model, OpenAI, Scripted, Turn
+from .demo_slots import DemoSlots, slots_of
 
-__all__ = ["Chat", "MAX_CHARS", "WINDOW", "page", "send", "settings", "spawn", "stream"]
+__all__ = ["Chat", "MAX_CHARS", "OpenAI", "Scripted", "Turn", "WINDOW", "page", "prompt_of", "register", "send", "settings", "stream"]
 
 TEXT_VALUE = "/source/default"  # pointer into a text node stored in a slot
 MAX_CHARS = 4096  # an application limit, not a wire limit
@@ -50,7 +44,8 @@ WINDOW = 12  # turns of context the model sees; older ones are dropped
 
 @dataclass
 class Settings:
-    """What a deployment decides once: which model, how fast it streams, how much it remembers."""
+    """一次部署只决定一次的东西：用哪个模型、流多快、记得多少。
+    """
 
     model: Model = field(default_factory=lambda: Scripted(window=WINDOW))
     window: int = WINDOW
@@ -62,7 +57,8 @@ settings = Settings()
 
 @dataclass
 class Chat:
-    """One conversation: what the model is told, what the user is told, and who is streaming."""
+    """一段对话：模型被告知什么、用户被告知什么、谁在流。
+    """
 
     model: Model
     window: int = WINDOW
@@ -76,7 +72,8 @@ class Chat:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def record(self, role: str, text: str) -> Turn:
-        """Add a turn and keep the window: the model sees the last `window` turns, nothing older."""
+        """加一条并保住窗口：模型看到最近 `window` 条，更旧的不看。
+        """
         turn = Turn(role, text)
         self.turns.append(turn)
         self.total += 1
@@ -86,13 +83,12 @@ class Chat:
         return turn
 
     def status(self) -> str:
-        return (
-            f"就绪 · {self.model.name} · {self.total} 轮（窗口 {len(self.turns)}/{self.window}，裁掉 {self.trimmed}）"
-        )
+        return f"就绪 · {self.model.name} · {self.total} 轮（窗口 {len(self.turns)}/{self.window}，裁掉 {self.trimmed}）"
 
 
 def state(ctx: Context) -> Chat:
-    """This connection's conversation: hung on `ctx.data`, so it dies with the connection."""
+    """这条连接自己的对话：挂在 `ctx.data` 上，所以它随连接一起结束。
+    """
     chat = ctx.data.get("chat")
     if chat is None:
         chat = Chat(model=settings.model, window=settings.window, delay=settings.delay)
@@ -104,18 +100,16 @@ def row(*children: Accrete, id: str) -> Accrete:
     return b.frame(*children, id=id)
 
 
-@app.route("/chat", title="对话")
-def page(ctx: Context, match: Match) -> None:
-    """The page — and, the first time this connection asks for it, the status line it reads.
-
-    The seed is a **send**, so it is written as one (`ctx.emit`), not folded into the page: on this
-    side of the socket nothing is a response, and a page that later has to say something to more than
-    the one device that asked (a broadcast, a nudge from a timer) says it the same way.
-
-    The address and the title come from the declaration above — `ctx.page` builds the markers — so the
-    handler passes its content and nothing else.
+def page(ctx: Context, match) -> None:
+    """页面 —— 以及这条连接第一次要它时、它读的那行状态。
+    
+        种子是一次**发送**，所以它被写成一次发送（`slots.status.set(...)`），而不是折进页面里：在
+        socket 的这一侧没有"响应"这回事，而一页日后若要同时对不止一个设备说话（广播、定时器的提醒），
+        说的方式也是这个。
+    
+        地址与标题来自上面那条声明 —— 标记由 `ctx.page` 造 —— 所以处理器只交内容，别的什么都不交。
     """
-    slots: Names = ctx.slot  # type: ignore[assignment]  # the names are `names.py`'s
+    slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
         slots.status.set(b.text("就绪"))
@@ -149,10 +143,10 @@ def page(ctx: Context, match: Match) -> None:
 
 
 def prompt_of(frame: dict) -> str | None:
-    """The composer's text out of a `chat.send` frame, or None when the frame carries nothing usable.
-
-    A form's submit carries `{field: {"data": value, ...}}` — that shape comes from the renderer, not
-    from us, so the unwrapping lives here and is total: a malformed frame yields None, never a raise.
+    """从 `chat.send` 帧里取出输入框的文本；帧里没有可用内容时是 None。
+    
+        表单提交带的是 `{字段: {"data": 值, ...}}` —— 这个形状来自渲染器而不是我们，所以拆包放在这里，
+        并且是全的：畸形的帧给出 None，绝不抛异常。
     """
     data = frame.get("data")
     entry = data.get("text") if isinstance(data, dict) else None
@@ -161,13 +155,15 @@ def prompt_of(frame: dict) -> str | None:
 
 
 def spawn(target, args: tuple) -> None:
-    """Start a reply's worker. A module-level seam so a test can run the reply inline instead."""
+    """起一个回答的工作线程。模块级的一个接缝，好让测试改成同步执行。
+    """
     threading.Thread(target=target, args=args, daemon=True).start()
 
 
 def send(ctx: Context, chat: Chat, text: str) -> None:
-    """Take one message: refuse it with a reason, or put it on screen and start the reply."""
-    slots: Names = ctx.slot  # type: ignore[assignment]
+    """收一条消息：要么给出理由拒掉，要么放上屏幕并开始回答。
+    """
+    slots = slots_of(ctx)
     if not text.strip():
         slots.status.set(b.text("空消息没有发出去"))
         return
@@ -195,8 +191,8 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
 
 
 def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
-    """One reply, chunk by chunk. Synchronous on purpose: the thread is the caller's choice, so a test
-    can run a whole reply without one."""
+    """一次回答，一块一块。故意是同步的：线程是调用方的选择，所以测试可以不用线程跑完一整段回答。
+    """
     pieces: list[str] = []
     failure: Exception | None = None
     try:
@@ -213,7 +209,7 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
         with chat.lock:
             chat.busy = False
 
-    slots: Names = ctx.slot  # type: ignore[assignment]
+    slots = slots_of(ctx)
     if failure is not None:
         with ctx.turn():
             reply.patch(TEXT_VALUE, f"\n\n⚠️ 模型出错：{failure}", op="append")
@@ -228,23 +224,31 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
     slots.status.set(b.text(chat.status()))
 
 
-@app.on(names.chat.send)
 def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        slots: Names = ctx.slot  # type: ignore[assignment]
-        slots.status.set(b.text("这一帧里没有文本字段，什么都没发"))
+        slots_of(ctx).status.set(b.text("这一帧里没有文本字段，什么都没发"))
         return
     send(ctx, state(ctx), text)
 
 
-@app.on(names.chat.stop)
 def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
+    slots = slots_of(ctx)
     if not chat.busy:
-        slots: Names = ctx.slot  # type: ignore[assignment]
         slots.status.set(b.text("没有正在进行的回答"))
         return
     chat.stop.set()
-    slots = ctx.slot  # type: ignore[assignment]
     slots.status.set(b.text("正在停止…"))
+
+
+def register(app, slots: DemoSlots) -> None:
+    """把这一页挂到应用上：它的路由，和它的两条上行。
+    
+        路由在这里是调用式声明而不是装饰器（`app.route(...)(page)`），因为这个模块不能 import 应用：
+        `python3 -m examples.X.demo_app` 时应用模块是以 `__main__` 跑的，`from .demo_app import app`
+        会造出第二份。
+    """
+    app.route("/chat", title="对话")(page)
+    app.on(slots.chat.send, on_send)
+    app.on(slots.chat.stop, on_stop)

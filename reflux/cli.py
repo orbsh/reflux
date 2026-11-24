@@ -12,7 +12,7 @@ off one `App` instance, and registering a handler has no import side effect to w
 **target** — `module:attr`, where `attr` is called with no arguments when it is callable and taken as
 it is when it is already an `App`:
 
-    python3 -m reflux.cli dests examples.demo_app:make_app
+    python3 -m reflux.cli dests examples.zh.demo_app:make_app
     python3 -m reflux.cli dests myapp.main:app
 
 Two rules this verb follows, both about not inventing conventions:
@@ -38,12 +38,28 @@ from .app import App
 from .routes import DEFAULT, Routes, discover
 
 
+def table_of(packages: Sequence[str]) -> Routes | None:
+    """The `Routes` an application in these packages declares on, if there is one.
+
+    A page declares its route on the table it is given: the module-level default is the convention for
+    a small app, and an app that keeps its own table (so two apps can serve the same path) is just as
+    valid. So look for the app, not for the convention — `app` first, then `make_app()`.
+    """
+    for name, module in list(sys.modules.items()):
+        if not any(name == package or name.startswith(package + ".") for package in packages):
+            continue
+        value = getattr(module, "app", None)
+        if isinstance(value, App):
+            return value.routes
+    return None
+
+
 def print_routes(packages: Sequence[str], table: Routes | None = None) -> int:
     """Import the packages, then print the table (path, source module, metadata fields)."""
     imported = discover(*packages)
     if imported:
         print(f"[routes] imported {len(imported)} module(s) from {', '.join(packages)}")
-    rows = (table if table is not None else DEFAULT).table()
+    rows = (table if table is not None else table_of(packages) or DEFAULT).table()
     if not rows:
         print("[routes] nothing registered")
         return 0
@@ -66,7 +82,7 @@ def resolve_app(target: str) -> App:
     if not sep or not module_name or not attr:
         raise SystemExit(
             f"[dests] expected a target of the form `module:attr` "
-            f"(e.g. examples.demo_app:make_app), got {target!r}"
+            f"(e.g. examples.zh.demo_app:make_app), got {target!r}"
         )
     try:
         module = importlib.import_module(module_name)
@@ -109,7 +125,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     dests = verbs.add_parser("dests", help="print an app's uplink registry")
     dests.add_argument(
         "target",
-        help="`module:attr` — a factory returning an App, or an App itself (e.g. examples.demo_app:make_app)",
+        help="`module:attr` — a factory returning an App, or an App itself (e.g. examples.zh.demo_app:make_app)",
     )
     args = parser.parse_args(argv)
     if args.verb == "routes":

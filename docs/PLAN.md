@@ -45,4 +45,6 @@
 - [x] 重画归设备：`device.draw()` 与 `device.go(url)` — 2026-11-04
 - [x] 示例里挂一个自己的 HTTP 接口（`/status`）— 2026-11-04
 - [x] 事件驱动这一侧不返回：处理器拿 `ctx` — 2026-11-04
-- [x] 走查页进了参考应用：`examples/demo_app.py` 声明外框与三页，`/demo` 播 fluxen 的 walkthrough（一域一槽、悬浮按钮四态、播放按连接），首页重排成卡片；`token_attrs` 的 `class` 键位按 schema 归位，Rust 夹具随之对齐（`gate_t10` 逐字节相等）— 2026-11-24
+- [x] 走查页进了参考应用：`examples/zh/demo_app.py` 声明外框与三页，`/demo` 播 fluxen 的 walkthrough（一域一槽、悬浮按钮四态、播放按连接），首页重排成卡片；`token_attrs` 的 `class` 键位按 schema 归位，Rust 夹具随之对齐（`gate_t10` 逐字节相等）— 2026-11-24
+- [x] 示例应用收成一个：`examples/app` 删除，对话页搬进参考应用成为 `/chat`（`examples/zh/demo_chat.py` + `examples/zh/chat_model.py`），`/status` 一并进 `demo_app`；`gate_chat`、`test_chat_example`、`test_example_status` 改指新页，`gate_dashboard` 删除（图表/3D 由 `gate_demo` 覆盖）— 2026-11-24
+- [x] 示例分成中英两棵树：`examples/zh` 与 `examples/en` 是同一个参考应用写了两遍（界面、注释、函数文档同语言），各有自己的 `Routes()` 因而能同时起服务；页面改由 `register(app)` 以调用式声明路由（避免 `-m` 下的循环 import），`reflux.cli routes` 先找模块里的 `app`；新增 `tests/test_two_trees.py` 六例（结构逐节点相同、两树语言互斥）— 2026-11-24

@@ -18,14 +18,14 @@ import contextlib
 import io
 import unittest
 
-from examples import demo_app as demo
+from examples.zh import demo_app as demo
 from reflux import Context
-from reflux.sdk import markers
 
 _CTX = Context(app=None, device=None)  # type: ignore[arg-type]  # only the slot names are read
 from reflux import cli
 from reflux.app import App
 from reflux.sdk import dump
+from tests.fakes import page_nodes
 
 
 def sent_dests(node) -> set[str]:
@@ -38,6 +38,10 @@ def sent_dests(node) -> set[str]:
     names: set[str] = set()
 
     def walk(node) -> None:
+        if isinstance(node, (list, tuple)):
+            for kid in node:
+                walk(kid)
+            return
         if not isinstance(node, dict):
             return
         sink = node.get("sink")
@@ -49,7 +53,9 @@ def sent_dests(node) -> set[str]:
             for kid in node.get(key) or ():
                 walk(kid)
 
-    walk(dump(node))
+    # A model (what a page builder returns) or an already-dumped dict (what the app sends).
+    for item in node if isinstance(node, (list, tuple)) else [node]:
+        walk(item if isinstance(item, dict) else dump(item))
     return names
 
 
@@ -64,11 +70,14 @@ class EventsCommand(unittest.TestCase):
         self.assertEqual(
             names,
             [
+                "chat.send",
+                "chat.stop",
                 "demo.pin",
                 "demo.review",
                 "demo.save",
                 "demo.toggle",
                 "go.about",
+                "go.chat",
                 "go.demo",
                 "go.home",
                 "name.change",
@@ -92,7 +101,7 @@ class EventsCommand(unittest.TestCase):
 
     def test_the_source_column_is_where_the_handler_was_written(self) -> None:
         sources = {name: source for name, source, _ in self.app.dests.table()}
-        self.assertEqual(sources["row.add"], "examples.demo_app.on_add")
+        self.assertEqual(sources["row.add"], "examples.zh.demo_app.on_add")
         self.assertTrue(sources["reflux:hello"].startswith("reflux."), sources["reflux:hello"])
 
     def test_this_app_is_not_the_only_app_the_registry_serves(self) -> None:
@@ -104,7 +113,7 @@ class EventsCommand(unittest.TestCase):
 
 class TargetResolution(unittest.TestCase):
     def test_a_factory_is_called(self) -> None:
-        app = cli.resolve_app("examples.demo_app:make_app")
+        app = cli.resolve_app("examples.zh.demo_app:make_app")
         self.assertIsInstance(app, App)
         self.assertIn("row.add", app.dests.names())
 
@@ -112,23 +121,23 @@ class TargetResolution(unittest.TestCase):
         mine = App()
         setattr(demo, "app_for_the_test", mine)
         try:
-            self.assertIs(cli.resolve_app("examples.demo_app:app_for_the_test"), mine)
+            self.assertIs(cli.resolve_app("examples.zh.demo_app:app_for_the_test"), mine)
         finally:
             delattr(demo, "app_for_the_test")
 
     def test_a_target_without_a_colon_is_refused(self) -> None:
         with self.assertRaises(SystemExit) as caught:
-            cli.resolve_app("examples.demo_app")
+            cli.resolve_app("examples.zh.demo_app")
         self.assertIn("module:attr", str(caught.exception))
 
     def test_a_missing_attribute_is_refused_and_named(self) -> None:
         with self.assertRaises(SystemExit) as caught:
-            cli.resolve_app("examples.demo_app:no_such_factory")
+            cli.resolve_app("examples.zh.demo_app:no_such_factory")
         self.assertIn("no_such_factory", str(caught.exception))
 
     def test_an_attribute_that_is_not_an_app_is_refused(self) -> None:
         with self.assertRaises(SystemExit) as caught:
-            cli.resolve_app("examples.demo_app:GO")  # a dict of navigation targets
+            cli.resolve_app("examples.zh.demo_app:GO")  # a dict of navigation targets
         self.assertIn("dict", str(caught.exception))
 
 
@@ -140,19 +149,19 @@ class EverySendableDestHasAHandler(unittest.TestCase):
         self.registered = set(self.app.dests.names())
 
     def test_the_reference_page_sends_only_registered_dests(self) -> None:
-        sent = sent_dests(markers.page('/', '演示', *demo.demo.home(_CTX)))
+        sent = sent_dests(page_nodes(self.app, '/'))
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
         self.assertEqual(sent - self.registered, set(), "the page sends an event nobody handles")
 
     def test_the_about_page_sends_only_registered_dests(self) -> None:
-        sent = sent_dests(markers.page('/about', '关于', *demo.demo.about()))
+        sent = sent_dests(page_nodes(self.app, '/about'))
         self.assertTrue(sent)
         self.assertEqual(sent - self.registered, set())
 
     def test_the_walk_sees_the_row_forms_the_page_does_not_contain(self) -> None:
         # Rows arrive through `append`, not through the page tree, so the row template is its own
         # subject — a row's remove event is exactly the kind of thing a page walk would miss.
-        row = demo.row_node({"id": "row-9", "text": "x"}, _CTX)
+        row = demo.row_node({"id": "row-9", "text": "x"})
         self.assertEqual(sent_dests(row), {"row.remove"})
         self.assertIn("row.remove", self.registered)
 
@@ -165,7 +174,7 @@ class Printing(unittest.TestCase):
         return code, out.getvalue()
 
     def test_intents_prints_a_header_and_one_line_per_name(self) -> None:
-        code, text = self.run_cli("dests", "examples.demo_app:make_app")
+        code, text = self.run_cli("dests", "examples.zh.demo_app:make_app")
         self.assertEqual(code, 0)
         lines = [line for line in text.splitlines() if line.strip()]
         self.assertTrue(lines[0].startswith("dest"))
@@ -173,11 +182,11 @@ class Printing(unittest.TestCase):
         self.assertIn("source", lines[0])
         # header + the demo's own names + the two protocol names + the three auth verbs (it declares
         # `auth=`, so the door exists — an app without one has neither the verbs nor a gate)
-        self.assertEqual(len(lines), 1 + 17, "header + every name the demo registers")
+        self.assertEqual(len(lines), 1 + 20, "header + every name the demo registers")
         self.assertTrue(any(line.startswith("row.remove") for line in lines))
 
     def test_routes_still_works(self) -> None:
-        code, text = self.run_cli("routes", "examples.demo_app")
+        code, text = self.run_cli("routes", "examples.zh.demo_app")
         self.assertEqual(code, 0)
         self.assertIn("/about", text)
 

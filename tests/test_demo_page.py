@@ -16,9 +16,9 @@ import unittest
 
 from reflux.sdk._parse import dump
 
-from examples import demo_app as _app
-from examples.demo import page as demo
-from examples.demo import scene
+from examples.zh import demo_app as _app
+from examples.zh.demo import page as demo
+from examples.zh.demo import scene
 from tests.fakes import FakeDevice
 
 # The page lives in the reference app; one built app serves every case, the way the gates build one.

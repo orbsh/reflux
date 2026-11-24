@@ -1,6 +1,6 @@
 """The walkthrough page: fluxen's own story, contributed to the reference app as `/demo`.
 
-    python3 -m examples.demo_app --port 8000      # then /demo, or the nav's 「走查」
+    python3 -m examples.zh.demo_app --port 8000      # then /demo, or the nav's 「走查」
 
 `fluxen/examples/walkthrough.py` is one message box that streams two charts, three radars, a review
 table, two 3D models, a code editor and a growing relationship graph into itself. There the script
@@ -45,7 +45,6 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from reflux import Context, Match
-from reflux.routes import route
 from reflux.sdk import builders as b
 from reflux.sdk.types import Accrete, Bind
 from reflux.slots import Slot
@@ -86,7 +85,8 @@ TRUCK_URL = "/assets/splatviewer/truck.ksplat"
 
 
 def _find(name: str, probe: str) -> Path | None:
-    """A module's directory: a local vendor copy first, then a fluxen checkout."""
+    """一个模块的目录：先找本地 vendor 副本，再找 fluxen 检出。
+    """
     for where in (VENDOR / name, ASSETS / name):
         if (where / probe).exists():
             return where
@@ -121,11 +121,11 @@ PRESENT: dict[str, bool] = {
 
 
 def install(app: Any) -> None:
-    """Mount every module directory that is on disk — the app's HTTP table, not a page's.
+    """把磁盘上存在的每个模块目录都挂出去 —— 这是应用的表，不是页面的。
 
-    None of these is in git (`www/static/vendor/` is ignored and the 3D viewer is 30 MB with a model
-    beside it), so each is served from wherever it exists. A host with nothing behind it reads as a
-    bug on screen, which is why the page says where it looked instead of drawing an empty box.
+    这些都不进 git（`www/static/vendor/` 被忽略，3D 查看器带一个模型有 30 MB），所以每个都从它实际
+    在的地方提供服务。背后什么都没有的宿主会在屏幕上显示成一个 bug，所以这一页说出它找过哪里，
+    而不是画一个空盒子。
     """
     for path, where in MOUNTS.items():
         if where is not None:
@@ -143,10 +143,10 @@ REVIEW = Slot("demo.review")
 
 
 class Walkthrough(Protocol):
-    """This page's slots — the editor's view of them; the wire only ever sees the names.
+    """这一页的槽 —— 给编辑器看的视图；wire 只看得见名字。
 
-    Every name in here is `demo.<field>`, so one handle (`ctx.slot("demo")`) reaches all of them and
-    the page reads `s.stream`, not a string.
+    这里每个名字都是 `demo.<字段>`，所以一个句柄（`ctx.slot("demo")`）就能拿到全部，页面写
+    `s.stream`，而不是写字符串。
     """
 
     graph: Slot  # the left column's forcegraph
@@ -177,7 +177,8 @@ class Walkthrough(Protocol):
 
 
 def slots_of(ctx: Context) -> "Walkthrough":
-    """One delivery's names for this page — `ctx.slot("demo")` nested, so `s.stream` is `demo.stream`."""
+    """一次投递里这一页的名字 —— `ctx.slot("demo")` 套着一层，于是 `s.stream` 就是 `demo.stream`。
+    """
     return ctx.slot("demo")  # type: ignore[return-value]
 
 
@@ -190,7 +191,8 @@ PIN_TAG = "snippet"  # the rail only takes cargo tagged this way (ADR 0034)
 
 @dataclass
 class Settings:
-    """How fast the story talks — a deployment's choice, filled from the command line."""
+    """故事说得多快 —— 部署的选择，从命令行填。
+    """
 
     pace: float = 0.03  # seconds per typewriter chunk (3 characters)
     hold: float = 0.35  # seconds between beats
@@ -202,11 +204,10 @@ settings = Settings()
 
 @dataclass
 class Run:
-    """One device's playback: what it may speak, where it stands, and what the graph shows.
+    """一台设备的播放：它能说什么、停在哪、图上显示什么。
 
-    `phase` is explicit rather than inferred from the thread — a worker that has not been spawned
-    yet and one that is mid-beat answer the same question differently, and the button has to know
-    which case it is in.
+    `phase` 是显式写的，不从线程推断 —— 一个还没起的线程和一个正走到一拍中间的线程对同一个问题
+    回答不同，而按钮必须知道自己处在哪一种。
     """
 
     phase: str = "idle"  # idle | playing | paused | done
@@ -217,7 +218,8 @@ class Run:
 
 
 def state(ctx: Context) -> Run:
-    """This connection's playback, hung on `ctx.data` — it dies with the connection."""
+    """这条连接的播放状态，挂在 `ctx.data` 上 —— 随连接一起结束。
+    """
     run = ctx.data.get("demo")
     if run is None:
         run = Run()
@@ -261,11 +263,10 @@ RAIL = {
 
 
 def control(label: str) -> Accrete:
-    """The floating button, in one of its four states: play → pause → resume → replay.
+    """浮动按钮，四种状态之一：播放 → 暂停 → 继续 → 重播。
 
-    The button is a bundle's confirm key (it has a sink and the bundle names the timing), and the
-    label is the state's — which is why this whole node rides a slot instead of being drawn into
-    the page.
+    这个按钮是 bundle 的确认键（它有 sink，时机由 bundle 命名），标签由状态给 —— 所以整个节点
+    走一个槽，而不是画进页面里。
     """
     return b.bundle(
         b.button(label, sink=TOGGLE),
@@ -275,13 +276,11 @@ def control(label: str) -> Accrete:
     )
 
 
-@route(PAGE, title="走查")
 def page(ctx: Context, match: Match) -> None:
-    """The page, and — once per connection — what the control region starts out holding.
+    """页面，以及每条连接一次的、控制区一开始装的东西。
 
-    The floating control's first node is a *send*, like every seed: the page supplies structure, and
-    a region's content is written to its slot. Seeding is guarded on the device because a slot
-    outlives a `create` — drawing twice must not append the same chip twice.
+    浮动控件的第一个节点是一次**发送**，和所有种子一样：页面提供结构，一个区的内容写进它的槽。
+    种在这里按设备守卫，因为槽活得比一次 `create` 长 —— 画两次不能把同一个碎片追加两遍。
     """
     s: Walkthrough = slots_of(ctx)
     if not ctx.data.get("demo_seeded"):
@@ -337,10 +336,10 @@ def page(ctx: Context, match: Match) -> None:
 # ---- the row --------------------------------------------------------------------------------
 
 def band(*children: Accrete, rows: str, columns: str | None = None, id: str) -> Accrete:
-    """A borderless container that gives its charts a definite size (ADR 0009).
+    """一个无边框容器，给它的图表一个确定的尺寸（ADR 0009）。
 
-    A canvas has no size of its own: it mounts a 100×100 surface and the page looks blank with zero
-    console errors, so the size comes from the box it sits in.
+    画布自己没有尺寸：它挂上去的是 100×100 的面，页面看着一片空白、控制台一个错都不报，所以尺寸
+    只能来自它坐的那个盒子。
     """
     grid: dict[str, str] = {"grid-template-rows": rows}
     if columns is not None:
@@ -349,11 +348,10 @@ def band(*children: Accrete, rows: str, columns: str | None = None, id: str) -> 
 
 
 def pin_tile(name: str, title: str) -> Accrete:
-    """The row's one draggable unit: the cargo IS this subtree, read at dragstart (ADR 0034).
+    """这一行里唯一可拖的单位：货物就是这棵子树，在 dragstart 时读出（ADR 0034）。
 
-    `attrs.draggable` tags the box `snippet`, the rail's `accept` takes only that tag, and what
-    lands is `{id, kind}` — the source adds no size or style of its own, so what the reader sees is
-    the chip inside it.
+    `attrs.draggable` 把这个盒子标成 `snippet`，右侧轨道只 `accept` 这个 tag，落地的是 `{id, kind}`
+    —— 源自己不加任何尺寸或样式，所以读者看见的是它里面那个碎片。
     """
     return b.frame(
         b.text(f"≡ 把「{title}」拖到右边", variant="muted"),
@@ -364,11 +362,10 @@ def pin_tile(name: str, title: str) -> Accrete:
 
 
 def row(s: Demo) -> Accrete:
-    """One row, every child bound to its own slot — the reason a stream re-renders one segment.
+    """一行，每个子节点绑在自己的槽上 —— 这就是一段流只重绘一截的原因。
 
-    An empty data area takes no room (ADR 0012), so the box opens holding nothing and grows a
-    segment at a time: a chart, a model or the editor appears the moment its payload lands, and
-    nothing already on screen is rebuilt.
+    空的数据区不占位置（ADR 0012），所以盒子一开始什么都不装，一段一段长出来：图表、模型或编辑器
+    在各自的载荷到达那一刻出现，屏幕上已有的东西不会被重建。
     """
     return b.frame(
         b.text(source=s.analytics, format="md", id="say-analytics"),
@@ -410,10 +407,10 @@ KINDS = {"number": "数字", "bool": "勾选", "text": "文本"}
 
 
 def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str) -> Accrete:
-    """One row of the table: an `entry` whose cells carry `selector` = the field's key.
+    """表格的一行：一个 `entry`，每格的 `selector` 就是那个字段的键。
 
-    There is no table/thead/tr/td family (ADR 0031 §4): a `tiles` with `fields` places cells by
-    key, and the header is derived from the fields' titles.
+    没有 table/thead/tr/td 这一族（ADR 0031 §4）：带 `fields` 的 `tiles` 按键放格子，表头由字段的
+    标题推出来。
     """
     return b.entry(
         b.text(str(initial), selector="score"),
@@ -426,12 +423,11 @@ def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str
 
 
 def review_form(s: Demo) -> Accrete:
-    """The table (rows arrive through a slot) and the form (fields a bundle can pack).
+    """表（行从槽里来）与表单（bundle 能打包的那些字段）。
 
-    Both halves are here because they cannot be one: `bundle` claims a field by walking its own
-    static children (`hooks.rs`, `collect`), so a row that arrives through a slot is not one of its
-    fields. The table is therefore the read-out and the three inputs below it are the form — a
-    submit carries `{zw, cj, sy}`, one value per row, whichever kind that row's cell is.
+    两半都在这里，因为它们合不成一个：`bundle` 靠遍历自己的静态子节点认领字段（`hooks.rs`、`collect`），
+    而一行从槽里来，就不在它的字段里。所以表是读数，它下面那三个输入是表单 —— 一次提交带
+    `{zw, cj, sy}`，每行一个值，不管那一行那格是什么类型。
     """
     return b.bundle(
         # One vertical box: a bundle is a flex row, so its children side by side squeeze the prose
@@ -475,21 +471,19 @@ def review_form(s: Demo) -> Accrete:
 # ---- the beats ------------------------------------------------------------------------------
 
 def payload(value: Any) -> Accrete:
-    """A slot's value with no structure: a `frame` whose `source.default` IS the payload.
+    """一个槽的值，不带任何结构：一个 `frame`，它的 `source.default` **就是**载荷。
 
-    A `frame` is the one node that owns a value (ADR 0027), and a module host reads its payload
-    from its slot's node's `source.default` — so this is how a chart spec, a graph snapshot or a
-    scene reaches a host.
+    `frame` 是唯一持有值的节点（ADR 0027），模块宿主从它槽里那个节点的 `source.default` 读载荷 ——
+    图表 spec、图快照或一个场景就是这样到达宿主的。
     """
     return b.frame(source=Bind(default=value))
 
 
 def hold(run: Run, seconds: float) -> None:
-    """A sleep that stops with the script: time spent paused does not count against it.
+    """一个随剧本一起停的睡眠：暂停的时间不算在剧本里。
 
-    `Event.wait` is not a sleep — a set event returns at once, which is exactly the wrong shape
-    here. So the pause is a block (`wait()` with no timeout) and the clock is a real sleep in
-    slices, which keeps a pause landing within 50 ms without giving up the pacing.
+    `Event.wait` 不是睡眠 —— 事件已置位时它立刻返回，在这里恰好是错的形状。所以暂停是一个阻塞
+    （无超时的 `wait()`），时钟是切片里的真睡眠，于是暂停能在 50 ms 内生效，又不牺牲节奏。
     """
     left = seconds
     while left > 0:
@@ -501,10 +495,10 @@ def hold(run: Run, seconds: float) -> None:
 
 
 def type_out(run: Run, slot: Slot, text: str) -> None:
-    """Three characters a frame, the way a model streams tokens — and a pause is a wait.
+    """一帧三个字，像模型吐词元那样 —— 而暂停就是等。
 
-    The pause is read *before* each chunk, so a stopped script writes nothing new; the chunk already
-    in flight still lands, which is why a gate reads a quiet window rather than one frame.
+    暂停在每一块**之前**读，所以停下的剧本不再写新东西；已经在路上的那一块仍然会落地，这也是为什么
+    门读的是一段安静窗口，而不是一帧。
     """
     for at in range(0, len(text), 3):
         run.resume.wait()
@@ -513,7 +507,8 @@ def type_out(run: Run, slot: Slot, text: str) -> None:
 
 
 def grow(run: Run, s: Demo, label: str) -> None:
-    """Push the snapshot for what has appeared so far — the graph grows with the stream."""
+    """把到场到现在为止的快照推出去 —— 图随流一起长大。
+    """
     ids = next((ids for name, ids in scene.GRAPH_REVEAL if name == label), ())
     if not ids:
         return
@@ -522,7 +517,8 @@ def grow(run: Run, s: Demo, label: str) -> None:
 
 
 def beat_row(ctx: Context, run: Run, s: Demo) -> None:
-    """The one row, the six text slots it will be typed into, and the graph's first snapshot."""
+    """那一行、它将被写进去的六个文本槽，和图的第一个快照。
+    """
     with ctx.turn():  # the reader sees the box and its empty segments arrive together
         s.stream.append(row(s))
         for slot in (s.analytics, s.summary, s.say_car, s.say_shoe, s.say_patch, s.say_graph):
@@ -535,14 +531,16 @@ def beat_analytics(ctx: Context, run: Run, s: Demo) -> None:
 
 
 def beat_charts(ctx: Context, run: Run, s: Demo) -> None:
-    """Four specs in one frame: the line chart and the three radars fill their bands."""
+    """一帧里四份 spec：折线与三个雷达填满各自那一条。
+    """
     with ctx.turn():
         for name, spec in (("trend", scene.TREND), *scene.RADARS.items()):
             getattr(s, name).set(payload(spec))
 
 
 def beat_days(ctx: Context, run: Run, s: Demo) -> None:
-    """One frame per day, three appends each — the line grows to thirty days while the reader watches."""
+    """一天一帧，每帧三次追加 —— 折线长到三十天，读者一路看着。
+    """
     for day, *scores in scene.TAIL_DAYS:
         hold(run, settings.day)
         with ctx.turn():
@@ -572,7 +570,8 @@ def beat_shoe(ctx: Context, run: Run, s: Demo) -> None:
 
 
 def beat_editor(ctx: Context, run: Run, s: Demo) -> None:
-    """The code is a parameter like the two models: Monaco is fetched when the payload arrives."""
+    """代码和两个模型一样是参数：Monaco 在载荷到达时才取。
+    """
     type_out(run, s.say_patch, scene.PATCH)
     s.patch_code.set(payload({"code": scene.PATCH_CODE, "lang": "rust", "event": str(SAVE)}))
 
@@ -582,7 +581,8 @@ def beat_graph(ctx: Context, run: Run, s: Demo) -> None:
 
 
 def beat_focus(ctx: Context, run: Run, s: Demo) -> None:
-    """The equivalent of a search landing: the camera flies to a cluster, nothing else leaves."""
+    """相当于一次搜索落点：相机飞向一簇，别的东西不离开。
+    """
     snapshot = scene.graph_payload(run.revealed)
     snapshot["focus"] = {"ids": ["accrete", "content", "transport"], "seq": 1}
     s.graph.set(payload(snapshot))
@@ -606,12 +606,14 @@ BEATS: tuple[tuple[str, Callable[[Context, Run, Demo], None]], ...] = (
 # ---- the player -----------------------------------------------------------------------------
 
 def spawn(target: Callable[..., None], args: tuple) -> None:
-    """Put the script on a thread. A module-level seam so a test can run it inline instead."""
+    """把剧本放上线程。模块级的一个接缝，好让测试改成同步执行。
+    """
     threading.Thread(target=target, args=args, daemon=True).start()
 
 
 def play(ctx: Context) -> None:
-    """The script, beat by beat. Synchronous on purpose: the thread is the caller's choice."""
+    """剧本，一拍一拍地走。故意是同步的：线程是调用方的选择。
+    """
     run = state(ctx)
     s: Walkthrough = slots_of(ctx)
     try:
@@ -633,11 +635,10 @@ def play(ctx: Context) -> None:
 
 
 def start(ctx: Context, run: Run) -> None:
-    """Reset what a finished run left behind, then put the script on a thread.
+    """清掉跑完一遍留下的东西，再把剧本放上线程。
 
-    Only what the player wrote is cleared: the row (its children are re-seeded by the first beat,
-    and its payloads are re-set by theirs) and the table's three rows. What the *reader* dropped on
-    the rail stays — replaying the story is not undoing someone's pins.
+    只清播放器自己写的：那一行（它的子节点由第一拍重新种，载荷由各自的拍重新设）和表的三行。
+    **读者**拖到轨道上的东西留着 —— 重播这个故事不是撤销别人钉下的东西。
     """
     s: Walkthrough = slots_of(ctx)
     if run.beat:
@@ -654,7 +655,8 @@ def start(ctx: Context, run: Run) -> None:
 
 
 def on_toggle(ctx: Context, frame: dict) -> None:
-    """One button, four states: play → pause → resume → replay."""
+    """一个按钮，四种状态：播放 → 暂停 → 继续 → 重播。
+    """
     run = state(ctx)
     s: Walkthrough = slots_of(ctx)
     if run.phase in ("idle", "done"):
@@ -673,17 +675,18 @@ def on_toggle(ctx: Context, frame: dict) -> None:
 
 
 def fields(frame: dict) -> dict:
-    """A handler's payload: the frame's `data` as a bag, empty when the frame carries none.
+    """处理器的载荷：帧的 `data` 当一个袋子看，帧里没有时就是空的。
 
-    Every uplink on this page is read defensively — a malformed frame from a module or a stale
-    client is a line on screen, not a raised handler (a raise would only reach the log).
+    这一页的每条上行都防御式地读 —— 来自模块或过期客户端的畸形帧是屏幕上的一行字，不是抛出去的
+    处理器（抛出去也只会进日志）。
     """
     data = frame.get("data")
     return data if isinstance(data, dict) else {}
 
 
 def on_pin(ctx: Context, frame: dict) -> None:
-    """A drag landed on the rail: the cargo's own id and kind, named on screen (ADR 0034)."""
+    """一次落点落在轨道上：货物自己的 id 与 kind，写在屏幕上（ADR 0034）。
+    """
     s: Walkthrough = slots_of(ctx)
     data = fields(frame)
     ident = data.get("id")
@@ -696,7 +699,8 @@ def on_pin(ctx: Context, frame: dict) -> None:
 
 
 def on_save(ctx: Context, frame: dict) -> None:
-    """Ctrl/Cmd+S in the editor: the code and its language, up the same leg the form uses."""
+    """编辑器里按 Ctrl/Cmd+S：代码连同语言，走表单用的同一条腿。
+    """
     s: Walkthrough = slots_of(ctx)
     data = fields(frame)
     code = data.get("code")
@@ -707,7 +711,8 @@ def on_save(ctx: Context, frame: dict) -> None:
 
 
 def on_review(ctx: Context, frame: dict) -> None:
-    """The form's fields, as the renderer packed them — one key per row."""
+    """表单的字段，按渲染器打包的样子 —— 一行一个键。
+    """
     s: Walkthrough = slots_of(ctx)
     data = frame.get("data") if isinstance(frame.get("data"), dict) else {}
     if not data:
@@ -720,7 +725,12 @@ def on_review(ctx: Context, frame: dict) -> None:
 # ---- what an app does with this page --------------------------------------------------------------
 
 def register(app: Any) -> None:
-    """Put this page's uplinks on an app: the four handlers, under the names the page speaks to."""
+    """把这一页挂到应用上：它的路由，和页面所说的那些名字下的四个处理器。
+
+    路由是调用式而不是装饰器，因为这个模块不能 import 应用：`python3 -m examples.zh.demo_app` 时
+    应用模块是以 `__main__` 跑的。
+    """
+    app.route(PAGE, title="走查")(page)
     app.on(TOGGLE, on_toggle)
     app.on(PIN, on_pin)
     app.on(SAVE, on_save)

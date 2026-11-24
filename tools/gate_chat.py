@@ -3,7 +3,7 @@
 
 Two phases, because they answer different questions.
 
-**A. The socket phase** drives the application's chat page (`examples.app.chat`, `/chat`) as a client: no browser, no DOM, just the
+**A. The socket phase** drives the application's chat page (`examples/zh/demo_chat.py`, `/chat` of the reference app) as a client: no browser, no DOM, just the
 frames. That is where the backend's promises live — one conversation per connection, a reply that
 arrives in chunks, a stop that stops at a boundary, a second message refused with a reason, the app's
 own size limit (the protocol has none), and a window that trims while the status line keeps counting.
@@ -29,9 +29,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # the example p
 
 from cdp import console_errors, open_page, report  # noqa: E402
 
-import examples.app as example  # noqa: E402
-from examples.app import chat as chat_page  # noqa: E402
-from examples.app.model import Scripted  # noqa: E402
+import examples.zh.demo_app as example  # noqa: E402
+from examples.zh import demo_chat as chat_page  # noqa: E402
+from examples.zh.chat_model import Scripted  # noqa: E402
 from tools.wire_probe import Socket  # noqa: E402
 
 MAX_CHARS = chat_page.MAX_CHARS
@@ -113,7 +113,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
     chat_page.settings.model = Scripted(window=WINDOW)
     chat_page.settings.delay = 0.01
     chat_page.settings.window = WINDOW
-    app = example.app
+    app = example.make_app()
     srv = app.serve(port=0)
     port = int(srv.server_address[1])
     checks: list[tuple[str, bool, str]] = []
@@ -251,7 +251,7 @@ def browser_phase() -> list[tuple[str, bool, str]]:
     chat_page.settings.model = Scripted(window=WINDOW)
     chat_page.settings.delay = 0.01
     chat_page.settings.window = WINDOW
-    app = example.app
+    app = example.make_app()
     checks: list[tuple[str, bool, str]] = []
     with open_page(app=app, path=PAGE, settle=0.6) as (cdp, base):
         body = cdp.eval("document.body.innerText") or ""

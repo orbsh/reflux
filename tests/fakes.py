@@ -46,3 +46,20 @@ class FakeDevice:
 
     def emit(self, *operations: dict) -> None:
         self.send(wire.draw(*operations))
+
+
+def page_nodes(app: Any, path: str = "/") -> list[dict]:
+    """The nodes of the page an app sends for `path` — the `create`'s payload, markers and all.
+
+    A page is a send (`ctx.page(...)`), not a value a route hands back, so a fixture that wants the
+    tree takes the one the app actually draws: one fake device, one draw, the frame it got.
+    """
+    device = FakeDevice(path=path, app=app)
+    app._draw(device)
+    for sent in device.frames:
+        for operation in sent:
+            # The page arrives as `set routes <page-root>`: the markers are that root's first two
+            # children (`ctx.page` puts them there), so one node carries the whole page.
+            if operation.get("action") == "set" and operation.get("slot") == "routes":
+                return [operation["data"]]
+    raise AssertionError(f"no page was drawn for {path!r}")

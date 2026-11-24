@@ -24,10 +24,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # the example p
 
 from cdp import console_errors, open_page, report  # noqa: E402
 
-from examples import demo_app as example  # noqa: E402
-from examples.demo import page as demo  # noqa: E402
-from examples.demo import scene  # noqa: E402
-from examples.demo import page as assets  # the module hosts live with the page that draws them
+from examples.zh import demo_app as example  # noqa: E402
+from examples.zh.demo import page as demo  # noqa: E402
+from examples.zh.demo import scene  # noqa: E402
+from examples.zh.demo import page as assets  # the module hosts live with the page that draws them
 from tools.wire_probe import Socket  # noqa: E402
 
 # The story is ~500 frames; this pace leaves room to pause inside it and still ends in seconds.

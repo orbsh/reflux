@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """T9 gate — the reference app in a real browser: is the SDK enough to write an application?
 
-`examples/demo_app.py` is the only application in this repo written the way an application is written
+`examples/zh/demo_app.py` is the only application in this repo written the way an application is written
 (SDK builders + `wire` + the route table), and until this gate nothing drove it: it was `gate_t7`'s
 device fixture and nothing more. So the question T9 asks is not about a mechanism — every mechanism
 has its own gate — but about the whole: the four advertised interactions, two declared routes, the
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 
-from examples import demo_app as demo  # noqa: E402
+from examples.zh import demo_app as demo  # noqa: E402
 
 PAGE = "/"
 

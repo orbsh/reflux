@@ -6,7 +6,7 @@
 
 No page is declared, so the page loads, connects and draws nothing: this is the dev loop's
 "serve the page and drive the planes by hand", not an application. To run an application, give it
-its own App (`examples/demo_app.py` is one).
+its own App (`examples/zh/demo_app.py` is one).
 
 uv is available but not required: the producer side has no dependencies.
 """

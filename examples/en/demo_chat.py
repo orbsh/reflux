@@ -1,0 +1,256 @@
+"""The chat page: a conversation per connection, streamed, stoppable, and honest about failures.
+
+It is the one page of the reference app whose subject is the *backend* rather than the vocabulary,
+and it is six pieces of behaviour, one per section — each asserted in `tests/test_chat_example.py`
+(offline, no socket) and in `tools/gate_chat.py` (real server, real WebSocket):
+
+1. **state per connection** — the conversation hangs off the `Device` (`ctx.data`), not off the app:
+   the socket *is* the state, so a refresh is a new conversation and nothing leaks when a client goes
+   away. The transcript is also the page tree's (the rows), so the backend keeps only what the model
+   needs: turns, and how many of them the window holds.
+2. **streaming** — a worker thread per reply appends chunks with
+   `reply.patch("/source/default", chunk, op="append")` — a `Slot`, not a name in a string. The frame
+   queue is the device's, so one client's slow write never holds a model call or another device.
+3. **single flight** — a second message while one is streaming is refused *with a reason on the
+   status line*, not silently dropped: the composer is not disabled, so the second send is a real
+   event and deserves a real answer.
+4. **stop** — `chat.stop` sets an event the worker checks at chunk boundaries. A stopped reply is
+   **not** added to the context even though part of it is on screen: half a sentence is worse for the
+   next turn than no sentence, and the status line says so.
+5. **a failing model is a bubble** — the exception becomes text in the reply slot plus a status line;
+   it never travels up the frame path (a raised handler would only be logged, and the user would see
+   a reply that silently stopped mid-sentence).
+6. **application limits** — empty and oversized messages are refused here, not at the ingest
+   boundary: that boundary checks the *shape* of a frame; how long a prompt may be is this app's.
+
+The knobs (`model`, `delay`, `window`) live in `settings`, which the reference app's `main()` fills
+from the command line — one place for the whole app, because there is one app.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+from dataclasses import dataclass, field
+
+from reflux import Context
+from reflux.sdk import builders as b
+from reflux.sdk.types import Accrete
+from reflux.slots import Slot
+
+from .chat_model import Model, OpenAI, Scripted, Turn
+from .demo_slots import DemoSlots, slots_of
+
+__all__ = ["Chat", "MAX_CHARS", "OpenAI", "Scripted", "Turn", "WINDOW", "page", "prompt_of", "register", "send", "settings", "stream"]
+
+TEXT_VALUE = "/source/default"  # pointer into a text node stored in a slot
+MAX_CHARS = 4096  # an application limit, not a wire limit
+WINDOW = 12  # turns of context the model sees; older ones are dropped
+
+
+@dataclass
+class Settings:
+    """What a deployment decides once: which model, how fast it streams, how much it remembers."""
+
+    model: Model = field(default_factory=lambda: Scripted(window=WINDOW))
+    window: int = WINDOW
+    delay: float = 0.02
+
+
+settings = Settings()
+
+
+@dataclass
+class Chat:
+    """One conversation: what the model is told, what the user is told, and who is streaming."""
+
+    model: Model
+    window: int = WINDOW
+    delay: float = 0.0
+    turns: list[Turn] = field(default_factory=list)
+    trimmed: int = 0  # turns dropped out of the window, counted for the status line
+    total: int = 0  # turns ever recorded, so the reader can see the difference
+    seq: int = 0  # reply counter: slot and row names
+    busy: bool = False
+    stop: threading.Event = field(default_factory=threading.Event)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def record(self, role: str, text: str) -> Turn:
+        """Add a turn and keep the window: the model sees the last `window` turns, nothing older."""
+        turn = Turn(role, text)
+        self.turns.append(turn)
+        self.total += 1
+        while len(self.turns) > self.window:
+            self.turns.pop(0)
+            self.trimmed += 1
+        return turn
+
+    def status(self) -> str:
+        return f"ready · {self.model.name} · {self.total} turns (window {len(self.turns)}/{self.window}, trimmed {self.trimmed})"
+
+
+def state(ctx: Context) -> Chat:
+    """This connection's conversation: hung on `ctx.data`, so it dies with the connection."""
+    chat = ctx.data.get("chat")
+    if chat is None:
+        chat = Chat(model=settings.model, window=settings.window, delay=settings.delay)
+        ctx.data["chat"] = chat
+    return chat
+
+
+def row(*children: Accrete, id: str) -> Accrete:
+    return b.frame(*children, id=id)
+
+
+def page(ctx: Context, match) -> None:
+    """The page — and, the first time this connection asks for it, the status line it reads.
+
+    The seed is a **send**, so it is written as one (`slots.status.set(...)`), not folded into the
+    page: on this side of the socket nothing is a response, and a page that later has to say
+    something to more than the one device that asked (a broadcast, a nudge from a timer) says it the
+    same way.
+
+    The address and the title come from the declaration above — `ctx.page` builds the markers — so
+    the handler passes its content and nothing else.
+    """
+    slots = slots_of(ctx)
+    if not ctx.data.get("status_seeded"):
+        ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
+        slots.status.set(b.text("ready"))
+    ctx.page(
+        b.frame(
+            b.text("Chat", variant="heading-1"),
+            b.text(source=slots.status, variant="muted", id="status"),
+            b.tiles(source=slots.messages, id="messages"),
+            b.frame(
+                b.bundle(
+                    b.input(tag="text", id="composer"),
+                    b.button("Send", sink=slots.chat.send),
+                    sink=slots.chat.send,
+                    submit=["enter", "button"],
+                    id="send",
+                ),
+                b.bundle(
+                    b.button("Stop", sink=slots.chat.stop),
+                    sink=slots.chat.stop,
+                    submit="button",
+                    id="stop",
+                ),
+                grid={"grid-template-columns": "1fr auto", "gap": "8px"},
+                id="composer-row",
+            ),
+            b.text("The reply streams in chunks and can be stopped or refused; a failing model becomes a bubble, not a stack trace.", variant="muted"),
+            id="chat-page",
+            grid={"grid-template-rows": "auto auto 1fr auto auto", "height": "100%", "gap": "8px"},
+        ),
+    )
+
+
+def prompt_of(frame: dict) -> str | None:
+    """The composer's text out of a `chat.send` frame, or None when the frame carries nothing usable.
+
+    A form's submit carries `{field: {"data": value, ...}}` — that shape comes from the renderer, not
+    from us, so the unwrapping lives here and is total: a malformed frame yields None, never a raise.
+    """
+    data = frame.get("data")
+    entry = data.get("text") if isinstance(data, dict) else None
+    value = entry.get("data") if isinstance(entry, dict) else entry
+    return value if isinstance(value, str) else None
+
+
+def spawn(target, args: tuple) -> None:
+    """Start a reply's worker. A module-level seam so a test can run the reply inline instead."""
+    threading.Thread(target=target, args=args, daemon=True).start()
+
+
+def send(ctx: Context, chat: Chat, text: str) -> None:
+    """Take one message: refuse it with a reason, or put it on screen and start the reply."""
+    slots = slots_of(ctx)
+    if not text.strip():
+        slots.status.set(b.text("empty message — nothing was sent"))
+        return
+    if len(text) > MAX_CHARS:
+        slots.status.set(b.text(f"too long: {len(text)} characters > the {MAX_CHARS}-character limit — nothing was sent"))
+        return
+    with chat.lock:
+        if chat.busy:
+            slots.status.set(b.text("the previous reply is still streaming: press Stop, or wait for it"))
+            return
+        chat.busy = True
+        chat.stop.clear()
+        chat.seq += 1
+        seq = chat.seq
+
+    chat.record("user", text)
+    context = list(chat.turns)  # a snapshot: the window may move while the model is answering
+    reply = ctx.slot(f"reply.{seq}")  # a path, because each answer gets its own plane
+    with ctx.turn():  # the client sees the two rows, the empty bubble and the status at once
+        slots.messages.append(row(b.text(text), id=f"row-user-{seq}"))
+        slots.messages.append(row(b.text(source=reply), id=f"row-bot-{seq}"))
+        reply.set(b.text(""))
+        slots.status.set(b.text(f"answering… ({chat.model.name})"))
+    spawn(stream, (ctx, chat, reply, context))
+
+
+def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
+    """One reply, chunk by chunk. Synchronous on purpose: the thread is the caller's choice, so a
+    test can run a whole reply without one."""
+    pieces: list[str] = []
+    failure: Exception | None = None
+    try:
+        for chunk in chat.model.reply(context):
+            if chat.stop.is_set():
+                break
+            pieces.append(chunk)
+            reply.patch(TEXT_VALUE, chunk, op="append")
+            if chat.delay:
+                time.sleep(chat.delay)
+    except Exception as exc:  # a model is a remote system: its failure is data, not control flow
+        failure = exc
+    finally:
+        with chat.lock:
+            chat.busy = False
+
+    slots = slots_of(ctx)
+    if failure is not None:
+        with ctx.turn():
+            reply.patch(TEXT_VALUE, f"\n\n⚠️ the model failed: {failure}", op="append")
+            slots.status.set(b.text(f"failed: {type(failure).__name__} · you can send another"))
+        return
+    if chat.stop.is_set():
+        with ctx.turn():
+            reply.patch(TEXT_VALUE, " ⏹", op="append")
+            slots.status.set(b.text(f"stopped (the half sentence stayed out of the context) · {chat.total} turns"))
+        return
+    chat.record("assistant", "".join(pieces))
+    slots.status.set(b.text(chat.status()))
+
+
+def on_send(ctx: Context, frame: dict) -> None:
+    text = prompt_of(frame)
+    if text is None:
+        slots_of(ctx).status.set(b.text("this frame carried no text field — nothing was sent"))
+        return
+    send(ctx, state(ctx), text)
+
+
+def on_stop(ctx: Context, frame: dict) -> None:
+    chat = state(ctx)
+    slots = slots_of(ctx)
+    if not chat.busy:
+        slots.status.set(b.text("nothing is streaming"))
+        return
+    chat.stop.set()
+    slots.status.set(b.text("stopping…"))
+
+
+def register(app, slots: DemoSlots) -> None:
+    """Put this page on the app: its route, and its two uplinks.
+
+    The route is declared here as a call rather than a decorator (`app.route(...)(page)`) because this
+    module must not import the app: under `python3 -m examples.X.demo_app` the app module runs as
+    `__main__`, and `from .demo_app import app` would build a second copy of it.
+    """
+    app.route("/chat", title="Chat")(page)
+    app.on(slots.chat.send, on_send)
+    app.on(slots.chat.stop, on_stop)

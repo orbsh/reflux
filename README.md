@@ -30,7 +30,7 @@ The wheel is self-contained: it carries the page (`reflux/www/`) with the pinned
 inside it, so a server started from an installed reflux serves pages without a network request and
 without any build step on your side.
 
-    python3 -c "from examples.demo_app import make_app; make_app().serve_forever(8000)"
+    python3 -c "from examples.zh.demo_app import make_app; make_app().serve_forever(8000)"
 
 The bundle is put in **while the wheel is built** (`hatch_build.py`): it downloads the release
 `vendor/pin.json` names, verifies that the manifest on disk is that revision, and copies `www/` in as
@@ -82,7 +82,7 @@ the bundle — frames that name those fetch them, so it stays ~3 MB.
 ## Try the reference app
 
 ```
-python3 -m examples.demo_app --port 8000
+python3 -m examples.zh.demo_app --port 8000
 ```
 
 Open <http://127.0.0.1:8000/>. It has one of each shape an application needs: an input that echoes,
@@ -90,11 +90,11 @@ a list you can add to, remove from, and drag onto an archive frame, a bundle tha
 fields at once, and a shell with a nav over three routes — `/` (that vocabulary, laid out as cards),
 `/about`, and `/demo`.
 
-`/demo` is the walkthrough (`examples/demo/page.py`): fluxen's own demo story — two charts, three
+`/demo` is the walkthrough (`examples/zh/demo/page.py`): fluxen's own demo story — two charts, three
 radars, a review table, two 3D models, a code editor and a relationship graph that grows as the story
 goes — played inside this framework. It is four regions that each read one slot, and a floating
 button in the window's corner plays, pauses, resumes and replays it. The story's text, chart specs
-and graph are `examples/demo/scene.py`; the module hosts it draws with (g2chart, the two viewers, the
+and graph are `examples/zh/demo/scene.py`; the module hosts it draws with (g2chart, the two viewers, the
 editor) are mounted by the page itself, from `www/static/vendor/` or a fluxen checkout
 (`REFLUX_ASSETS` overrides the path), and a page missing one says where it looked instead of drawing
 an empty box.
@@ -102,8 +102,8 @@ an empty box.
 Two tools tell you what a running app declared:
 
 ```
-python3 -m reflux.cli routes examples.demo_app                  # path → source module → metadata
-python3 -m reflux.cli dests examples.demo_app:make_app         # dest → kind → handler source
+python3 -m reflux.cli routes examples.zh.demo_app                  # path → source module → metadata
+python3 -m reflux.cli dests examples.zh.demo_app:make_app         # dest → kind → handler source
 ```
 
 ## Your first app
@@ -255,42 +255,62 @@ the shape of a frame.
 
 `python3 tools/gate_t10.py` builds seven frames with each SDK and compares them **byte for byte**.
 
-## The example app: one page per file
+## The reference app: one page per file, in two languages
 
-`examples/app/` is a whole application, not a toy: a dashboard with two charts and a 3D viewport, and
-a chat page with a backend behind it. The shape is the one a framework's docs should teach —
+`examples/` holds the same application written twice — not one tree with a translation table on top:
 
 ```
-examples/app/
-  app.py         the app and its shell; the host events; main()
-  dashboard.py   "/"     — charts, a module host, a refresh
-  chat.py        "/chat" — a conversation per connection, streamed, stoppable
-  walkthrough.py seven steps, no browser
+examples/zh/   UI, comments and docstrings in Chinese      python3 -m examples.zh.demo_app --port 8000
+examples/en/   UI, comments and docstrings in English      python3 -m examples.en.demo_app --port 8001
 ```
 
-— one page per file, each declaring its route on the shared app with `@app.route`, each keeping the
-handlers for its own events. Importing a page module is what puts it in the table:
+Both serve the same four pages, and both can run at once (each tree declares its own route table, so
+`/` in one is not `/` in the other). The trees are byte-for-byte the same code apart from their words:
+`tests/test_two_trees.py` draws every page in both and compares the node ids, then checks that no
+Chinese survives in `examples/en/` and no English docstring survives in `examples/zh/`.
+
+Each tree is one page per file:
+
+```
+demo_app.py     the app, its shell, `/` (the vocabulary, as cards) and `/about`; `/status`
+demo_slots.py   every name the app speaks, in one Protocol (the editor's view of them)
+demo_chat.py    "/chat" — a conversation per connection, streamed, stoppable, refusable
+demo/page.py    "/demo" — fluxen's own walkthrough, played by a floating button
+demo/scene.py   the walkthrough's text, chart specs and graph
+chat_model.py   the model seam: `Scripted` (offline) or an OpenAI-compatible SSE client
+```
+
+A page declares its route where it is written, and its handlers beside it — the declaration and the
+thing it draws are one thought:
 
 ```python
-# app.py
-app = App(routes=Routes(), shell=shell)      # the shell stays; pages are written into `routes`
+# examples/zh/demo_app.py
+@app.route("/", title="演示")             # "/" and "演示" are the route's: `ctx.page` writes the markers
+def home_page(ctx, match):
+    ctx.page(b.frame(b.text("演示", variant="heading-1"), ...))
+```
 
-# dashboard.py
-from .app import app
+A page that lives in its own module cannot import the app (under `-m` the app module runs as
+`__main__`, so importing it would build a second copy), so it takes the app as an argument and declares
+its route as a call — `app.route(...)(page)` — in the same `register` that hangs its handlers:
 
-@app.route("/", title="概览")
-def dashboard(ctx, match):
-    ctx.page(b.text("概览", variant="heading-1"), ...)      # "/" 与 "概览" 来自 @app.route
+```python
+# examples/zh/demo_chat.py — the page, its route and its two uplinks, together
+def register(app, slots):
+    app.route("/chat", title="对话")(page)
+    app.on(slots.chat.send, on_send)
+    app.on(slots.chat.stop, on_stop)
 ```
 
 - **The shell is drawn once.** The first frame is `create(shell)` plus the page in the `routes` slot;
-  every page turn after that writes only that slot, so the header is never sent twice. Declare no shell
+  every page turn after that writes only that slot, so the nav is never sent twice. Declare no shell
   and the framework supplies one — a single full-screen `routes` — so a page lands in that slot either
-  way and `demo_app` is only a smaller frame, not a second shape.
+  way, which is why `demo_app` could grow a nav without touching a page.
 - **A chart is a canvas with a spec.** `b.canvas(value=<G2 grammar>, url="/assets/g2chart/index.js")`;
   the module that draws it is a file, and `app.mount("/assets/g2chart", path)` is how a page gets the
-  files its modules need. A 3D viewport is the same node with another url — accrete has one module
-  host, and which renderer it mounts lives in the url.
+  files its modules need — the walkthrough page does exactly that, for two charts, two viewers and an
+  editor. A 3D viewport is the same node with another url: accrete has one module host, and which
+  renderer it mounts lives in the url.
 - **The address carries what the backend needs.** `hello` brings `path` and `query`, so `/chat` and
   `/?filter=…` open the right thing on the first frame; the URL belongs to the browser.
 - **A page turn is one call.** `device.go("/chat")` moves that device's address and draws the page the
@@ -299,7 +319,9 @@ def dashboard(ctx, match):
   which address it is.
 - **Three names belong to the host** — `connect` / `location` / `disconnect` — registered like any
   other name, and refused if a client tries to send them.
-- **The socket is one entry in the HTTP table, and an operator's endpoint is another.** `@app.mount("/status")` puts a plain function next to `/ws` and the two asset directories; it takes a `Request` and answers JSON, because a monitor asks a question that is neither a page nor a frame:
+- **The socket is one entry in the HTTP table, and an operator's endpoint is another.**
+  `@app.mount("/status")` puts a plain function next to `/ws`; it takes a `Request` and answers JSON,
+  because a monitor asks a question that is neither a page nor a frame:
 
   ```python
   @app.mount("/status")
@@ -307,13 +329,15 @@ def dashboard(ctx, match):
       return Response(200, json.dumps({"devices": len(app.live()), ...}), "application/json")
   ```
 
-  `mount` returns the function, so the name stays bound and the declaration sits on the handler. A `str` or `Path` as the second argument means a directory served file by file instead; the channel is `mount("/socket", CHANNEL)`.
+  `mount` returns the function, so the name stays bound and the declaration sits on the handler. A `str`
+  or `Path` as the second argument means a directory served file by file instead; the channel is
+  `mount("/socket", CHANNEL)`.
 
 ```
-python3 -m examples.app --port 8100            # 概览 + 对话
-python3 -m examples.app.walkthrough --auto     # the same seven steps, no browser
-python3 tools/gate_dashboard.py                # 18 assertions: 13 over HTTP, 5 in Chromium
-python3 tools/gate_chat.py                     # the chat page's own 12, over a socket and in Chromium
+python3 -m examples.zh.demo_app --port 8000         # /、/about、/chat、/demo
+python3 tools/gate_t9.py                         # the reference app: 15, over a socket and in Chromium
+python3 tools/gate_chat.py                       # the chat page: 12 — streaming, stop, refusals, the window
+python3 tools/gate_demo.py                       # the walkthrough page: 19
 ```
 
 The chat's model is one method (`Model.reply`). `Scripted` runs offline and deterministic — the
@@ -334,7 +358,7 @@ A module that is not on disk draws a line saying where the page looked, not an e
 ## Verify
 
 ```
-python3 -m unittest discover -s tests -t .     # 280 tests, no browser
+python3 -m unittest discover -s tests -t .     # 305 tests, no browser
 python3 tools/gate_ingest.py                   # the two boundaries, over a real socket
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
@@ -345,7 +369,7 @@ python3 tools/gate_t7.py                       # devices: reload and death
 python3 tools/gate_t8.py                       # what a bad frame does (and does not) do
 python3 tools/gate_t9.py                       # the reference app end to end, auth included
 python3 tools/gate_t10.py                      # Rust vs Python frames (needs cargo)
-python3 tools/gate_dashboard.py                # the dashboard, its modules, and the chat page
+python3 tools/gate_chat.py                     # the chat page, over a socket and in a browser
 python3 tools/measure.py                       # bytes, DOM changes, first paint, CPU
 ```
 
@@ -364,7 +388,8 @@ www/               the page: index.html, reflux.js runtime, css (the renderer bu
 schema/ profile/   the wire's snapshot and this framework's selection over it
 sdks/rust/         the second SDK, generated from the same two files
 tools/             generators, gates, the CDP fixture, the measurement script, vendor.py
-examples/app/      the example application — one page per file: dashboard (/), chat (/chat)
+examples/          the reference app, twice: examples/zh (Chinese) and examples/en (English)
+                   page (demo/), the model seam (chat_model.py)
 vendor/pin.json    which renderer release to install
 tests/             everything that needs no browser
 docs/              design and decision record (in Chinese)

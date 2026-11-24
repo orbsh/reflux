@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-from examples import demo_app as demo
+from examples.zh import demo_app as demo
 from reflux import ROUTES_SLOT
 from reflux.app import App, not_found
 from reflux.routes import Routes
@@ -123,17 +123,20 @@ class TestPageResolution(unittest.TestCase):
 class TestTheDemoApp(unittest.TestCase):
     def test_the_demo_declares_routes_and_handlers(self) -> None:
         app = demo.make_app()
-        for path in ("/", "/about", "/demo"):
+        for path in ("/", "/about", "/chat", "/demo"):
             with self.subTest(path=path):
                 self.assertIsNotNone(app.routes.match(path))
         self.assertEqual(
             sorted(app.dests.names()),
             [
+                "chat.send",
+                "chat.stop",
                 "demo.pin",
                 "demo.review",
                 "demo.save",
                 "demo.toggle",
                 "go.about",
+                "go.chat",
                 "go.demo",
                 "go.home",
                 "name.change",

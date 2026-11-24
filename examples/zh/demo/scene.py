@@ -1,12 +1,8 @@
-"""The demo's content: what the page says and what the hosts draw, as data.
+"""演示的内容：页面说什么、宿主画什么，都写成数据。
 
-Ported from fluxen's `examples/walkthrough.py` and `examples/yaml/00.radar.yaml` (extracted
-2026-11-24, fluxen `8f8fd84`). Those two files stay the origin of the story; this one is what reflux
-can read without a YAML parser or a checkout of the other repo. A change there does not reach here —
-re-run the extraction if the story itself moves.
-
-Nothing in this module knows about slots, frames or the page: it is text, chart specs and a graph.
-`page.py` is the player that puts them on screen.
+从 fluxen 的 `examples/walkthrough.py` 与 `examples/yaml/00.radar.yaml` 搬来（2026-11-24 抽取，
+fluxen `8f8fd84`）。那两份文件仍是这个故事的源头；这一份是 reflux 不必有 YAML 解析器、也不必检出
+另一个仓就能读的形态。那边的改动不会自己流过来 —— 要跟就重跑一次抽取。
 """
 
 from __future__ import annotations
@@ -418,11 +414,10 @@ GRAPH_REVEAL = [
 
 
 def graph_payload(revealed: set[str] | frozenset[str]) -> dict[str, Any]:
-    """Cumulative snapshot for the ids on screen: a link needs both of its ends.
-
-    Cumulative, not a per-node patch, because one write is one physics push — the component diffs
-    by node id, so re-sending what is already there is a no-op and an append never re-frames the
-    camera.
+    """屏幕上的那些 id 的累积快照：一条边需要两端都在场。
+    
+        累积而不是逐点补丁，因为一次写入就是一次物理推演 —— 组件按节点 id 做差分，所以重发已经在场的
+        东西是空操作，追加也永远不会让相机重新取景。
     """
     nodes = [node for node in GRAPH_NODES if node["id"] in revealed]
     links = [link for link in GRAPH_LINKS if link["source"] in revealed and link["target"] in revealed]

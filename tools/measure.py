@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Ws, open_page  # noqa: E402
 
 from reflux import ingest, wire  # noqa: E402
-from examples import demo_app as demo  # noqa: E402
+from examples.zh import demo_app as demo  # noqa: E402
 from reflux.sdk import builders as b  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
@@ -66,11 +66,18 @@ def _ctx():
     return demo.make_app().context(None)
 
 
+def _page_nodes(path: str = "/") -> list[dict]:
+    """The nodes the app sends for `path`: its route, drawn once into a fake device."""
+    from tests.fakes import page_nodes
+
+    return page_nodes(demo.make_app(), path)
+
+
 def seed_frame() -> list[dict]:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
-        wire.create(b.frame(*demo.demo.home(_ctx()))),
-        *[wire.append("rows", demo.row_node(row, _ctx())) for row in demo.demo.rows],
+        wire.create(*_page_nodes("/")),
+        *[wire.append("rows", demo.row_node(row)) for row in demo.state.rows],
     )
 
 
@@ -79,7 +86,7 @@ def section_bytes() -> None:
         ("echo (`set`)", wire.draw(wire.set("echo", b.text("hello")))),
         (
             "add row (`append`)",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}, _ctx()))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
         ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
         (
@@ -137,7 +144,7 @@ def section_mutations() -> None:
         )
         turn(
             "list: `append` one row",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-m", "text": "measured-row"}, _ctx()))),
+            wire.draw(wire.append("rows", demo.row_node({"id": "row-m", "text": "measured-row"}))),
             "measured-row",
         )
         turn(
