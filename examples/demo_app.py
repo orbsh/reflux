@@ -427,17 +427,17 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="examples.demo_app", description="Serve the reference app.")
     ap.add_argument("--port", type=int, default=8000, help="0 picks a free port (default: 8000)")
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--pace", type=float, default=demo_walkthrough.settings.pace,
+    ap.add_argument("--pace", type=float, default=walkthrough.settings.pace,
                     help="seconds per typewriter chunk on the walkthrough (default: 0.03)")
-    ap.add_argument("--hold", type=float, default=demo_walkthrough.settings.hold,
+    ap.add_argument("--hold", type=float, default=walkthrough.settings.hold,
                     help="seconds between the walkthrough's beats (default: 0.35)")
     args = ap.parse_args(argv)
-    demo_walkthrough.settings.pace = args.pace
-    demo_walkthrough.settings.hold = args.hold
+    walkthrough.settings.pace = args.pace
+    walkthrough.settings.hold = args.hold
     app = make_app()
     if args.port == 0:
         server = app.make_server(0, args.host)
-        print(f"[reflux] serving the demo on http://{args.host}:{server.server_address[1]}/", flush=True)
+        print(f"[reflux] serving the reference app on http://{args.host}:{server.server_address[1]}/", flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
