@@ -290,6 +290,28 @@ def home_page(ctx, match):
     ctx.page(b.frame(b.text("演示", variant="heading-1"), ...))
 ```
 
+A handler for a page's own event is written beside the frame that sends to it, as a closure. The
+closure is handed the event's value and holds its slots; the framework names it when the page is drawn:
+
+```python
+@app.route("/", title="演示")
+def home_page(ctx, match):
+    slots = slots_of(ctx)
+
+    def echo(value):                      # an `input` uplinks its value alone
+        slots.echo.set(b.text(value))
+
+    def add_row(value):
+        slots.rows.append(row_node(...))
+
+    ctx.page(b.frame(b.input(sink=echo), b.button("加一行", sink=add_row), b.text(source=slots.echo)))
+```
+
+`@app.on(slot)` stays for the landing points whose name must exist before any page is drawn: a slot
+with **several sources**, an identity that belongs to a row rather than to the page, the framework's own
+verbs (`reflux:login`), and events that outlive a page. A gate rides the landing point rather than the
+handler — `sink=gated(save)` — because that is where the reader asks the question.
+
 A page that lives in its own module cannot import the app (under `-m` the app module runs as
 `__main__`, so importing it would build a second copy), so it takes the app as an argument and declares
 its route as a call — `app.route(...)(page)` — in the same `register` that hangs its handlers:

@@ -47,7 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from reflux.app import App, Context
+from reflux.app import App, Context, gated
 from reflux.auth import Auth
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
@@ -201,7 +201,33 @@ def home_page(ctx, match):
 
     A page turn is `ctx.page(...)` and nothing else: the two markers the runtime reads
     (`reflux:path`, `reflux:title`) are written for you, in front of the node it draws.
+
+    This page is also the contrast between the two kinds of landing point. **Echo**, **add a row** and
+    **secret** are closures: one request, one answer, the handler written beside the button that sends
+    to it, the closure taking the event's value and holding its slots. **✕**, the **drop zone** and the
+    **nav** stay names on `@app.on` — their identity is not in the page (one id per row, and the name
+    belongs to the row), and a name has to exist before any page is drawn. The walkthrough's `echo` is
+    the other end of it: that slot is written by two sources, the drag landing and the editor's save,
+    and only a name can say "one slot, several sources".
     """
+    slots = slots_of(ctx)
+
+    def echo(value: object) -> None:
+        # An `input` uplinks its value alone (no wrapper): the closure is handed that string.
+        state.echo = value if isinstance(value, str) else ""
+        slots.echo.set(b.text(state.echo))
+
+    def add_row(value: object) -> None:
+        row = {"id": f"row-{state.next_row}", "text": f"Row {state.next_row}"}
+        state.next_row += 1
+        state.rows.append(row)
+        slots.rows.append(row_node(row))
+
+    def reveal(value: object) -> None:
+        # Only a signed-in click gets here: the gate answered the rest before the closure ran.
+        ctx.data["may_see_secret"] = True
+        slots.secret.set(b.text("Classified content"))
+
     ctx.page(
         b.frame(
             b.frame(
@@ -220,7 +246,7 @@ def home_page(ctx, match):
                         "An `input` uplinks its buffer on Enter; the uplink carries no wrapper, so the handler's `data` is exactly that string.",
                         variant="muted",
                     ),
-                    b.input(sink=slots.name.change, id="name-input"),
+                    b.input(sink=echo, id="name-input"),
                     b.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
@@ -232,7 +258,7 @@ def home_page(ctx, match):
                         "A row's identity is its id: ✕ removes by id, and a drop archives by id — the gesture itself says nothing; only the landing point speaks.",
                         variant="muted",
                     ),
-                    b.bundle(b.button("Add a row", sink=slots.row.add), sink=slots.row.add,
+                    b.bundle(b.button("Add a row", sink=add_row), sink=add_row,
                              submit=["button"], id="add-row"),
                     b.tiles(source=slots.rows, id="rows"),
                     # The landing point names its event and what it accepts; `accept` is one tag
@@ -282,8 +308,8 @@ def home_page(ctx, match):
                 ),
                 b.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # Behind a declaration: a click here from a visitor never reaches the handler.
-                b.bundle(b.button("Secret", sink=slots("vault.secret")),
-                         sink=slots("vault.secret"), submit=["button"], id="vault"),
+                b.bundle(b.button("Secret", sink=gated(reveal)),
+                         sink=gated(reveal), submit=["button"], id="vault"),
                 b.text(source=slots.secret, id="secret"),
                 b.bundle(b.button("Log out", sink=slots(LOGOUT)), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
@@ -331,22 +357,7 @@ def about_page(ctx, match):
     )
 
 
-# --- handlers: change the app's data, push exactly that change ---------------------------------
-
-@app.on(slots.name.change)
-def on_name(ctx, frame) -> None:
-    # An `input` uplinks its value alone (no wrapper): the frame's `data` is the string.
-    state.echo = frame["data"] if isinstance(frame["data"], str) else ""
-    slots_of(ctx).echo.set(b.text(state.echo))
-
-
-@app.on(slots.row.add)
-def on_add(ctx, frame) -> None:
-    row = {"id": f"row-{state.next_row}", "text": f"Row {state.next_row}"}
-    state.next_row += 1
-    state.rows.append(row)
-    slots_of(ctx).rows.append(row_node(row))
-
+# --- handlers: the named landing points (identity in the page, or across it) --------------------
 
 @app.on(slots.row["remove"])  # `remove` is a verb: the name goes by subscript
 def on_remove(ctx, frame) -> None:
@@ -366,13 +377,6 @@ def on_archive(ctx, frame) -> None:
     state.rows = [r for r in state.rows if r["id"] != row_id]
     slots_of(ctx).rows.remove(row_id)
     slots_of(ctx).archived.set(b.text(f"Archived: {row['text']}"))
-
-
-@app.on(slots("vault.secret"), auth=True)
-def on_secret(ctx, frame) -> None:
-    """Only a signed-in click gets here: the gate answered the rest before this handler ran."""
-    ctx.data["may_see_secret"] = True
-    slots_of(ctx).secret.set(b.text("Classified content"))
 
 
 @app.on(slots(GO_HOME.name))

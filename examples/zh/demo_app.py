@@ -37,7 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from reflux.app import App, Context
+from reflux.app import App, Context, gated
 from reflux.auth import Auth
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
@@ -185,7 +185,31 @@ def home_page(ctx, match):
 
     翻页就是 `ctx.page(...)`，别的什么都不做：运行时读的两个标记（`reflux:path`、`reflux:title`）
     由它替你写好，放在它画的那个节点前面。
+
+    这页也是两种落点的对照。**回声**、**加一行**、**私密**是闭包：一次请求一次回应，处理器写在发出
+    它的那个按钮旁边，闭包拿到的就是事件的值，槽是它闭住的。**✕**、**落点**、**导航**仍是
+    `@app.on` 的名字 —— 它们的身份不在页面里（一行一个 id，名字由行持有），而且名字必须先于任何
+    一次绘制存在。走查页的 `echo` 是另一头：那个槽被拖拽落点和编辑器回传两个来源写，只有名字能表达
+    「一个槽，多个来源」。
     """
+    slots = slots_of(ctx)
+
+    def echo(value: object) -> None:
+        # 一个 `input` 上行时只带值（没有包装）：闭包拿到的就是那个字符串。
+        state.echo = value if isinstance(value, str) else ""
+        slots.echo.set(b.text(state.echo))
+
+    def add_row(value: object) -> None:
+        row = {"id": f"row-{state.next_row}", "text": f"第 {state.next_row} 行"}
+        state.next_row += 1
+        state.rows.append(row)
+        slots.rows.append(row_node(row))
+
+    def reveal(value: object) -> None:
+        # 只有已登录的点击能到这里：其余的在闭包之前就被门答掉了（`gated`）。
+        ctx.data["may_see_secret"] = True
+        slots.secret.set(b.text("机密内容"))
+
     ctx.page(
         b.frame(
             b.frame(
@@ -203,7 +227,7 @@ def home_page(ctx, match):
                         "一个 input 在回车时把缓冲上行；上行不带包装，处理器拿到的 `data` 就是那个字符串。",
                         variant="muted",
                     ),
-                    b.input(sink=slots.name.change, id="name-input"),
+                    b.input(sink=echo, id="name-input"),
                     b.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
@@ -215,7 +239,7 @@ def home_page(ctx, match):
                         "行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。",
                         variant="muted",
                     ),
-                    b.bundle(b.button("加一行", sink=slots.row.add), sink=slots.row.add,
+                    b.bundle(b.button("加一行", sink=add_row), sink=add_row,
                              submit=["button"], id="add-row"),
                     b.tiles(source=slots.rows, id="rows"),
                     # 落点说出它的事件和它收什么；`accept` 是一个 tag（或 any），所以别的 tag 的
@@ -264,8 +288,8 @@ def home_page(ctx, match):
                 ),
                 b.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # 在一句声明后面：访客在这里的点击永远到不了处理器。
-                b.bundle(b.button("私密", sink=slots("vault.secret")),
-                         sink=slots("vault.secret"), submit=["button"], id="vault"),
+                b.bundle(b.button("私密", sink=gated(reveal)),
+                         sink=gated(reveal), submit=["button"], id="vault"),
                 b.text(source=slots.secret, id="secret"),
                 b.bundle(b.button("退出", sink=slots(LOGOUT)), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
@@ -314,22 +338,7 @@ def about_page(ctx, match):
     )
 
 
-# --- 处理器：改应用的数据，只推那一处改动 ------------------------------------------
-
-@app.on(slots.name.change)
-def on_name(ctx, frame) -> None:
-    # 一个 `input` 上行时只带值（没有包装）：帧的 `data` 就是那个字符串。
-    state.echo = frame["data"] if isinstance(frame["data"], str) else ""
-    slots_of(ctx).echo.set(b.text(state.echo))
-
-
-@app.on(slots.row.add)
-def on_add(ctx, frame) -> None:
-    row = {"id": f"row-{state.next_row}", "text": f"第 {state.next_row} 行"}
-    state.next_row += 1
-    state.rows.append(row)
-    slots_of(ctx).rows.append(row_node(row))
-
+# --- 处理器：名字的落点（身份在页面里或跨页的那些） ---------------------------------
 
 @app.on(slots.row["remove"])  # `remove` 是动词：这个名字要用下标访问
 def on_remove(ctx, frame) -> None:
@@ -350,14 +359,6 @@ def on_archive(ctx, frame) -> None:
     state.rows = [r for r in state.rows if r["id"] != row_id]
     slots_of(ctx).rows.remove(row_id)
     slots_of(ctx).archived.set(b.text(f"已归档：{row['text']}"))
-
-
-@app.on(slots("vault.secret"), auth=True)
-def on_secret(ctx, frame) -> None:
-    """只有已登录的点击能到这里：其余的在处理器跑之前就被门答掉了。
-    """
-    ctx.data["may_see_secret"] = True
-    slots_of(ctx).secret.set(b.text("机密内容"))
 
 
 @app.on(slots(GO_HOME.name))

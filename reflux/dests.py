@@ -130,6 +130,13 @@ class Registry:
             self.log.append(f"malformed frame from {ctx.id}: {frame!r}")
             return False
         name = frame["dest"]
+        local = getattr(device, "landings", None) or {}
+        row = local.get(name)
+        if row is not None:
+            # A closure the page drew: it takes the event's value (no frame, no ctx — the slots it
+            # writes it captured where it was written) and it is one connection's, so it is not in
+            # this registry and `/status` does not list it.
+            return self._call_local(name, row[0], ctx, frame)
         row = self._handlers.get(name)
         if row is None:
             self.refused += 1
@@ -156,5 +163,16 @@ class Registry:
         except Exception:  # a handler's defect stays a log line; the device survives
             self.refused += 1
             self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")
+            return False
+        return True
+
+    def _call_local(self, name: str, fn: Any, ctx: Any, frame: dict) -> bool:
+        """One closure landing point, one accounting — same rules as `_call`, one argument."""
+        self.calls += 1
+        try:
+            fn(frame.get("data"))
+        except Exception:  # a page's defect stays a log line; the connection survives
+            self.refused += 1
+            self.log.append(f"landing {name!r} raised:\n{traceback.format_exc()}")
             return False
         return True

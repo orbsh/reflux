@@ -25,6 +25,7 @@ _CTX = Context(app=None, device=None)  # type: ignore[arg-type]  # only the slot
 from reflux import cli
 from reflux.app import App
 from reflux.sdk import dump
+from tests.fakes import FakeDevice  # noqa: F401
 from tests.fakes import page_nodes
 
 
@@ -80,16 +81,13 @@ class EventsCommand(unittest.TestCase):
                 "go.chat",
                 "go.demo",
                 "go.home",
-                "name.change",
                 "reflux:hello",
                 "reflux:login",
                 "reflux:logout",
                 "reflux:nav",
                 "reflux:signup",
-                "row.add",
                 "row.archive",
                 "row.remove",
-                "vault.secret",
             ],
         )
 
@@ -97,11 +95,11 @@ class EventsCommand(unittest.TestCase):
         kinds = {name: kind for name, _, kind in self.app.dests.table()}
         self.assertEqual(kinds["reflux:hello"], "builtin")
         self.assertEqual(kinds["reflux:nav"], "builtin")
-        self.assertEqual(kinds["row.add"], "app")
+        self.assertEqual(kinds["row.remove"], "app")
 
     def test_the_source_column_is_where_the_handler_was_written(self) -> None:
         sources = {name: source for name, source, _ in self.app.dests.table()}
-        self.assertEqual(sources["row.add"], "examples.zh.demo_app.on_add")
+        self.assertEqual(sources["row.remove"], "examples.zh.demo_app.on_remove")
         self.assertTrue(sources["reflux:hello"].startswith("reflux."), sources["reflux:hello"])
 
     def test_this_app_is_not_the_only_app_the_registry_serves(self) -> None:
@@ -115,7 +113,7 @@ class TargetResolution(unittest.TestCase):
     def test_a_factory_is_called(self) -> None:
         app = cli.resolve_app("examples.zh.demo_app:make_app")
         self.assertIsInstance(app, App)
-        self.assertIn("row.add", app.dests.names())
+        self.assertIn("row.remove", app.dests.names())
 
     def test_an_app_instance_is_taken_as_it_is(self) -> None:
         mine = App()
@@ -149,9 +147,15 @@ class EverySendableDestHasAHandler(unittest.TestCase):
         self.registered = set(self.app.dests.names())
 
     def test_the_reference_page_sends_only_registered_dests(self) -> None:
+        # A page's closures are landing points too, but they are one draw's: they resolve on the
+        # device that drew the page, not in the app's registry. So the invariant is "every name the
+        # page sends resolves where it was drawn" — which is the stronger half of the old check.
+        device = FakeDevice(app=self.app)
+        self.app._draw(device)
         sent = sent_dests(page_nodes(self.app, '/'))
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
-        self.assertEqual(sent - self.registered, set(), "the page sends an event nobody handles")
+        self.assertEqual(sent - self.registered - set(device.landings), set(),
+                         "the page sends an event nobody handles")
 
     def test_the_about_page_sends_only_registered_dests(self) -> None:
         sent = sent_dests(page_nodes(self.app, '/about'))
@@ -182,7 +186,7 @@ class Printing(unittest.TestCase):
         self.assertIn("source", lines[0])
         # header + the demo's own names + the two protocol names + the three auth verbs (it declares
         # `auth=`, so the door exists — an app without one has neither the verbs nor a gate)
-        self.assertEqual(len(lines), 1 + 20, "header + every name the demo registers")
+        self.assertEqual(len(lines), 1 + 17, "header + every name the demo registers")
         self.assertTrue(any(line.startswith("row.remove") for line in lines))
 
     def test_routes_still_works(self) -> None:

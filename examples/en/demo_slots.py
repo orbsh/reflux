@@ -1,5 +1,10 @@
 """The reference app's slot names: one Protocol, one accessor, and the nav's addresses.
 
+Names only: the `@app.on` landing points — identity in the page, a name that outlives a page, or one
+slot with several sources. A page's own request-response does not belong here: that is a closure,
+`sink=add_row`, written beside the button that sends to it, named by the framework when the page is
+drawn.
+
 A slot name is a string on the wire (`reflux/slots.py`), and the framework's table hands out a `Slot`
 for anything it is asked — `Slots.__getattr__ -> Slot`, no vocabulary. So the checking a page needs
 comes from a Protocol that names them, which is what this module is: every name the app speaks, in one
@@ -26,16 +31,8 @@ from reflux.slots import Slot
 __all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_DEMO", "GO_HOME", "slots_of", "table"]
 
 
-class _Change(Protocol):
-    """The `name` family: an input's uplink is `name.change`."""
-
-    change: Slot
-
-
 class _Row(Protocol):
     """The `row` family. `remove` is a verb on `Slot`, so that name goes by subscript."""
-
-    add: Slot
 
     def __getitem__(self, name: str) -> Slot: ...
 
@@ -78,7 +75,6 @@ class DemoSlots(Protocol):
     messages: Slot  # the chat page's transcript — a list slot, appended to per bubble
     status: Slot  # the chat page's status line
 
-    name: _Change
     row: _Row
     vault: _Vault
     go: _Go
@@ -95,7 +91,7 @@ def slots_of(ctx: Context) -> DemoSlots:
 
 
 def table(app: Any) -> DemoSlots:
-    """The app's own table, typed — the names it addresses: `@app.on(slots.name.change)`.
+    """The app's own table, typed — the names it addresses: `@app.on(slots.row["remove"])`.
 
     `Any` for the app is the price of not importing the framework's `App` here: this module is the
     names, and an import of `App` would tie the names to one application's shape for nothing.

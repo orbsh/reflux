@@ -37,10 +37,26 @@ def parse(obj: Any, cls: Any = None) -> Any:
     demand that exact one. An unknown `type`, a missing one, or a field of the wrong shape raises —
     the boundary is where a producer's mistake should surface.
     """
+    if _carries_landing(obj):
+        # A callable sink is not a name yet, so this tree is not wire-shaped yet: it validates when
+        # the app draws it, which is the first moment a name can exist (`App._name_landings`).
+        return obj
     adapter = _adapter(cls or Accrete)
     if isinstance(obj, (list, tuple)):
         return [adapter.validate_python(item) for item in obj]
     return adapter.validate_python(obj)
+
+
+def _carries_landing(node: Any) -> bool:
+    """Does this tree hold a closure landing point? The one shape the wire types do not accept yet."""
+    if isinstance(node, dict):
+        sink = node.get("sink")
+        if isinstance(sink, dict) and "__landing__" in sink:
+            return True
+        return any(_carries_landing(kid) for kid in node.values())
+    if isinstance(node, (list, tuple)):
+        return any(_carries_landing(kid) for kid in node)
+    return False
 
 
 def dump(node: Any) -> Any:
@@ -128,9 +144,20 @@ def as_source(value: Any = None, *, default: Any = None, constants: bool = True)
 
 
 def as_sink(value: Any = None) -> dict[str, Any] | None:
-    """A write channel — `sink=`. A bare string is a slot name: a write has nothing to default to."""
+    """A write channel — `sink=`, or a callable as one.
+
+    A bare string is a slot name: a write has nothing to default to. A **callable** (or `gated(fn)`)
+    is the other kind of landing point — a handler written where the frame that sends to it is
+    written — and it goes into the tree as itself; `App._draw` turns it into a name once it knows
+    which device the frame is for, because a name for a closure can only be a per-connection name.
+    """
     if isinstance(value, str):
         return {"slot": value} if value else None
+    landing = getattr(value, "__landing__", None)
+    if landing is True:  # `gated(fn)`
+        return {"__landing__": value.fn, "__auth__": bool(value.auth)}
+    if callable(value) and not isinstance(value, type):
+        return {"__landing__": value, "__auth__": False}
     return _bind(value, "sink") or None
 
 

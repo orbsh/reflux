@@ -83,10 +83,40 @@ from .protocol import (
 from .routes import DEFAULT, Match, Routes
 from .sdk import builders as b
 from .sdk import markers
+from .sdk._parse import parse
 from .sdk.markers import PAGE_ID, token_marker
 from .sdk.types import Accrete
 from .slots import Slot, Slots
 from .server import CHANNEL, make_server
+
+class Landing:
+    """A closure as a landing point: `sink=add_row`, or `sink=gated(save)`.
+
+    The wire carries a name, so a callable sink becomes one at draw time — the framework names it
+    (`<path>.<function>`, `#2` for a second one) and registers it on the device being drawn. That is
+    the whole mechanism: a name for the frame, a table for one connection, and a page turn replacing
+    it. What the comment above a handler used to say in prose, the closure says by sitting under the
+    button that sends to it.
+
+    A `Landing` also carries the gate, because a gate belongs to the landing point and not to the
+    handler behind it: `gated(save)` says "only a device with a user bound may send this".
+    """
+
+    __landing__ = True
+
+    def __init__(self, fn: Callable, *, auth: bool = False) -> None:
+        self.fn = fn
+        self.auth = auth
+
+    def __repr__(self) -> str:
+        name = getattr(self.fn, "__qualname__", type(self.fn).__qualname__)
+        return f"Landing({name}{', gated' if self.auth else ''})"
+
+
+def gated(fn: Callable) -> Landing:
+    """This landing point needs a bound user — `sink=gated(save)`. Absent is public."""
+    return Landing(fn, auth=True)
+
 
 # "no handler was passed" — apart from `None`, which means the channel (a route that answers an
 # upgrade instead of a request). The difference is what lets `mount("/x")` be a decorator.
@@ -218,6 +248,10 @@ class Device:
         self.data: dict[str, Any] = {}
         self.connected = False  # the hello landed: `connect` is raised once, not per hello frame
         self.shell_drawn = False  # the shell is on the client; a page turn now only writes `routes`
+        # The landing points this device's current page drew: `sink=add_row` became a name at draw
+        # time and lives here, not in the app's registry — a closure is one connection's, and a page
+        # turn replaces the table (a stale name is then simply unregistered).
+        self.landings: dict[str, tuple[Callable, bool]] = {}
         self.sent = 0
         self.emits = 0
         self.capacity = outbox
@@ -594,7 +628,11 @@ class App:
         if self.auth is None:
             return False
         name = frame.get("dest")
-        if not isinstance(name, str) or not self.dests.gated(name):
+        if not isinstance(name, str):
+            return False
+        local = device.landings.get(name)
+        gated = local[1] if local is not None else self.dests.gated(name)
+        if not gated:
             return False
         if device.data.get("user"):
             return False
@@ -701,6 +739,9 @@ class App:
                 drawn = match.resolve(ctx)
         if drawn is None:  # nothing drew for this address: the app's own 404, not a blank page
             drawn = not_found(device.path)
+        drawn, named = self._name_landings(device, drawn, device.path)
+        if named and isinstance(drawn, dict) and "type" in drawn:
+            drawn = parse(drawn)  # named now, so it can be held to the wire's types again
         operations = drawn if isinstance(drawn, list) else [wire.create(drawn)]
         frame: list[dict] = []
         if not device.shell_drawn:
@@ -708,6 +749,66 @@ class App:
             frame.append(wire.create(self.shell(ctx)))
         frame.extend(into_routes(operations))
         device.emit(*frame)
+
+    def _name_landings(self, device: Device, tree: Any, path: str) -> tuple[Any, bool]:
+        """Replace closure sinks with names, registering each on the device being drawn.
+
+        A closure cannot be a name until the frame is for someone: two devices run two pages, so the
+        same `sink=add_row` is two landings. The name is therefore built here — `<path>.<function>`,
+        and `#2`, `#3` for a second and third binding of the same function in one draw — and the
+        table is the device's, replaced on every draw.
+        """
+        if not isinstance(tree, (dict, list)):
+            return tree, False
+        seen: dict[str, int] = {}
+        by_function: dict[int, str] = {}  # one closure, one name: a bundle and its button are one
+        named: list[bool] = []  # a one-element box: the walk is recursive, the flag is the draw's
+
+        def name_of(fn: Any) -> str:
+            # The same closure bound twice in one draw is one landing point: a bundle carries the
+            # sink its button sends with, and both are the page saying the same thing. A *different*
+            # closure gets its own name, which is what makes a per-row handler possible.
+            if id(fn) in by_function:
+                return by_function[id(fn)]
+            base = f"{path}.{getattr(fn, '__name__', 'handler')}"
+            seen[base] = seen.get(base, 0) + 1
+            name = base if seen[base] == 1 else f"{base}#{seen[base]}"
+            by_function[id(fn)] = name
+            return name
+
+        def walk(node: Any) -> Any:
+            # A tree is mixed on purpose: a builder that had to validate returns a model, one that
+            # carries a closure returns the dict it was given (the closure is not a name yet), and
+            # the page's markers are built as models inside either. Both shapes are walked.
+            if isinstance(node, list):
+                return [walk(kid) for kid in node]
+            if isinstance(node, dict):
+                sink = node.get("sink")
+                if isinstance(sink, dict) and "__landing__" in sink:
+                    name = name_of(sink["__landing__"])
+                    device.landings[name] = (sink["__landing__"], bool(sink.get("__auth__")))
+                    if device.app is not None:
+                        device.app.declare(name)
+                    node["sink"] = {"slot": name}
+                    named.append(True)
+                if node.get("children"):
+                    node["children"] = walk(node["children"])
+                return node
+            sink = getattr(node, "sink", None)
+            if isinstance(sink, dict) and "__landing__" in sink:
+                name = name_of(sink["__landing__"])
+                device.landings[name] = (sink["__landing__"], bool(sink.get("__auth__")))
+                if device.app is not None:
+                    device.app.declare(name)
+                node.sink = {"slot": name}
+                named.append(True)
+            children = getattr(node, "children", None)
+            if children:
+                node.children = walk(list(children))
+            return node
+
+        device.landings.clear()
+        return walk(tree), bool(named)
 
     # --- the device table -----------------------------------------------------------------
 

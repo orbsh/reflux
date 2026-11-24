@@ -35,7 +35,7 @@ whatever else the app mounts.
 """
 
 from . import sdk, wire
-from .app import App, Context, Device
+from .app import App, Context, Device, Landing, gated
 from .auth import Auth, Tokens
 from .slots import Slot, Slots
 from .dests import Registry, RegistryError
@@ -60,6 +60,8 @@ __version__ = "0.0.0"
 
 __all__ = [
     "App",
+    "Landing",
+    "gated",
     "Auth",
     "Tokens",
     "Device",

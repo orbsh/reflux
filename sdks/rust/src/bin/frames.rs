@@ -12,6 +12,7 @@
 //! `sink` out, `scope` naming where it is authoritative (`remote` unless a node reads the page's
 //! own vals plane).
 
+use reflux_sdk::landings::Landings;
 use reflux_sdk::markers;
 use reflux_sdk::types::{
     bundle, button, frame, input, text, tiles, Bind, FrameVariant, JsType, TextVariant,
@@ -136,6 +137,13 @@ fn row_node(id: &str, value: &str) -> Value {
 }
 
 fn home() -> Value {
+    // The page's own three landing points: closures written where their buttons are written, named
+    // by the table the way the Python side names them at draw time.
+    let mut landings = Landings::new("/");
+    let echo_sink = landings.bind("echo", |_| {});
+    let add_row_sink = landings.bind("add_row", |_| {});
+    let reveal_sink = landings.bind_gated("reveal", |_| {});
+
     let echo = card(
         &[
             text(Some("回声"), None, None, None, None, Some(TextVariant::Heading3)),
@@ -151,7 +159,7 @@ fn home() -> Value {
                 None,
                 None,
                 None,
-                Some(remote_slot("name.change")),
+                Some(remote_slot(&echo_sink)),
                 None,
                 None,
                 None,
@@ -173,10 +181,10 @@ fn home() -> Value {
                 Some(TextVariant::Muted),
             ),
             bundle(
-                &[press("加一行", "row.add")],
+                &[press("加一行", &add_row_sink)],
                 None,
                 Some(&["button"]),
-                Some(remote_slot("row.add")),
+                Some(remote_slot(&add_row_sink)),
                 None,
                 Some("add-row"),
             ),
@@ -265,10 +273,10 @@ fn home() -> Value {
                 None,
             ),
             bundle(
-                &[press("私密", "vault.secret")],
+                &[press("私密", &reveal_sink)],
                 None,
                 Some(&["button"]),
-                Some(remote_slot("vault.secret")),
+                Some(remote_slot(&reveal_sink)),
                 None,
                 Some("vault"),
             ),

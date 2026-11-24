@@ -27,6 +27,7 @@ class FakeDevice:
         self.emits = 0
         self.frames: list[dict] = []
         self.seen: list[dict] = []
+        self.landings: dict = {}  # this page's closure landing points, named at draw time
 
     def draw(self) -> None:
         """Draw the page this device stands on — the real `Device.draw`, through the app."""

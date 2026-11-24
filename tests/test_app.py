@@ -139,16 +139,13 @@ class TestTheDemoApp(unittest.TestCase):
                 "go.chat",
                 "go.demo",
                 "go.home",
-                "name.change",
                 "reflux:hello",
                 "reflux:login",
                 "reflux:logout",
                 "reflux:nav",
                 "reflux:signup",
-                "row.add",
                 "row.archive",
                 "row.remove",
-                "vault.secret",
             ],
         )
 
