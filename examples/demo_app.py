@@ -67,13 +67,56 @@ def slots_of(ctx: Context) -> "DemoSlots":
     return ctx.slot  # type: ignore[return-value]
 
 
+class _Change(Protocol):
+    """The `name` family: an input's uplink is `name.change`."""
+
+    change: Slot
+
+
+class _Row(Protocol):
+    """The `row` family. `remove` is a verb on `Slot`, so that name goes by subscript."""
+
+    add: Slot
+
+    def __getitem__(self, name: str) -> Slot: ...
+
+
+class _Vault(Protocol):
+    vault: Slot
+    secret: Slot
+
+
+class _Go(Protocol):
+    """The nav's three targets — the frame's `dest` is the name."""
+
+    home: Slot
+    about: Slot
+    demo: Slot
+
+
 class DemoSlots(Protocol):
-    """The reference app's slots, for the editor — the runtime only ever sees the names."""
+    """The reference app's slots, for the editor — the runtime only ever sees the names.
+
+    Two halves: the ones the page *writes* (`echo`, `rows`, … — reached through `slots_of(ctx)`,
+    which carries the delivery) and the ones the page *addresses* (`name.change`, `row.add`,
+    `go.home`, … — reached through the module-level `slots`, which carries none). One protocol,
+    because they are one namespace: the sink of an uplink and the handler that answers it are the
+    same name (`slots.py`).
+    """
 
     echo: Slot  # what the input last carried
     rows: Slot  # the list the tiles node reads
     archived: Slot  # what the last drop archived — a text slot, written by the dock's handler
     secret: Slot  # only a signed-in click writes it; every anonymous draw clears it
+    routes: Slot  # the shell's reader — where the page is written
+
+    name: _Change
+    row: _Row
+    vault: _Vault
+    go: _Go
+
+    def __call__(self, path: str) -> Slot: ...  # `reflux:login`, `reflux:logout`, `reflux:auth`
+
     # (the login form's answer is the framework's: it lands in the reserved `auth` region)
 
 # Where a navigation form sends the client. The frame's `event` is the target's name.
@@ -110,9 +153,9 @@ def row_node(row: dict, ctx: Context) -> Accrete:
     return b.bundle(
         b.frame(b.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
-        b.frame(b.button("删", sink=ctx.slot.row["remove"]),
+        b.frame(b.button("删", sink=slots.row["remove"]),
                 style={"flex": "0 0 auto", "align-self": "center"}),
-        sink=ctx.slot.row["remove"],
+        sink=slots.row["remove"],
         submit=["button"],
         id=row["id"],
     )
@@ -161,7 +204,6 @@ class Demo:
         landing point. Each card is a `frame` with the `card` variant, and its own gap — a bundle is
         a flex row and would line its fields up edge to edge, which is a form, not a page.
         """
-        slots = slots_of(ctx)
         return [
             b.frame(
                 b.frame(
@@ -180,7 +222,7 @@ class Demo:
                             "一个 input 在回车时把缓冲上行；上行不带包装，处理器拿到的 `data` 就是那个字符串。",
                             variant="muted",
                         ),
-                        b.input(sink=ctx.slot.name.change, id="name-input"),
+                        b.input(sink=slots.name.change, id="name-input"),
                         b.text(source=slots.echo, id="echo"),
                         grid=CARD,
                         variant="card",
@@ -192,7 +234,7 @@ class Demo:
                             "行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。",
                             variant="muted",
                         ),
-                        b.bundle(b.button("加一行", sink=ctx.slot.row.add), sink=ctx.slot.row.add,
+                        b.bundle(b.button("加一行", sink=slots.row.add), sink=slots.row.add,
                                  submit=["button"], id="add-row"),
                         b.tiles(source=slots.rows, id="rows"),
                         # The landing point names its event and what it accepts; `accept` is one tag
@@ -202,7 +244,7 @@ class Demo:
                         b.frame(
                             b.text("拖一行到这里归档"),
                             accept={"tag": "row"},
-                            sink=ctx.slot("row.archive"),
+                            sink=slots("row.archive"),
                             grid={"place-items": "center"},
                             style={"border": "var(--border)", "border-style": "dashed",
                                    "min-height": "72px"},
@@ -232,20 +274,20 @@ class Demo:
                             id="login-fields",
                         ),
                         b.frame(
-                            b.button("登录", sink=ctx.slot(LOGIN)),
+                            b.button("登录", sink=slots(LOGIN)),
                             style={"flex": "0 0 auto", "align-self": "end"},
                             id="login-press",
                         ),
-                        sink=ctx.slot(LOGIN),
+                        sink=slots(LOGIN),
                         submit=["enter", "button"],
                         id="login",
                     ),
-                    b.frame(source=ctx.slot(AUTH_SLOT), id="auth-region"),
+                    b.frame(source=slots(AUTH_SLOT), id="auth-region"),
                     # Behind a declaration: a click here from a visitor never reaches the handler.
-                    b.bundle(b.button("私密", sink=ctx.slot("vault.secret")),
-                             sink=ctx.slot("vault.secret"), submit=["button"], id="vault"),
+                    b.bundle(b.button("私密", sink=slots("vault.secret")),
+                             sink=slots("vault.secret"), submit=["button"], id="vault"),
                     b.text(source=slots.secret, id="secret"),
-                    b.bundle(b.button("退出", sink=ctx.slot(LOGOUT)), sink=ctx.slot(LOGOUT),
+                    b.bundle(b.button("退出", sink=slots(LOGOUT)), sink=slots(LOGOUT),
                              submit=["button"], id="logout"),
                     grid=CARD,
                     variant="card",
@@ -296,7 +338,7 @@ def shell(ctx: Context) -> Accrete:
             id="nav",
         ),
         b.frame(
-            source=ctx.slot(ROUTES_SLOT),
+            source=slots(ROUTES_SLOT),
             id=ROUTES_SLOT,
             style={"min-height": "0", "overflow": "auto"},
         ),
@@ -320,8 +362,8 @@ def demo_view(ctx, state):
         b.bundle(
             b.input(tag="user", id="auth-user"),
             b.input(tag="pass", sink=Bind(type=JsType.password), id="auth-pass"),
-            b.button("确认登录", sink=ctx.slot(LOGIN)),
-            sink=ctx.slot(LOGIN),
+            b.button("确认登录", sink=slots(LOGIN)),
+            sink=slots(LOGIN),
             submit=["enter", "button"],
             id="auth-form",
         ),
@@ -355,17 +397,22 @@ def about_page(ctx, match):
 # written (`@app.on(...)` above it) — the same sugar `@route` uses one line up.
 app = App(auth=Auth(verify=demo_verify, view=demo_view), shell=shell)
 
+# The app's own table, typed: `@app.on(slots.name.change)` completes, and a name that is not in
+# `DemoSlots` is an error rather than a handler nothing ever sends to. `ctx.slot` is this table with
+# a device attached; `slots_of(ctx)` is where a write comes from.
+slots: DemoSlots = app.slot  # type: ignore[assignment]  # `Slots` hands out `Slot`s; the names are the Protocol's
+
 
 # --- handlers: change the app's data, push exactly that change ---------------------------------
 
-@app.on(app.slot.name.change)
+@app.on(slots.name.change)
 def on_name(ctx, frame) -> None:
     # An `input` uplinks its value alone (no wrapper): the frame's `data` is the string.
     demo.echo = frame["data"] if isinstance(frame["data"], str) else ""
     slots_of(ctx).echo.set(b.text(demo.echo))
 
 
-@app.on(app.slot.row.add)
+@app.on(slots.row.add)
 def on_add(ctx, frame) -> None:
     row = {"id": f"row-{demo.next_row}", "text": f"第 {demo.next_row} 行"}
     demo.next_row += 1
@@ -373,14 +420,14 @@ def on_add(ctx, frame) -> None:
     slots_of(ctx).rows.append(row_node(row, ctx))
 
 
-@app.on(app.slot.row["remove"])  # `remove` is a verb: the name goes by subscript
+@app.on(slots.row["remove"])  # `remove` is a verb: the name goes by subscript
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # the row's form carried its identity up
     demo.rows = [row for row in demo.rows if row["id"] != row_id]
     slots_of(ctx).rows.remove(row_id)
 
 
-@app.on(app.slot("row.archive"))
+@app.on(slots("row.archive"))
 def on_archive(ctx, frame) -> None:
     """A drop: the landing point sends `{id, tag}` — the dragged frame's own id, and its tag."""
     cargo = (frame.get("data") or {}).get("id") or ""
@@ -393,16 +440,16 @@ def on_archive(ctx, frame) -> None:
     slots_of(ctx).archived.set(b.text(f"已归档：{row['text']}"))
 
 
-@app.on(app.slot("vault.secret"), auth=True)
+@app.on(slots("vault.secret"), auth=True)
 def on_secret(ctx, frame) -> None:
     """Only a signed-in click gets here: the gate answered the rest before this handler ran."""
     ctx.data["may_see_secret"] = True
     slots_of(ctx).secret.set(b.text("机密内容"))
 
 
-@app.on(app.slot(GO_HOME.name))
-@app.on(app.slot(GO_ABOUT.name))
-@app.on(app.slot(GO_DEMO.name))
+@app.on(slots(GO_HOME.name))
+@app.on(slots(GO_ABOUT.name))
+@app.on(slots(GO_DEMO.name))
 def on_go(ctx, frame) -> None:
     """A submit that moves the client: the new structure and the new path marker."""
     ctx.go(GO[frame["dest"]])
