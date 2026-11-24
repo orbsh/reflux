@@ -71,6 +71,11 @@ def token_attrs(attrs: dict[str, Any] | None, variant: str | None, tag: str) -> 
     behind it is the profile's, and it is the only way a class ever reaches the wire (the builders
     have no `class` keyword otherwise). An unknown variant is refused here, listing the set — the
     alternative is a class the stylesheet does not know and a page that silently looks wrong.
+
+    **Where the key goes matters**, because a frame is compared as bytes by `gate_t10`: the class
+    sits where the schema's attrs class declares it, which is first everywhere except `FrameAttr`
+    (`accept` comes before it). That is also the order `sdks/rust/src/types.rs` writes, and the two
+    SDKs must not disagree about a node's keys.
     """
     if variant is None:
         return attrs
@@ -79,8 +84,11 @@ def token_attrs(attrs: dict[str, Any] | None, variant: str | None, tag: str) -> 
         known = ", ".join(sorted(tokens)) or "none declared"
         raise ValueError(f"{tag}: {variant!r} is not a variant of this type ({known})")
     out = dict(attrs or {})
-    out["class"] = [tokens[variant], *out.get("class", [])]
-    return out
+    classes = [tokens[variant], *out.pop("class", [])]
+    # `accept` is the one attrs property declared before `class`.
+    if "accept" in out:
+        return {"accept": out.pop("accept"), "class": classes, **out}
+    return {"class": classes, **out}
 
 
 def _bind(value: Any, name: str, *, constant: bool = False) -> dict[str, Any]:

@@ -359,7 +359,7 @@ def shell(ctx):
 - 连接时的首帧是**一帧两条**：`create(shell)` 加 `set("routes", 页面)` —— 外框和首页一起到，客户端不会先看到空壳。
 - 之后的每一次页面切换只写 `routes` 槽（`set`），外框不再出现在帧里。**这是唯一被改写的操作**：页面自己的 `create` 落成 `set("routes", …)`，其余操作（顺手播种的槽）原样跟在后面。
 - 槽名 `routes` 是框架保留的（`protocol.ROUTES_SLOT`），但读取器由**提供外框的那一方**写——外框是应用的视图（没给时是框架的默认视图），框架只往这个名字里写。所以「槽名归供应基础视图的一方」没有破例：声明在这里，写入在那里。
-- 外框没给，框架给默认的那一个（`reflux/app.py` 的 `default_shell`）：一个撑满视口的 `frame` 加一个读 `routes` 的 `frame`。于是「外框」不是一个可选模式，而是页面到达客户端的唯一落点——单页应用（`demo_app`）只是外框里没有导航而已，`routes` 这个槽名一样出现。
+- 外框没给，框架给默认的那一个（`reflux/app.py` 的 `default_shell`）：一个撑满视口的 `frame` 加一个读 `routes` 的 `frame`。于是「外框」不是一个可选模式，而是页面到达客户端的唯一落点——`routes` 这个槽名在每个应用里都出现。`demo_app` 声明了自己的外框（导航 + `routes` 读取器），因为它有三页；不声明外框的应用得到默认那一个，形状一样，只是没有导航。
 - 页面**必须产出结构**（一个节点，或自己的 `create`）：没有结构就抛错，否则槽里还留着上一页，客户端看起来一切正常，直到有人点一下。
 - 客户端陈旧触发的重同步会**连外框一起重发**（清掉「外框已画」的标记再画），丢帧的客户端可能正是没收到那条 `create` 的那一个。
 
@@ -476,6 +476,8 @@ def on_disconnect(device, frame):
 
 ## 示例应用（`examples/app`）
 
+**参考应用里的走查页**（`reflux/demo_walkthrough.py`，2026-11-24）：fluxen 的 `examples/walkthrough.py` 变成 `/demo` 一页。剧本内容抽成 `reflux/demo_scene.py` 的字面量（原文、两张图的 spec、关系图的节点与揭示表、30 天序列），页面只负责播：一拍一次槽写，绝不重画页面，所以图表出现不会重建消息，3D 模块也不会重挂。四域各读一个槽（左关系图／右消息流／落点 chips／控件），播放状态挂 `device.data`——一条连接一份剧本，关掉标签页就结束。控件是悬浮按钮，四态（播放／暂停／继续／重播）；暂停是块边界的等待，续跑从原偏移接上，重播删行重跑而不刷新页面。控件标签不能由槽写（`button` 读 `source.default`），所以整枚按钮节点写在 `control` 槽里，靠 `frame` 的 `source` 挂一个节点（ADR 0027）。页面的模块宿主（g2chart／两个查看器／编辑器）由页面自己挂，缺盘时页面就地写「looked in …」。
+
 框架此前只有一个使用者：`demo_app`（参考应用）。它证明「页面能怎么用」，不证明「页面后面那个后端在做什么」。`examples/app` 补这一半，并且长成了一个完整应用的样子：`dashboard.py` 是 `/`（折线图、雷达图、一个 3D 模块宿主），`chat.py` 是 `/chat`（六个后端行为各自有断言：`tests/test_chat_example.py` 19 例，`tools/gate_chat.py` 12 条）。两个页面一个文件一个，声明都挂在 `app.py` 建的那个 app 上；`tools/gate_dashboard.py` 18 条看的是「应用长什么样」（模块被挂载并真的画出来；socket 13 条 + Chromium 5 条，其中一条是同一张表里的 `/status` 用 JSON 回答）。
 
 - **状态挂在设备上**：`Chat` 是 `Device` 的（`setattr`，与「socket 就是状态」一致），随连接回收；不持久化、不跨刷新。显示那份（行）在页面树里，模型那份（turn 窗口）在后端——两者只在「停止」时故意分叉。
@@ -551,7 +553,7 @@ def on_disconnect(device, frame):
 - **T6——导航。**（已落地）壳侧链接拦截（带修饰键/中键/`external`/跨源四类放行）、`popstate`、history 写入、hello 带路径；生产者侧 `reflux:nav` → 匹配 → `create`，应用侧 `app.page(device, path)` 钩子，匹配不到回内置 404（有 `{rest:path}` 就用它）；伺服进程把无扩展名、无对应文件的页面路径交给壳（深链与刷新成立的前提）。门槛：点链接与前进后退各一次，地址栏／界面／服务端路由三者一致；未知路径走 404 结构；冷启动直接打开 `/blog/x` 落在该页。**目标形态里没有锚点**（见「客户端 runtime」）：M1 把这条门改写成「路径标记 → 地址栏镜像 + 后退前进 + 深链 + 404」，四类放行随锚点退场。
 - **T7——设备与心跳。**（已落地）设备即连接：连接打开即登记、断线即回收；心跳线程按默认 10s 发协议层 ping、30s 没有入站活动即判死并回收（关 socket 让阻塞的读线程退出）；计数 issued / reclaimed / dead，看现在的设备用 `App.live()`。门槛：一次刷新后表里只剩一个设备（旧连接被回收）；客户端不发 FIN 就消失时判死并回收、表归零，且那条算 `dead` 而不是 `reclaimed`。没有 token 这一层——「跨连接复用」随「设备即连接」一起作废，「伪造 token」那条门槛随之退休。
 - **T8——故障注入。** 坏帧（未知 action、未知路径、未知组件、未注册事件名、超大批次、重复行 id、慢客户端、地址栏与路径标记不一致）各自产生「失败模式」里规定的行为，且设备存活。
-- **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@route`；处理器签名 `handler(device, frame)`；出帧走每设备单队列（顺序由构造保证）。demo 应用（`reflux/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删（`tiles` + `append`/`remove`，行身份随行 `bundle` 的 id 上行）、`bundle` 一次提交（`login` 带全部字段）、两条路由（`/` 与 `/about`）。
+- **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@route`；处理器签名 `handler(device, frame)`；出帧走每设备单队列（顺序由构造保证）。demo 应用（`reflux/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删（`tiles` + `append`/`remove`，行身份随行 `bundle` 的 id 上行）、`bundle` 一次提交（`login` 带全部字段）、三条路由（`/`、`/about` 与走查 `/demo`）。
   门槛（`python3 tools/gate_t9.py`，15 条）：参考应用真画出来并种好列表 · 输入的回声 · 一次 bundle 提交加一行 · 行自己的 bundle 按身份删掉它 · 一行拖进归档落点后由落点那一帧把行带走（`frame` 的 `draggable`／`accept` 在参考应用里的用处）· **匿名点 gated 落点开登录面而不是到处理器** · **登录的 bundle 走场馆的动词并绑定这条连接** · **同一个落点随后落地** · **刷新（新连接）仍是同一个用户——token 的证明** · **退出撤销，下一次 gated 点击重新问** · 导航是**一次提交 + 标记镜像**（点「关于」→ 结构与地址栏一起变 `/about`）· 反方向同一机制 · 浏览器后退是一帧 `reflux:nav`（`data` 只有 path）· 未注册路径画内置 404 且地址栏停在原地 · 零 console error。
   这一轮实测到的两件事（都不改框架）：**空字段的 `bundle` 照样发帧**（「加一行」的 `bundle` 只有一个 button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 `bundle`，这里补上；**内置 404 第一次有门**（M1.7 之前它是壳的形状，画不出来，`gate_t6` 因此刻意没有这条）。
   标记糖在 T10 之后落了（第二个消费者到齐才落的，见 T10 段的最后一段）：`reflux/sdk/markers.py` 与 `sdks/rust/src/markers.rs` 手写同一件事——`path_marker()`／`title_marker()`／`page(path, title, *children)`，把两个保留 id 放在页面的最前面。三份手写副本（参考应用、`gate_t6`、Rust 的帧转储）收敛到它；`gate_t6` 只留它自己的两个旋钮（`label=`、`markers=False`）。

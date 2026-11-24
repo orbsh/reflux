@@ -64,7 +64,12 @@ class EventsCommand(unittest.TestCase):
         self.assertEqual(
             names,
             [
+                "demo.pin",
+                "demo.review",
+                "demo.save",
+                "demo.toggle",
                 "go.about",
+                "go.demo",
                 "go.home",
                 "name.change",
                 "reflux:hello",
@@ -87,7 +92,7 @@ class EventsCommand(unittest.TestCase):
 
     def test_the_source_column_is_where_the_handler_was_written(self) -> None:
         sources = {name: source for name, source, _ in self.app.dests.table()}
-        self.assertEqual(sources["row.add"], "reflux.demo_app.Demo.on_add")
+        self.assertEqual(sources["row.add"], "reflux.demo_app.on_add")
         self.assertTrue(sources["reflux:hello"].startswith("reflux."), sources["reflux:hello"])
 
     def test_this_app_is_not_the_only_app_the_registry_serves(self) -> None:
@@ -168,7 +173,7 @@ class Printing(unittest.TestCase):
         self.assertIn("source", lines[0])
         # header + the demo's own names + the two protocol names + the three auth verbs (it declares
         # `auth=`, so the door exists — an app without one has neither the verbs nor a gate)
-        self.assertEqual(len(lines), 1 + 12, "header + every name the demo registers")
+        self.assertEqual(len(lines), 1 + 17, "header + every name the demo registers")
         self.assertTrue(any(line.startswith("row.remove") for line in lines))
 
     def test_routes_still_works(self) -> None:

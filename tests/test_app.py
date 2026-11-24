@@ -123,13 +123,18 @@ class TestPageResolution(unittest.TestCase):
 class TestTheDemoApp(unittest.TestCase):
     def test_the_demo_declares_routes_and_handlers(self) -> None:
         app = demo.make_app()
-        for path in ("/", "/about"):
+        for path in ("/", "/about", "/demo"):
             with self.subTest(path=path):
                 self.assertIsNotNone(app.routes.match(path))
         self.assertEqual(
             sorted(app.dests.names()),
             [
+                "demo.pin",
+                "demo.review",
+                "demo.save",
+                "demo.toggle",
                 "go.about",
+                "go.demo",
                 "go.home",
                 "name.change",
                 "reflux:hello",

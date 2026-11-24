@@ -14,7 +14,7 @@
 
 use reflux_sdk::markers;
 use reflux_sdk::types::{
-    bundle, button, frame, input, text, tiles, Bind, JsType, TextVariant,
+    bundle, button, frame, input, text, tiles, Bind, FrameVariant, JsType, TextVariant,
 };
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::{json, Value};
@@ -70,10 +70,30 @@ fn nav_bundle(label: &str, event: &str) -> Value {
     )
 }
 
+/// A card: the `card` variant, and its children stacked at their own heights.
+fn card(children: &[Value], id: &str) -> Value {
+    frame(
+        children,
+        None,
+        None,
+        Some(json!({"grid-auto-rows": "auto", "gap": "10px", "align-content": "start"})),
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(id),
+        Some(FrameVariant::Card),
+    )
+}
+
 /// One row: a draggable frame (the cargo) inside the bundle whose submit carries the row id up.
 ///
 /// The cargo frame names itself `<id>-cargo`: a drop reports the dragged node's own id, and the
 /// bundle already owns `<id>` — one id per tree, on both sides of the wire (ADR 0034).
+///
+/// Both children say how the row is divided: a bundle is a flex row whose items all grow, so the
+/// cargo takes the width and the ✕ keeps its own size, centred in the height it does not fill.
 fn row_node(id: &str, value: &str) -> Value {
     let remove = remote_slot("row.remove");
     let cargo = format!("{id}-cargo");
@@ -85,13 +105,25 @@ fn row_node(id: &str, value: &str) -> Value {
             None,
             None,
             None,
-            None,
+            Some(json!({"flex": "1 1 auto"})),
             None,
             None,
             Some(&cargo),
             None,
         ),
-        button(Some("删"), None, None, None, Some(remove.clone()), None),
+        frame(
+            &[button(Some("删"), None, None, None, Some(remove.clone()), None)],
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(json!({"flex": "0 0 auto", "align-self": "center"})),
+            None,
+            None,
+            None,
+            None,
+        ),
     ];
     bundle(
         &children,
@@ -104,13 +136,42 @@ fn row_node(id: &str, value: &str) -> Value {
 }
 
 fn home() -> Value {
-    markers::page(
-        "/",
-        "演示",
+    let echo = card(
         &[
-            text(Some("演示"), None, None, None, None, Some(TextVariant::Heading1)),
-            input(None, None, None, Some(remote_slot("name.change")), None, None, None, Some("name-input")),
+            text(Some("回声"), None, None, None, None, Some(TextVariant::Heading3)),
+            text(
+                Some("一个 input 在回车时把缓冲上行；上行不带包装，处理器拿到的 `data` 就是那个字符串。"),
+                None,
+                None,
+                None,
+                None,
+                Some(TextVariant::Muted),
+            ),
+            input(
+                None,
+                None,
+                None,
+                Some(remote_slot("name.change")),
+                None,
+                None,
+                None,
+                Some("name-input"),
+            ),
             text(None, None, None, Some(remote_slot(ECHO)), Some("echo"), None),
+        ],
+        "card-echo",
+    );
+    let rows = card(
+        &[
+            text(Some("列表 · 拖拽"), None, None, None, None, Some(TextVariant::Heading3)),
+            text(
+                Some("行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。"),
+                None,
+                None,
+                None,
+                None,
+                Some(TextVariant::Muted),
+            ),
             bundle(
                 &[press("加一行", "row.add")],
                 None,
@@ -125,22 +186,63 @@ fn home() -> Value {
                 &[text(Some("拖一行到这里归档"), None, None, None, None, None)],
                 Some(json!({"tag": "row"})),
                 None,
+                Some(json!({"place-items": "center"})),
                 None,
                 None,
-                None,
-                None,
+                Some(json!({"border": "var(--border)", "border-style": "dashed", "min-height": "72px"})),
                 None,
                 Some(remote_slot("row.archive")),
                 Some("archive"),
                 None,
             ),
             text(None, None, None, Some(remote_slot("archived")), Some("archived"), None),
+        ],
+        "card-rows",
+    );
+    let login = card(
+        &[
+            text(Some("登录 · 门"), None, None, None, None, Some(TextVariant::Heading3)),
+            text(
+                Some("这张表单说的是框架的动词 `reflux:login`：应用只写 verify 和 view，密码它从来读不到。"),
+                None,
+                None,
+                None,
+                None,
+                Some(TextVariant::Muted),
+            ),
             // The credential bundle speaks the framework's verb: this app never sees the password.
             bundle(
                 &[
-                    input(None, None, None, None, None, None, Some("user"), Some("f-user")),
-                    input(None, None, None, Some(remote_type(JsType::Password)), None, None, Some("pass"), Some("f-pass")),
-                    press("登录", LOGIN),
+                    frame(
+                        &[
+                            input(None, None, None, None, None, None, Some("user"), Some("f-user")),
+                            input(None, None, None, Some(remote_type(JsType::Password)), None, None,
+                                  Some("pass"), Some("f-pass")),
+                        ],
+                        None,
+                        None,
+                        Some(json!({"grid-template-rows": "auto auto", "gap": "8px"})),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some("login-fields"),
+                        None,
+                    ),
+                    frame(
+                        &[press("登录", LOGIN)],
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(json!({"flex": "0 0 auto", "align-self": "end"})),
+                        None,
+                        None,
+                        Some("login-press"),
+                        None,
+                    ),
                 ],
                 None,
                 Some(&["enter", "button"]),
@@ -179,19 +281,85 @@ fn home() -> Value {
                 None,
                 Some("logout"),
             ),
-            nav_bundle("关于", "go.about"),
-            text(
-                Some(
-                    "accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构加上新的路径标记，\
-                     runtime 把标记镜像进地址栏。",
-                ),
-                None,
-                None,
-                None,
-                None,
-                Some(TextVariant::Muted),
-            ),
         ],
+        "card-login",
+    );
+    markers::page(
+        "/",
+        "演示",
+        &[frame(
+            &[
+                // The title is a grid item too: it spans both columns.
+                frame(
+                    &[
+                        text(Some("演示"), None, None, None, None, Some(TextVariant::Heading1)),
+                        text(
+                            Some("这个应用只用 SDK 写出来：回声、列表、表单、拖拽，加三条路由。"),
+                            None,
+                            None,
+                            None,
+                            None,
+                            Some(TextVariant::Muted),
+                        ),
+                    ],
+                    None,
+                    None,
+                    Some(json!({"grid-template-rows": "auto auto"})),
+                    None,
+                    None,
+                    Some(json!({"grid-column": "1 / -1"})),
+                    None,
+                    None,
+                    Some("home-title"),
+                    None,
+                ),
+                frame(
+                    &[echo, rows],
+                    None,
+                    None,
+                    Some(json!({"grid-template-rows": "auto auto", "gap": "16px", "align-content": "start"})),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some("home-left"),
+                    None,
+                ),
+                login,
+                // The footnote spans as well: a text node has no style, so a frame carries it.
+                frame(
+                    &[text(
+                        Some("accrete 没有带 URL 的类型：页面之间靠上面那个表单提交，生产者回一帧新结构加上新的路径标记，runtime 把标记镜像进地址栏。"),
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(TextVariant::Muted),
+                    )],
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(json!({"grid-column": "1 / -1"})),
+                    None,
+                    None,
+                    Some("home-note"),
+                    None,
+                ),
+            ],
+            None,
+            None,
+            Some(json!({"grid-template-columns": "minmax(0, 1fr) minmax(280px, 360px)", "gap": "16px", "align-items": "start"})),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("home-grid"),
+            None,
+        )],
     )
 }
 
@@ -209,7 +377,7 @@ fn about() -> Value {
                 Some(TextVariant::Heading1),
             ),
             text(
-                Some("这个示例应用只用 SDK 写出来：回声、列表、表单，加两条路由。"),
+                Some("这个示例应用只用 SDK 写出来：回声、列表、表单，加三条路由 —— /、/about 和走查。"),
                 None,
                 None,
                 None,

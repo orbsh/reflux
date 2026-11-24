@@ -87,7 +87,17 @@ python3 -m reflux.demo_app --port 8000
 
 Open <http://127.0.0.1:8000/>. It has one of each shape an application needs: an input that echoes,
 a list you can add to, remove from, and drag onto an archive frame, a bundle that submits several
-fields at once, and two routes that change both the structure and the address bar.
+fields at once, and a shell with a nav over three routes — `/` (that vocabulary, laid out as cards),
+`/about`, and `/demo`.
+
+`/demo` is the walkthrough (`reflux/demo_walkthrough.py`): fluxen's own demo story — two charts, three
+radars, a review table, two 3D models, a code editor and a relationship graph that grows as the story
+goes — played inside this framework. It is four regions that each read one slot, and a floating
+button in the window's corner plays, pauses, resumes and replays it. The story's text, chart specs
+and graph are `reflux/demo_scene.py`; the module hosts it draws with (g2chart, the two viewers, the
+editor) are mounted by the page itself, from `www/static/vendor/` or a fluxen checkout
+(`REFLUX_ASSETS` overrides the path), and a page missing one says where it looked instead of drawing
+an empty box.
 
 Two tools tell you what a running app declared:
 
