@@ -1,38 +1,33 @@
-"""The walkthrough page: fluxen's own story, contributed to the reference app as `/demo`.
+"""走查页：fluxen 自己的故事，作为 `/demo` 贡献给参考应用。
 
-    python3 -m examples.zh.demo_app --port 8000      # then /demo, or the nav's 「走查」
+    python3 -m examples.zh.demo_app --port 8000      # 然后 /demo，或导航里的「走查」
 
-`fluxen/examples/walkthrough.py` is one message box that streams two charts, three radars, a review
-table, two 3D models, a code editor and a growing relationship graph into itself. There the script
-POSTs frames to `stage`'s console on a keyboard's rhythm (`Enter` per step) and the terminal is the
-control; here the story is one route of the reference app, the script runs on the server for the
-device that asked, and a floating button in the window's corner plays, pauses, resumes and replays.
+`fluxen/examples/walkthrough.py` 是一个消息框，把两张图、三个雷达、一张复核表、两个 3D 模型、一个代码编辑器
+和一张不断生长的关系图流进它自己。那边剧本按键盘的节奏向 `stage` 的控制台 POST 帧（一步一个 `Enter`），终端
+就是控制器；这里这个故事是参考应用的一条路由，剧本在服务器上为要它的那台设备跑，窗口角落的一个浮动按钮负责
+播放、暂停、继续、重播。
 
-The page is four regions and each region reads one slot — the island shape the renderer's own note
-asks for (`fluxen/docs/ideas/islands.md`: a page divided into regions, one slot each, and a part is
-declared rather than loaded):
+这一页是四个区，每个区读一个槽 —— 渲染器自己那份笔记要的岛形（`fluxen/docs/ideas/islands.md`：一页分几个区，
+每区一个槽，部件是声明的而不是加载的）：
 
-    graph    the left column: a native forcegraph, fed cumulative snapshots
-    stream   the right column: one row whose every child is bound to its own slot
-    pins     the chips a drag dropped on the rail at the window's edge
-    control  the floating button, and the line that says which beat is running
+    graph    左列：一个原生 forcegraph，喂给它累积快照
+    stream   右列：一行，每个子节点绑在自己的槽上
+    pins     拖到窗口边缘那条轨道上的碎片
+    control  浮动按钮，和说明正走到哪一拍的那行字
 
-Two things are worth naming, because they are the reasons this is written the way it is:
+有两件事值得点出来，因为它们就是这一页写成这样的原因：
 
-- **A beat writes slots, never the page.** A slot write wakes only its reader, so a chart appearing
-  re-renders its band and does not rebuild the message or remount a 3D viewer that is already up.
-  That is why the row's children each have a slot, and why the page is drawn once per turn.
-- **The button's label is a node, not a slot-bound string.** `button_` reads its label from
-  `source.default` (`fluxen/crates/ui_core/src/widgets/button.rs`), so a label cannot come from a
-  slot; the control region holds `frame(source=control)`, and the player writes the *node* the
-  current state looks like. A frame's `source` mounts one node (ADR 0027), so one region, one slot,
-  four states, and no page turn (a turn would remount every module inside the row).
+- **一拍只写槽，绝不重画页面。** 一次槽写入只唤醒它的读者，所以一张图出现只重绘它那一条，不会重建消息，也
+  不会重挂已经起来的 3D 查看器。这就是为什么那一行的每个子节点各有一个槽，也是为什么页面每轮只画一次。
+- **按钮的标签是一个节点，不是绑在槽上的字符串。** `button_` 从 `source.default` 读它的标签
+  （`fluxen/crates/ui_core/src/widgets/button.rs`），所以标签不可能来自槽；控制区里挂的是
+  `frame(source=control)`，播放器写的是"当前状态长什么样"的那个**节点**。一个 frame 的 `source` 挂一个节点
+  （ADR 0027），所以一个区、一个槽、四种状态，不翻页（翻页会把那一行里的每个模块重挂一遍）。
 
-The playback state hangs off `device.data`: a socket is one device, so two viewers each run their
-own script, and closing the tab ends it. Nothing is shared, nothing persists.
+播放状态挂在 `device.data` 上：一个 socket 就是一台设备，所以两个观看者各跑各的剧本，关掉标签页就结束。
+不共享，不持久。
 
-The content is `demo_scene.py`'s (text, chart specs, a graph) — this module is the player, and it
-knows nothing about what the story says.
+内容是 `scene.py` 的（文案、图表 spec、一张图）—— 本模块是播放器，它不知道故事说了什么。
 """
 
 from __future__ import annotations

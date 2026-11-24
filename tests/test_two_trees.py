@@ -76,6 +76,12 @@ def comments(path: Path) -> list[tuple[int, str]]:
     return out
 
 
+def is_code(body: str) -> bool:
+    """A docstring that is really a code sample: Rust, JS or Python with nothing to read as prose."""
+    first = body.strip().splitlines()[0]
+    return bool(re.search(r"(fn |pub |->|;\s*$|\{\s*$)", body)) and not CJK.search(first)
+
+
 def docstrings(path: Path) -> list[tuple[int, str]]:
     """Every triple-quoted block in a file, with the line it opens on — enough to tell prose languages."""
     text = path.read_text(encoding="utf-8")
@@ -127,10 +133,21 @@ class Sources(unittest.TestCase):
         import examples.zh as package
 
         for path in self.tree(package):
-            for number, body in docstrings(path) + comments(path):
+            for number, body in comments(path):
                 if WORD.search(body) and not ANY.search(body):
                     self.fail(
                         f"{path.relative_to(Path.cwd())}:{number} is not Chinese: {body.strip()[:70]}"
+                    )
+            for number, body in docstrings(path):
+                if is_code(body):
+                    continue  # a code sample inside the docstring is not prose
+                # A docstring is judged as a whole, by proportion: Chinese prose run through a
+                # tangle of identifiers still reads as Chinese, while an English paragraph that
+                # quotes one wire word (`退出`) does not become Chinese by containing it.
+                if len(CJK.findall(body)) < 2 * len(WORD.findall(body)):
+                    self.fail(
+                        f"{path.relative_to(Path.cwd())}:{number} is not written in Chinese: "
+                        f"{body.strip().splitlines()[0][:70]}"
                     )
 
     def test_the_english_tree_carries_no_chinese(self) -> None:

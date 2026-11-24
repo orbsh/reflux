@@ -1,44 +1,35 @@
-"""The reference application: what a reflux app looks like, written with the SDK and `wire`.
+"""参考应用：一个 reflux 应用长什么样，只用 SDK 和 `wire` 写出来。
 
     python3 -m examples.zh.demo_app --port 8000
 
-Three pages, a shell around them, and one page per shape an application is made of:
+四页、一个把它们包起来的外壳，一页对应应用由之构成的一种形状：
 
-- `/` — **the vocabulary**, as cards. An `input` uplinks its buffer on Enter and a `text` reads the
-  slot the handler writes (an echo); rows live in a slot and a `tiles` shows them, each row's remove
-  button carrying its own identity up, and a row also carries cargo — its frame is `draggable`, so
-  dragging it onto the landing frame uplinks `{id, tag}`, the dragged frame's own id, so the archive
-  handler resolves what the gesture never could (the drag itself reports nothing: only the landing
-  point does); and one `bundle` carries every field it packs (`{tag: value, …}`, ADR 0032) — the
-  LOGIN bundle, because credentials are the framework's business: the exit is `reflux:login`, the
-  app writes only `verify` and `view`, and no password is ever read here. Behind it, `vault.secret`
-  is declared `auth=True`, so an anonymous click opens the login surface instead of reaching the
-  handler and the same click lands once signed in (`退出` is the way back out).
-- `/about` — the second route, reached by the address bar, a deep link, back/forward, or the nav.
-- `/demo` — the walkthrough page, which is `examples/demo/`'s: fluxen's own story, played by a
-  floating button, in four regions that each read one slot. The page is content and lives with the
-  examples; this module is what an app looks like, and it imports the page the way an app imports a
-  page.
+- `/` —— **词表**，摆成卡片。一个 `input` 在回车时把缓冲上行，一个 `text` 读处理器写进去的那个槽（回声）；
+  行住在槽里、由 `tiles` 显示，每行的删除按钮把自己的身份抬上去；一行还可以当货物 —— 它的 frame 是
+  `draggable`，把它拖到落点 frame 上就上行 `{id, tag}`，即被拖 frame 自己的 id，于是归档处理器能解析出手势
+  永远给不出的东西（拖拽本身什么都不报告：只有落点报告）；一个 `bundle` 携带它打包的每个字段
+  （`{tag: value, …}`，ADR 0032）—— 那是 LOGIN 这个 bundle，因为凭据是框架的事：出口是 `reflux:login`，
+  应用只写 `verify` 与 `view`，密码在这里从来没被读过。它后面，`vault.secret` 声明为 `auth=True`，所以匿名
+  点击打开登录面而到不了处理器，而同一个点击登录之后就落地（`退出` 是出去的走法）。
+- `/about` —— 第二条路由，地址栏、深链、前进后退或导航都能到。
+- `/chat` —— 对话页：每条连接一段对话，流式、可停、可拒；模型接缝在 `chat_model.py`。
+- `/demo` —— 走查页，属于 `examples/zh/demo/`：fluxen 自己的故事，由一个浮动按钮播放，四个区各读一个槽。
+  这一页是内容，住在示例里；本模块是"一个应用长什么样"，它像应用导入页面那样导入这一页。
 
-**The shell** is this app's, not the framework's default: a header that says where you are and the
-`routes` reader the pages are written into. It is drawn once per connection, so a page turn replaces
-one slot and leaves the header alone. Its reader is `min-height: 0` on purpose — a grid item's
-automatic minimum is its content, and without the zero that row would grow with the page instead of
-scrolling it.
+**外壳**是这个应用自己的，不是框架的缺省：一个说你在哪里的页头，和一个页面被写进去的 `routes` 读槽。它每条
+连接只画一次，所以翻页只替换一个槽，页头不动。它的读槽故意是 `min-height: 0` —— grid 条目的自动最小值就是它
+的内容，不写这个零，那一行会跟着页面一起长高，而不是滚动它。
 
-Two facts about this vocabulary shape the code, and both are measured by the gates:
+两条关于这套词表的事实决定了代码的形状，两样都由门量着：
 
-- **A `button` lives inside a `bundle`** (`gate_t3_next`): that is where the renderer mounts it, and
-  a bundle's `submit` is what a press sends (`submit=["button"]`). So "add a row", "remove a row" and
-  "go to another page" are one-button bundles, and the frame's `id` is the bundle's own id — which is
-  how a row's identity rides up and back.
-- **accrete has no URL-bearing type**, so there is no anchor to click and nothing to intercept: a
-  page change is the producer answering with a new structure plus the new path marker (`go.home` /
-  `go.about` / `go.demo` below). The runtime mirrors that marker into the address bar.
+- **一个 `button` 住在 `bundle` 里**（`gate_t3_next`）：渲染器就把它挂在那里，而一次按下发送的是 bundle 的
+  `submit`（`submit=["button"]`）。所以"加一行""删一行""去另一页"都是一个按钮的 bundle，而 frame 的 `id`
+  就是 bundle 自己的 id —— 一行的身份就是靠它上去又回来的。
+- **accrete 没有带 URL 的类型**，所以没有可点的锚、也没有可拦截的东西：一次换页是生产者答回一帧新结构加一个
+  新的路径标记（下面的 `go.home` / `go.about` / `go.demo`）。runtime 把这个标记镜像进地址栏。
 
-The two markers are ordinary nodes read straight out of the DOM (`reflux:path`, `reflux:title`) by
-`www/static/reflux.js`; the convention lives in `reflux.sdk.markers` (one `page()` call per page),
-because the page's own shape is the runtime's contract, not an application's private habit.
+这两个标记是普通节点，由 `www/static/reflux.js` 直接从 DOM 里读（`reflux:path`、`reflux:title`）；约定住在
+`reflux.sdk.markers`（每页一次 `page()` 调用），因为页面自己的形状是 runtime 的契约，不是某个应用的私习。
 """
 
 from __future__ import annotations
