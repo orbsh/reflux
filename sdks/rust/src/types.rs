@@ -150,7 +150,7 @@ pub enum FrameVariant {
 impl FrameVariant {
     pub fn token(self) -> &'static str {
         match self {
-            Self::Card => "rx-card",
+            Self::Card => "is-card",
         }
     }
 }
