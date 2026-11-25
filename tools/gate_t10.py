@@ -39,7 +39,7 @@ def compact(obj) -> bytes:
 
 
 def python_turns() -> list[tuple[str, dict]]:
-    """The reference app's five turns, built with the Python SDK."""
+    """The reference app's turns, built with the Python SDK."""
     sys.path.insert(0, str(ROOT))
     import examples.zh.demo_app as demo
     from reflux import wire
@@ -53,6 +53,8 @@ def python_turns() -> list[tuple[str, dict]]:
             wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
         ),
         ("remove row", wire.draw(wire.remove("rows", "row-1"))),
+        # One row to the head of its list: the same id, no new node (ADR 0040).
+        ("move row", wire.draw(wire.move("rows", "row-3", -1))),
         (
             # The refused login surface: a real frame the app produces (its `view` seam), and a
             # deterministic one — which the old "form submit" turn is not any more, since a login
@@ -94,7 +96,7 @@ def _page_nodes(path: str) -> list[dict]:
 
 
 def rust_frames() -> list[bytes]:
-    """`cargo run --bin frames` — the same five turns, built by the Rust SDK."""
+    """`cargo run --bin frames` — the same turns, built by the Rust SDK."""
     out = subprocess.run(
         ["cargo", "run", "--quiet", "--bin", "frames"],
         cwd=CRATE,

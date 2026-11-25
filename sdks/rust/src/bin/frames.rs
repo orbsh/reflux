@@ -18,7 +18,7 @@ use reflux_sdk::markers;
 use reflux_sdk::types::{
     loom, button, frame, input, text, tiles, FrameVariant, JsType, Sink, Source, TextVariant,
 };
-use reflux_sdk::wire::{append, create, draw, remove, set};
+use reflux_sdk::wire::{append, create, draw, move_row, remove, set};
 use serde_json::{json, Value};
 use std::io::Write;
 
@@ -495,6 +495,8 @@ fn main() {
             draw(&[append(ROWS, row_node("row-4", "第 4 行"), 0)]),
         ),
         ("remove row", draw(&[remove(ROWS, "row-1")])),
+        // One row to the head of its list: the same id, no new node (ADR 0040).
+        ("move row", draw(&[move_row(ROWS, "row-3", -1)])),
         ("login surface", draw(&[set(AUTH_SLOT, login_surface())])),
         (
             "page turn",

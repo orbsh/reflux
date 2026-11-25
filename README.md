@@ -255,7 +255,7 @@ Generated: the node builders (`reflux/sdk/types.py`, `reflux/sdk/builders.py`,
 `sdks/rust/src/wire.rs`) and the page markers. The spec owns *what you may build*; it does not own
 the shape of a frame.
 
-`python3 tools/gate_t10.py` builds seven frames with each SDK and compares them **byte for byte**.
+`python3 tools/gate_t10.py` builds eight frames with each SDK and compares them **byte for byte**.
 
 ## The reference app: one page per file, in two languages
 

@@ -83,31 +83,37 @@ pub fn patch(slot: &str, path: &str, value: Value, op_kind: &str, id: Option<&st
     Value::Object(op)
 }
 
-/// Write the vals plane as if the page had emitted a `local` event on `slot`.
+/// Move the row carrying `id` inside the list slot to `position`.
 ///
-/// `data` is a bare JSON value: the vals plane's currency is not display form (no node). The
-/// renderer short-circuits an equal value, so this is safe to repeat.
-pub fn inject(slot: &str, data: Value, event: Option<&str>, id: Option<&str>) -> Value {
+/// `position` counts the list with that row taken out (one shorter), so `-1` is the tail: `+n`
+/// counts in from the tail, `-n` from the head. The row node is reused — focus and caret come with
+/// it — which is what separates a move from a remove plus an append (ADR 0040).
+pub fn move_row(slot: &str, id: &str, position: i64) -> Value {
     let mut op = Map::new();
-    put(&mut op, "action", s("inject"));
+    put(&mut op, "action", s("move"));
     put(&mut op, "slot", s(slot));
-    put(&mut op, "data", data);
-    if let Some(name) = event {
-        // `inject`'s rider is an EVENT name (the local emit it imitates), not an address
-        put(&mut op, "event", s(name));
-    }
-    if let Some(row) = id {
-        put(&mut op, "id", s(row));
-    }
+    put(&mut op, "id", s(id));
+    put(&mut op, "position", Value::from(position));
     Value::Object(op)
 }
 
-/// Register a `{{key}}` substitution table. `body` is the template's own Accrete JSON, as text.
-pub fn tmpl(name: &str, body: &str) -> Value {
+/// Register a template: a tree with `$name` holes in its strings, plus the names it takes.
+///
+/// `data` is either the tree itself or its JSON as text, which is what a hand-written frame carries.
+/// Registering is checking (ADR 0037): every `$name` must be in `params` and every param must be
+/// used; that judgment lives in the renderer, so this layer only writes the shape.
+pub fn tmpl(name: &str, params: &[&str], data: Value) -> Value {
     let mut op = Map::new();
     put(&mut op, "action", s("tmpl"));
     put(&mut op, "name", s(name));
-    put(&mut op, "data", s(body));
+    if !params.is_empty() {
+        put(
+            &mut op,
+            "params",
+            Value::Array(params.iter().map(|each| s(each)).collect()),
+        );
+    }
+    put(&mut op, "data", data);
     Value::Object(op)
 }
 
