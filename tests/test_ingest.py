@@ -52,7 +52,6 @@ class TestTheFrame(unittest.TestCase):
             wire.tmpl("t1", '{"type":"text"}'),
             wire.create(h.frame(h.text("hi", id="a"), h.tiles(source=Slot("rows")))),
             wire.append("rows", h.text("row", id="r1")),
-            wire.inject("chan", {"v": 1}),
         )
         ingest.check_frame(good)  # returns: nothing to report
         self.assertIsInstance(good, list)
@@ -76,14 +75,14 @@ class TestTheFrame(unittest.TestCase):
                 f"the cap is {MAX_OPS_PER_FRAME}",
             ),
             ("not an op", ["create"], "frame[0]: an operation is an object"),
-            ("an unknown action", [{"action": "move"}], "frame[0]: 'move' is not one of the eight actions"),
+            ("an unknown action", [{"action": "jiggle"}], "frame[0]: 'jiggle' is not one of the eight actions"),
         ]
         for label, bad, expects in cases:
             with self.subTest(label):
                 refused(self, bad, expects)
 
     def test_an_unknown_action(self) -> None:
-        refused(self, frame({"action": "move"}), "'move' is not one of the eight actions")
+        refused(self, frame({"action": "jiggle"}), "'jiggle' is not one of the eight actions")
         refused(self, frame({"op": "create", "root": {}}), "is not one of the eight actions")
 
     def test_each_actions_field_set(self) -> None:
@@ -93,11 +92,13 @@ class TestTheFrame(unittest.TestCase):
             ("set needs its slot", {"action": "set", "data": node}, "'slot' is required"),
             ("append's position is an int", {"action": "append", "slot": "rows", "data": node, "position": "0"}, "position is '0'"),
             ("remove needs an id", {"action": "remove", "slot": "rows"}, "'id' is required"),
+            ("move needs its place", {"action": "move", "slot": "rows", "id": "r"}, "'position' is required"),
+            ("move's position is an int", {"action": "move", "slot": "rows", "id": "r", "position": "0"}, "position is '0'"),
             ("patch's pointer", {"action": "patch", "slot": "", "path": "a/b", "op": "replace", "value": 1}, "not a JSON Pointer"),
             ("patch's op", {"action": "patch", "slot": "", "path": "", "op": "insert", "value": 1}, '"replace" or "append"'),
             ("patch needs a value", {"action": "patch", "slot": "", "path": "", "op": "replace"}, "'value' is required"),
-            ("inject's slot", {"action": "inject", "slot": "", "data": 1}, "is not a non-empty string"),
-            ("tmpl's body", {"action": "tmpl", "name": "t", "data": {"k": 1}}, "not the template's JSON as text"),
+            ("tmpl's body", {"action": "tmpl", "name": "t", "data": 1}, "not a node or a list"),
+            ("tmpl's params", {"action": "tmpl", "name": "t", "params": "label", "data": {}}, "not a list of names"),
             ("tmpl's body text", {"action": "tmpl", "name": "t", "data": "{nope"}, "data is not JSON"),
             ("empty carries nothing", {"action": "empty", "data": 1}, "'data' is not a field"),
         ]
@@ -225,6 +226,27 @@ class TestRowIdentity(unittest.TestCase):
     def test_rows_without_identity_may_repeat(self) -> None:
         ingest.check_frame(frame(wire.append("rows", h.text("a")), wire.append("rows", h.text("b"))))
 
+    def test_a_move_names_its_row_and_always_says_where(self) -> None:
+        ingest.check_frame(frame(wire.move("rows", "r1", -1)))
+        # `0` (the end) is written too: for `move` it is one of several places a row can be sent,
+        # not the absence of an opinion (fluxen ADR 0005).
+        self.assertEqual(wire.move("rows", "r1", 0)["position"], 0)
+        # A row is named by its id: no id, no move — the same boundary `remove` draws.
+        with self.assertRaises(ValueError):
+            wire.move("rows", "", 0)
+        # And a place is not optional: the renderer's `MoveOp` has no default for it.
+        refused(
+            self,
+            frame({"action": "move", "slot": "rows", "id": "r1"}),
+            "'position' is required",
+        )
+        # The row's own fields are the address's, not a node's: `data` is not a move's word.
+        refused(
+            self,
+            frame({"action": "move", "slot": "rows", "id": "r1", "position": 0, "data": {}}),
+            "'data' is not a field of this action",
+        )
+
 
 class TestTheUplink(unittest.TestCase):
     def test_a_legal_uplink(self) -> None:
@@ -290,7 +312,7 @@ class TestTheOutboundDoor(unittest.TestCase):
 
     def test_a_bad_frame_never_queues_and_is_counted_with_its_device(self) -> None:
         device = self.make()
-        device.send(frame({"action": "move"}))
+        device.send(frame({"action": "jiggle"}))
         self.assertEqual(device.outbox, [])
         self.assertEqual(device.sent, 0)
         self.assertEqual(self.stats["refused"], 1)

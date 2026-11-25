@@ -6,8 +6,8 @@ what the four planes say it does? The gate plays the producer: `App` has no page
 sends its own frames through `wire` and reads the DOM.
 
 Checks: create draws · tmpl expands · set replaces a slot · append lands at the tail · append `+1` lands
-before the last · remove drops by identity · patch `replace` · patch `append` · inject writes the vals
-plane · an out-of-range position is refused (not clamped) · empty is a no-op inside a frame that still
+before the last · remove drops by identity · patch `replace` · patch `append` · a `local` reader ignores
+the far side · an out-of-range position is refused (not clamped) · empty is a no-op inside a frame that still
 lands · zero console errors.
 
     python3 tools/gate_t2.py
@@ -32,7 +32,7 @@ from reflux.slots import Slot  # noqa: E402
 PAGE = "/"
 
 # A body the tmpl op registers: `{{label}}` is the only template language there is (ADR 0006).
-TEMPLATE_BODY = '{"type":"text","source":{"default":"{{label}}"}}'
+TEMPLATE_BODY = '{"type":"text","source":{"default":"$label"}}'
 
 
 def local_text(slot: str, *, id: str):
@@ -49,7 +49,7 @@ def tree():
     return h.frame(
         h.text(source=Slot("echo"), id="echo"),          # the data-slot reader (set / patch)
         h.tiles(source=Slot("rows"), id="rows"),         # the list slot (append / remove)
-        local_text("chan", id="local-echo"),       # the vals plane (inject)
+        local_text("chan", id="local-echo"),       # the page's own half of a value
         {"type": "stamp", "name": "t1", "data": {"label": "expanded"}},
         id="root",
     )
@@ -94,12 +94,12 @@ def main() -> int:
             device.send(wire.draw(*ops))
 
         # tmpl first: a template node expands when the tree lands, so the body must be registered
-        send(wire.tmpl("t1", TEMPLATE_BODY), wire.create(tree()))
+        send(wire.tmpl("t1", TEMPLATE_BODY, params=["label"]), wire.create(tree()))
         drawn = wait(lambda: cdp.eval("!!document.getElementsByClassName('root').length"))
         checks.append(("create draws the layout root", bool(drawn), "root present" if drawn else "root missing"))
 
         expanded = wait(lambda: "expanded" in (cdp.eval("document.body.innerText") or ""))
-        checks.append(("tmpl expands {{label}} inside create", bool(expanded), "expanded" if expanded else "not expanded"))
+        checks.append(("tmpl expands $label inside create", bool(expanded), "expanded" if expanded else "not expanded"))
 
         send(wire.set("echo", h.text("set-value")))
         ok = wait(lambda: text_of(cdp, "echo") == "set-value")
@@ -126,9 +126,13 @@ def main() -> int:
         ok = wait(lambda: text_of(cdp, "echo") == "patched!")
         checks.append(("patch append extends a string", bool(ok), f"echo={text_of(cdp, 'echo')!r}"))
 
-        send(wire.inject("chan", "injected"))
-        ok = wait(lambda: text_of(cdp, "local-echo") == "injected")
-        checks.append(("inject writes the vals plane", bool(ok), f"local-echo={text_of(cdp, 'local-echo')!r}"))
+        # `inject` is gone (ADR 0038 §1): the far side cannot plant a page-local value any more. The
+        # door that remains is `set`, and a `local` reader does not take it — the page's own half wins.
+        send(wire.set("chan", h.text("injected")))
+        ok = wait(lambda: text_of(cdp, "local-echo") != "injected")
+        checks.append(
+            ("a local reader ignores the far side's set", bool(ok), f"local-echo={text_of(cdp, 'local-echo')!r}")
+        )
 
         # Out of range is refused, never clamped. The following op in the same frame proves the refused one
         # was processed: a frame is applied in order and an undecodable op refuses the whole frame.

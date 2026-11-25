@@ -278,7 +278,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
                 (
                     "the review table and its three-field form arrive",
                     len(formed) == 1
-                    and form.get("sink", {}).get("slot") == "demo.review"
+                    and form.get("sink", {}).get("dest") == "demo.review"
                     and [f["key"] for f in (table.get("attrs") or {}).get("fields") or []] == ["score", "name", "dept", "avg", "note"]
                     and tagged == ["cj", "sy", "zw"]
                     and rows == [f"review-{key}" for key, *_ in scene.REVIEW],

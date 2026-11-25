@@ -65,21 +65,19 @@ class TestShapes(unittest.TestCase):
     def test_patch_can_address_a_row(self) -> None:
         self.assertEqual(wire.patch("rows", "/source/default", "x", id="row-2")["id"], "row-2")
 
-    def test_inject_writes_the_vals_plane(self) -> None:
+    def test_tmpl_carries_the_tree_and_its_params(self) -> None:
+        """A template is a tree with `$name` holes plus the names it takes (ADR 0037)."""
         self.assertEqual(
-            wire.inject("chan", {"v": 1}),
-            {"action": "inject", "slot": "chan", "data": {"v": 1}},
+            wire.tmpl("t1", {"type": "text", "source": {"default": "$label"}}, params=["label"]),
+            {"action": "tmpl", "name": "t1", "params": ["label"],
+             "data": {"type": "text", "source": {"default": "$label"}}},
         )
 
-    def test_inject_can_carry_a_name_and_an_id(self) -> None:
-        op = wire.inject("chan", None, name="chan", id="row-1")
-        self.assertEqual(op["name"], "chan")
-        self.assertEqual(op["id"], "row-1")
-
-    def test_tmpl_registers_a_body_string(self) -> None:
+    def test_tmpl_accepts_the_tree_as_text(self) -> None:
+        """A hand-written frame carries the tree as JSON text; the op is the same either way."""
         self.assertEqual(
             wire.tmpl("t1", '{"type":"text"}'),
-            {"action": "tmpl", "name": "t1", "data": '{"type":"text"}'},
+            {"action": "tmpl", "name": "t1", "params": [], "data": {"type": "text"}},
         )
 
     def test_empty_carries_nothing(self) -> None:
@@ -121,7 +119,6 @@ class TestRefusals(unittest.TestCase):
         for call in (
             lambda: wire.set("", h.text("x")),
             lambda: wire.remove("rows", ""),
-            lambda: wire.inject("", None),
             lambda: wire.tmpl("", "{}"),
         ):
             with self.assertRaises(ValueError):

@@ -39,26 +39,27 @@ __all__ = ["Refused", "check_frame", "check_uplink", "DEST_KEYS", "OP_KEYS"]
 DEST_KEYS = frozenset({"dest", "id", "data"})
 
 # Each action's field set, verbatim from `content`: `Influx` (create/set — its address is `slot`,
-# `""` meaning the layout root), `AppendOp`, `RemoveOp`, `PatchOp`, `InjectOp`, `InfluxTmpl`, and the
-# unit `Empty`. An address is a `slot`; `event` is a name, and only `inject` carries one (fluxen
-# ADR 0022).
+# `""` meaning the layout root), `AppendOp`, `RemoveOp`, `PatchOp`, `InfluxTmpl`, and the unit
+# `Empty`. An address is a `slot`; `event` is a name and it rides only the way up (fluxen ADR 0022).
+# `report` and `inject` are gone: ADR 0031 §2 and ADR 0038 §1.
 OP_KEYS: dict[str, frozenset[str]] = {
     "create": frozenset({"action", "slot", "data"}),
     "set": frozenset({"action", "slot", "data"}),
     "append": frozenset({"action", "slot", "position", "data"}),
+    "move": frozenset({"action", "slot", "id", "position"}),
     "remove": frozenset({"action", "slot", "id"}),
     "patch": frozenset({"action", "slot", "id", "path", "op", "value"}),
-    "inject": frozenset({"action", "slot", "name", "id", "data"}),
-    "tmpl": frozenset({"action", "name", "data"}),
+    "tmpl": frozenset({"action", "name", "params", "data"}),
     "empty": frozenset({"action"}),
 }
 OP_REQUIRED: dict[str, frozenset[str]] = {
     "create": frozenset({"action", "slot", "data"}),
     "set": frozenset({"action", "slot", "data"}),
     "append": frozenset({"action", "slot", "data"}),
+    # `position` has no default here: a move that names no place has said nothing (fluxen ADR 0005).
+    "move": frozenset({"action", "slot", "id", "position"}),
     "remove": frozenset({"action", "slot", "id"}),
     "patch": frozenset({"action", "slot", "path", "op", "value"}),
-    "inject": frozenset({"action", "slot", "data"}),
     "tmpl": frozenset({"action", "name", "data"}),
     "empty": frozenset({"action"}),
 }
@@ -145,25 +146,23 @@ def _op(op: Any, where: str, appended: dict[str, set[str]]) -> None:
             _refuse("%s: path %r is not a JSON Pointer", where, path)
         if op["op"] not in ("replace", "append"):
             _refuse('%s: op is %r — "replace" or "append"', where, op["op"])
-    elif action == "inject":
-        _text(op["slot"], f"{where}.slot")
-        if "name" in op:
-            _text(op["name"], f"{where}.name")
-        if "id" in op:
-            _text(op["id"], f"{where}.id")
     elif action == "tmpl":
         _text(op["name"], f"{where}.name")
+        params = op.get("params", [])
+        if not isinstance(params, list) or any(not isinstance(p, str) or not p for p in params):
+            _refuse("%s: params is %r, not a list of names", where, params)
         body = op["data"]
-        if not isinstance(body, str):
-            _refuse("%s: data is %s, not the template's JSON as text", where, type(body).__name__)
-        try:
-            # A body is a node with `{{key}}` holes in its strings, so it parses as JSON but is not
-            # a node yet: closure and domains are judged after expansion, inside the renderer.
-            json.loads(body)
-        except ValueError as exc:
-            _refuse("%s: data is not JSON (%s)", where, exc)
+        if isinstance(body, str):
+            # A hand-written frame may carry the tree as text; the renderer takes either, and a
+            # template's holes are `$name` inside its strings — parsed and judged on expansion.
+            try:
+                json.loads(body)
+            except ValueError as exc:
+                _refuse("%s: data is not JSON (%s)", where, exc)
+        elif not isinstance(body, (dict, list)):
+            _refuse("%s: data is %s, not a node or a list of them", where, type(body).__name__)
 
-    if action == "append" and "position" in op:
+    if action in ("append", "move") and "position" in op:
         position = op["position"]
         if not isinstance(position, int) or isinstance(position, bool):
             _refuse("%s: position is %r, not an integer", where, position)

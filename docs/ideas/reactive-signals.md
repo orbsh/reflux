@@ -178,7 +178,7 @@ def register(app: App) -> None:
 
 这些是对着代码确认过的，写在这里免得实现时再猜一遍：
 
-- `ctx.slot(f"_rx_{n}")` 成立（`Slots.__call__`，`reflux/slots.py:180`）；`slot.set/append/patch/remove` 都在，`append` 的 `position=0` 是**尾插**（`wire.append`：`0` 是尾巴，`+n` 从尾数，`-n` 从头数）。
+- `ctx.slot(f"_rx_{n}")` 成立（`Slots.__call__`，`reflux/slots.py:180`）；`slot.set/append/move/patch/remove` 都在，`append` 的 `position=0` 是**尾插**（`wire.append`：`0` 是尾巴，`+n` 从尾数，`-n` 从头数）。
 - `h.tiles(source=slot)` 成立（`tiles` 有 `source`）。
 - `ctx.data` 是连接级：两个标签页各一份，与计数器页今天的写法一致。
 - **没有 `ctx.on_close`**：清理要挂在 `@app.on("disconnect")`（`App.on` 接受框架自己的宿主事件名字符串）。
@@ -345,13 +345,13 @@ class Signal(Generic[T]):
 
 ### 三条规则就够，不需要 LIS
 
-wire 没有 `move` 动作（`create` / `set` / `append` / `remove` / `patch` / `inject` / `tmpl` / `empty`），`append` 的 `position` 只能表达到头/尾的距离（`0` 尾插，`+n` 从尾数，`-n` 从头数）。所以"移动"这件事在 wire 上只有一种说法：**删掉再插回**。据此，diff 退化成三条：
+当时 wire 没有 `move` 动作，`append` 的 `position` 只能表达到头/尾的距离（`0` 尾插，`+n` 从尾数，`-n` 从头数），所以"移动"只有一种说法：**删掉再插回**。这个天花板 2026-11-24 拆掉了：渲染器加了 `move`（fluxen ADR 0005），一条帧改行序、行节点复用、焦点不丢；下表第三行因此改写作一次 `move`。
 
 | 变化 | 写法 | 代价 |
 | --- | --- | --- |
 | 尾部追加（日志、消息流） | 一次 `append` | 一行，零重建 |
 | 中间删除 | 一次 `remove(id)` | 一行，其余行 keyed 不动 |
-| 重排序 | 整表重建（全删 + 按新序插） | 全量，焦点丢——这是 wire 的天花板，不是实现的偷懒 |
+| 重排序 | 一次 `move(id, position)`（`wire.move` / `slot.move`） | 一行；节点 keyed 复用，焦点与光标由渲染器接住 |
 
 ```python
 def list_tiles(self, items: Signal[list[T]], render_item: Callable[[T, str], Any], *,

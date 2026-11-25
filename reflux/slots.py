@@ -103,6 +103,14 @@ class Slot:
         """Write one value inside the node that is already here."""
         self._emit(wire.patch(self.name, path, value, op=op))
 
+    def move(self, id: str, position: int) -> None:
+        """Move the row carrying `id` to `position` — the row's node is reused, so its focus stays.
+
+        `position` counts like `append`'s (`0` = the end, `+n` from the tail, `-n` from the head),
+        but on the list with the row lifted out (fluxen ADR 0005).
+        """
+        self._emit(wire.move(self.name, id, position))
+
     def remove(self, id: str) -> None:
         """Drop the row carrying `id`."""
         self._emit(wire.remove(self.name, id))
@@ -110,7 +118,7 @@ class Slot:
     def declare(self) -> "Slot":
         """Record this name on the app — what makes `/status` a list of names in use, not of guesses.
 
-        Called where the name is actually used: a write (`set`/`append`/`patch`/`remove`) or an
+        Called where the name is actually used: a write (`set`/`append`/`move`/`patch`/`remove`) or an
         entry in a node (`source=`, `sink=`). Taking a handle is not a use, so `ctx.slot.go` inside
         `ctx.slot.go.dashboard` records `go.dashboard` and not the `go` on the way.
         """

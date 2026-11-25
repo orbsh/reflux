@@ -1,9 +1,10 @@
 """The outbound frame layer: accrete's eight actions, verbatim.
 
 Fields are the wire's, taken from the renderer's `content` crate: `create` / `set` carry
-`Influx{event, data}`, `append` `AppendOp{event, position, data}`, `remove` `RemoveOp{event, id}`,
-`patch` `PatchOp{event, id?, path, op, value}`, `inject` `InjectOp{slot, event?, id?, data}`, `tmpl`
-`InfluxTmpl{name, data}`, and `empty` carries nothing.
+`Influx{slot, data}`, `append` `AppendOp{slot, position, data}`, `move` `MoveOp{slot, id, position}`,
+`remove` `RemoveOp{slot, id}`, `patch` `PatchOp{slot, id?, path, op, value}`, `tmpl`
+`InfluxTmpl{name, params, data}`, and `empty` carries nothing. (`report` and `inject` are gone:
+ADR 0031 §2 and ADR 0038 §1.)
 
 **A frame is the action list** — a bare JSON array, one element per operation. The envelope
 (`Message{ev, sender, created?}`) belongs to the host and this layer has none: the renderer decodes
@@ -21,7 +22,9 @@ that the row did not land. `create`'s `event` is required on the wire but unread
 
 from __future__ import annotations
 
-from typing import Any
+import json
+
+from typing import Any, Sequence
 
 from .protocol import MAX_OPS_PER_FRAME
 from .sdk import closed
@@ -33,14 +36,14 @@ __all__ = [
     "create",
     "draw",
     "empty",
-    "inject",
+    "move",
     "patch",
     "remove",
     "set",
     "tmpl",
 ]
 
-ACTIONS = frozenset({"create", "set", "append", "remove", "patch", "inject", "tmpl", "empty"})
+ACTIONS = frozenset({"create", "set", "append", "move", "remove", "patch", "tmpl", "empty"})
 
 
 def _node(node: Any, what: str) -> dict:
@@ -145,6 +148,24 @@ def remove(slot: str, id: str) -> dict:
     return {"action": "remove", "slot": _slot(slot, "remove"), "id": id}
 
 
+def move(slot: str, id: str, position: int) -> dict:
+    """Move the row `id`, already in the list slot, to `position`.
+
+    `position` uses `append`'s vocabulary — `0` = the end, `+n` counts in from the tail, `-n` in
+    from the head — but counted on the list **with the row lifted out**, and it is always written:
+    unlike `append`, the end is one of several places a row can be sent, not the absence of an
+    opinion (fluxen ADR 0005). Out of range is refused by the renderer, not clamped here.
+    """
+    if not isinstance(id, str) or not id:
+        raise ValueError(f"move: the row id must be a non-empty string, got {id!r}")
+    return {
+        "action": "move",
+        "slot": _slot(slot, "move"),
+        "id": id,
+        "position": _position(position, "move"),
+    }
+
+
 def patch(
     slot: str,
     path: str,
@@ -175,30 +196,26 @@ def patch(
     return out
 
 
-def inject(slot: str, data: Any, *, name: str | None = None, id: str | None = None) -> dict:
-    """Write the vals plane as if the page had emitted a `local` intent on `slot`.
+def tmpl(name: str, data: Any, *, params: Sequence[str] = ()) -> dict:
+    """Register a template: an Accrete tree with `$name` holes, and the names it takes.
 
-    `data` is a bare JSON value: the vals plane's currency is not display form (no node). The renderer
-    short-circuits an equal value, so this is safe to repeat. `name` is the name stamped into the
-    wrapper the slot receives (it defaults to the slot name on the renderer's side).
+    Registration is validation (ADR 0037): every `$name` in `data` must be one of `params` and every
+    param must be used, which the renderer checks when the op lands. `data` may be the tree itself or
+    its JSON text — the text form is what a hand-written frame carries.
     """
-    out: dict[str, Any] = {"action": "inject", "slot": _slot(slot, "inject"), "data": data}
-    if name is not None:
-        out["name"] = _slot(name, "inject")
-    if id is not None:
-        if not isinstance(id, str) or not id:
-            raise ValueError(f"inject: the id must be a non-empty string, got {id!r}")
-        out["id"] = id
-    return out
-
-
-def tmpl(name: str, body: str) -> dict:
-    """Register a `{{key}}` substitution table. `body` is the template's own Accrete JSON, as text."""
     if not isinstance(name, str) or not name:
         raise ValueError(f"tmpl: the name must be a non-empty string, got {name!r}")
-    if not isinstance(body, str):
-        raise ValueError(f"tmpl: the body must be a string of JSON, got {type(body).__name__}")
-    return {"action": "tmpl", "name": name, "data": body}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"tmpl {name!r}: the body is not JSON ({e})") from None
+    if not isinstance(data, (dict, list)):
+        raise ValueError(f"tmpl {name!r}: the body must be a node or a list of them, got {type(data).__name__}")
+    names = list(params)
+    if any(not isinstance(p, str) or not p for p in names):
+        raise ValueError(f"tmpl {name!r}: params are names, got {names!r}")
+    return {"action": "tmpl", "name": name, "params": names, "data": data}
 
 
 def empty() -> dict:

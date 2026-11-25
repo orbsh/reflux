@@ -225,8 +225,7 @@ with the DOM and with the host's own events; it never appears on this wire:
 | `append` | `slot`, `data`, `position?` | add a row to a list slot |
 | `remove` | `slot`, `id` | drop a row by identity |
 | `patch` | `slot`, `path` (JSON Pointer), `op`, `value`, `id?` | change one value inside the addressed plane |
-| `inject` | `slot`, `data`, `name?`, `id?` | write the values plane, as if a local emit fired (`name` defaults to the slot) |
-| `tmpl` | `name`, `data` (JSON text) | register a substitution table |
+| `tmpl` | `name`, `params`, `data` (a node, or its JSON text) | register a template: a tree with `$name` holes and the names it takes |
 | `empty` | — | a no-op, for keeping a frame's shape |
 
 Rules the framework enforces rather than documents and forgets:

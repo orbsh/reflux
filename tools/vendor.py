@@ -78,10 +78,14 @@ def write_versions(rev: str, files: dict[str, dict], entry: dict[str, str]) -> d
 
 
 def prune(keep: set[str]) -> None:
-    """Drop bundles from an older build — a stale `.wasm` next to the live one is a trap."""
-    for f in VENDOR.glob("ui_leptos-*"):
-        if f.name not in keep:
-            f.unlink()
+    """Drop everything an older build left in the vendor tree — a stale `.wasm` or a renamed
+    stylesheet next to the live one is a trap: it loads, it looks right, and nothing reads it."""
+    if not VENDOR.exists():
+        return
+    for path in VENDOR.rglob("*"):
+        if path.is_file() and path.name not in keep and path.name != "versions.json":
+            path.unlink()
+            print(f"vendor: dropped stale {path.relative_to(VENDOR).as_posix()}")
 
 
 def install(dist: pathlib.Path, rev: str) -> dict:
@@ -94,7 +98,7 @@ def install(dist: pathlib.Path, rev: str) -> dict:
     for p in wanted:
         if not p.exists():
             die(f"{p} is missing from {dist}")
-    prune({js[0].name, wasm[0].name})
+    prune({js[0].name, wasm[0].name, *(pathlib.PurePosixPath(rel).name for rel in CORE)})
     VENDOR.mkdir(parents=True, exist_ok=True)
     files: dict[str, dict] = {}
     for p in wanted:
