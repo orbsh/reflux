@@ -26,7 +26,7 @@
 应用要认证，就写一个 `login` 口子：
 
 ```python
-from reflux import app
+from reflux.singleton import app
 from reflux.sdk import builders as h
 
 @app.hooks.login()                       # 第二个参数可改线上的事件名：@app.hooks.login("登录事件")
@@ -91,7 +91,8 @@ def secret(ctx):
 
 ```python
 # 全部认证就是一个口子，三样东西各就各位：
-from reflux import app, Auth
+from reflux.singleton import app
+from reflux import Auth
 
 app = create_app(auth=Auth(idle_window=3600))   # 设置（会话多久算闲置）走构造函数
 

@@ -112,12 +112,14 @@ def inspect(data):
 Roughly twenty lines, and every one of them is used:
 
 ```python
-from reflux import app, wire
+from reflux.singleton import app
+from reflux import wire
 from reflux.sdk import builders as b
 from reflux.sdk import markers
 
-# `reflux.app` is the deployment's app: one per process, built when the package is imported. A test, or
-# a process that wants a second one, asks for a fresh instance with `create_app()`.
+# `reflux.singleton.app` is the deployment's app: one per process, built when that module is imported —
+# `import reflux` alone builds nothing. A test, or a process that wants a second one, asks for a fresh
+# instance with `create_app()`.
 
 
 @app.page("/", title="Hello")

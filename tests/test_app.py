@@ -48,6 +48,25 @@ def shown(node: dict) -> str:
     return node["source"]["default"]
 
 
+class TestOneAppPerProcess(unittest.TestCase):
+    """The singleton lives in `reflux.singleton`: importing the library costs nothing, importing the
+    module is the deployment saying it has an app."""
+
+    def test_the_package_alone_builds_no_app(self) -> None:
+        import reflux
+
+        self.assertFalse(hasattr(reflux, "app"), "a library import must not pay for an App")
+
+    def test_the_singleton_module_holds_one_app_for_every_importer(self) -> None:
+        import importlib
+
+        first = importlib.import_module("reflux.singleton")
+        second = importlib.import_module("reflux.singleton")
+
+        self.assertIsInstance(first.app, App)
+        self.assertIs(first.app, second.app)
+
+
 class TestPageResolution(unittest.TestCase):
     def app(self, *paths: str) -> App:
         built = create_app()

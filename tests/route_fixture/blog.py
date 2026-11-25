@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reflux import app
+from reflux.singleton import app
 
 
 @app.page("/blog/{slug}", title="文章")

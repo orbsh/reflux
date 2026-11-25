@@ -56,11 +56,6 @@ from .sdk._parse import dump, parse
 from .sdk.builders import *  # noqa: F401,F403  (one constructor per type, generated)
 from .server import CHANNEL, Request, Response
 
-# The app every deployment uses. User code says `from reflux import app` and hangs its pages, seams
-# and handlers on it; there is one per process because an `App` IS the deployment (one shell, one
-# login door, one dest registry). A test that needs its own calls `create_app()`.
-app = create_app()
-
 __version__ = "0.0.0"
 
 __all__ = [
@@ -78,7 +73,6 @@ __all__ = [
     "Response",
     "Registry",
     "RegistryError",
-    "app",
     "create_app",
     "Route",
     "Match",
