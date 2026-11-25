@@ -147,14 +147,21 @@ function schedule() {
  * neither belongs in a page's markup: a page that mounts reflux asks this module for them (ADR 0046
  * put the same split inside fluxen: the boot decides nothing about the address).
  */
-export const BOOT = { codec: "json", path: "/ws" };
+export const BOOT = {
+  codec: "json",
+  path: "/ws",
+  hooks: {
+    // 握手挂在连接的门口，不挂在"页面启动"上：重连是另一次握手，服务端那时是另一个人
+    // （它不认识旧的 socket），所以每一新连接都要重新说我们在哪、我们是谁（ADR 0047）。
+    open: (send) => send("reflux:hello", where()),
+  },
+};
 
 export function start() {
   if (!window.fluxen || typeof window.fluxen.send !== "function") {
     throw new Error("reflux runtime: window.fluxen.send is missing — is the renderer mounted?");
   }
-  // 握手先走：连接那一刻生产者还不知道客户端站在哪条路径上（见「连接与握手」）
-  window.fluxen.send("reflux:hello", where());
+  // hello 已经在 `BOOT.hooks.open` 里说了（每次连接一次）；这里只管页面自己的事。
   addEventListener("popstate", () => {
     // 后退/前进：浏览器已经把地址栏换了，这里只负责把请求送上去
     window.fluxen.send("reflux:nav", where());
