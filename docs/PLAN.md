@@ -39,6 +39,8 @@
 - [x] 上行目标叫 `dest` — fluxen ADR 0023 — 2026-10-29
 - [x] 渲染器包不入库：一个 pin、一个装它的工具、一条发布流水线 — 2026-10-30
 - [x] 渲染器跟到 fluxen `92f0a7f`：`Sink{dest}`（ADR 0039）与 `kind` 都在包里了；`main.css` 改名 `core.css`（`vendor.py` 的清单、`www/index.html`、文档一起改）；`prune` 改成整棵 vendor 树扫一遍，改名留下的旧样式表不再躺在那儿被误读 — 2026-11-25
+- [x] 按钮不再有出口（fluxen ADR 0039 §2a）：`Button` 去掉 `sink`，它就是它所在 `bundle` 的确认键，按下提交那个组；SDK 的 `button()` 不再收 `sink`，闭包落点搬到持有出口的 `bundle` 上（示例、测试、T10 的 Rust 帧、`types_fixture` 同步）— 2026-11-25
+- [x] 渲染器钉到 `6882ce4`：`Button.sink` 删掉之后重打、发了 `renderer-6882ce4`，`tools/vendor.py fetch` 端到端跑通，本地 vendor 树与发布件逐字节一致 — 2026-11-25
 - [x] `renderer-92f0a7f` 的 release 资产已发布，`tools/vendor.py fetch` 端到端跑通（装的是发布件，本地 vendor 树与它逐字节一致）— 2026-11-25
   同一 rev 两次构建不是逐字节可复现：js 相同（sha `fdc85bbe…`），wasm 差 8 KB（2,858,761 vs 2,867,046 B）。发布件为准——本地已换成发布件，十道门在它上面全绿
 - [x] 地址带查询串、内置 `connect`/`disconnect`、后端可加的 location 事件、`routes` 槽 — 2026-11-03
