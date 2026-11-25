@@ -6,6 +6,8 @@
   <title>reflux</title>
   <!-- 资源一律从源站绝对路径取（`/static/…`）：深链也不会把引用解析到深链目录底下。
        js/wasm 的名字带内容哈希，所以从 versions.json 取，不写死。
+       渲染器的配置**不用属性**（ADR 0045）：codec 与路径是 `mount()` 的两个实参，写在这一段里，页面标记
+       因此回到宿主自己的形状（`#main` 是我们的地标，不是渲染器的魔法 id）。
        `<base>` 是客户端 runtime 的挂载前缀：页面挂在源站根上，标记里的应用路径就是地址栏的路径。 -->
   <base href="/">
   <link rel="icon" href="data:,">
@@ -13,12 +15,14 @@
   <link rel="stylesheet" href="/static/reflux.css">
 </head>
 <body>
-  <div id="main" data-codec="json" data-path="/ws"></div>
+  <div id="main"></div>
   <script type="module">
     const versions = await (await fetch("/static/vendor/fluxen/versions.json")).json();
-    const entry = "/static/vendor/fluxen/" + versions.entry.js;
-    const { default: init } = await import(entry);
-    await init({ module_or_path: "/static/vendor/fluxen/" + versions.entry.wasm });
+    const vendor = "/static/vendor/fluxen/";
+    const { default: init, mount } = await import(vendor + versions.entry.js);
+    await init({ module_or_path: vendor + versions.entry.wasm });
+    // 上行是 JSON、渲染器腿挂在 /ws：这两个数只属于这个宿主，所以它们出现在这里，而不是页面标记里。
+    await mount(document.querySelector("#main"), { codec: "json", path: "/ws" });
     // 渲染器起来了，再交班给 runtime：它只会调 window.fluxen.send
     const { start } = await import("/static/reflux.js");
     start();

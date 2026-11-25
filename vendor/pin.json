@@ -1,10 +1,10 @@
 {
   "renderer": "fluxen",
   "source": "orbsh/fluxen",
-  "releases": "orbsh/reflux",
-  "rev": "26b4dc2",
-  "tag": "renderer-26b4dc2",
-  "asset": "fluxen-renderer-26b4dc2.tar.gz",
-  "asset_url": "https://github.com/orbsh/reflux/releases/download/renderer-26b4dc2/fluxen-renderer-26b4dc2.tar.gz",
+  "releases": "orbsh/fluxen",
+  "rev": "81458a0",
+  "tag": "v0.3.1",
+  "asset": "fluxen-ui-v0.3.1.tar.gz",
+  "asset_url": "https://github.com/orbsh/fluxen/releases/download/v0.3.1/fluxen-ui-v0.3.1.tar.gz",
   "install": "python3 tools/vendor.py fetch"
 }

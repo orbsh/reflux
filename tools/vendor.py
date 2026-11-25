@@ -2,7 +2,7 @@
 """Install the pinned renderer bundle into `www/static/vendor/fluxen/`.
 
 The bundle is **not** in git: it is a build product of another repository (fluxen's
-`examples/renderer`, `trunk build --release`), it is ~3 MB of hashed names, and every
+`crates/ui_leptos`, `trunk build --release`), it is ~3 MB of hashed names, and every
 commit of it would be a binary diff that says nothing. What *is* in git is the pin —
 `vendor/pin.json` — and the reader's contract with it: `versions.json` next to the
 bundle, carrying the rev and a sha256 + size per file. Every gate reads that file
@@ -13,7 +13,7 @@ Three ways in, one output layout:
 
     python3 tools/vendor.py fetch                    # from the release the pin names
     python3 tools/vendor.py build --fluxen ../fluxen # trunk build, then install
-    python3 tools/vendor.py install --dist ../fluxen/examples/renderer/dist
+    python3 tools/vendor.py install --dist ../fluxen/dist-release
 
 `fetch` is what CI and a fresh clone use (no Rust toolchain needed). `build`/`install`
 are for someone changing the renderer: point them at a fluxen checkout and they adopt
@@ -136,22 +136,37 @@ def tarball(out_dir: pathlib.Path, tag: str, rev: str) -> pathlib.Path:
     return target
 
 
+MANIFESTS = ("manifest.json", "versions.json")
+
+
 def unpack(blob: bytes, rev: str) -> dict:
-    """Extract a release tarball into the vendor tree, then re-derive `versions.json`."""
+    """Extract a release tarball into the vendor tree, then re-derive `versions.json`.
+
+    The tarball is fluxen's own (`fluxen-ui-<tag>.tar.gz`, cut by its `scripts/ui_dist.py` and published
+    by its CI): four files plus a `manifest.json` naming the entry, and a `SHA256SUMS` beside it. Reflux
+    used to re-cut its own copy under `versions.json`; reading the producer's manifest directly means one
+    less duplicate of the same bytes and one less release to keep.
+    """
     with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
         manifest_bytes = None
+        files_only = []
         for member in tar.getmembers():
-            if member.name == "versions.json":
+            if member.name in MANIFESTS:
                 manifest_bytes = tar.extractfile(member).read()  # type: ignore[union-attr]
                 continue
+            if member.name == "SHA256SUMS":
+                continue  # fluxen's own checksums; `versions.json` re-derives what it pins
             if not (member.name.startswith("ui_leptos-") or member.name in CORE):
                 die(f"unexpected member in the bundle: {member.name}")
             target = (VENDOR / member.name).resolve()
             if VENDOR.resolve() not in target.parents:
                 die(f"refusing to write outside the vendor tree: {member.name}")
-        tar.extractall(VENDOR)  # noqa: S202 — member names checked just above
+            files_only.append(member)
+        # Only the payload: the producer's manifest is read for its `entry`, not installed — this tree's
+        # contract with its readers is `versions.json`, and two manifests side by side is two answers.
+        tar.extractall(VENDOR, members=files_only)  # noqa: S202 — member names checked just above
     if manifest_bytes is None:
-        die("the bundle carries no versions.json")
+        die("the bundle carries no manifest.json")
     shipped = json.loads(manifest_bytes)
     files = {}
     for rel in [*CORE, *(p.name for p in VENDOR.glob("ui_leptos-*"))]:
@@ -159,6 +174,11 @@ def unpack(blob: bytes, rev: str) -> dict:
         if not p.exists():
             die(f"the bundle promised {rel} but did not carry it")
         files[rel] = {"sha256": sha256(p), "size": p.stat().st_size}
+    # A bundle with a new hash leaves the previous pair behind; a stale `ui_leptos-*.wasm` in the vendor
+    # tree is 3 MB nobody loads and a second answer to "which renderer is this".
+    for stale in VENDOR.glob("ui_leptos-*"):
+        if stale.name not in files:
+            stale.unlink()
     manifest = write_versions(rev, files, shipped.get("entry", {}))
     total = sum(m["size"] for m in manifest["files"].values())
     print(f"fetched {rev}: {manifest['entry'].get('js')} + {len(files) - 1} more, {total:,} B")
@@ -205,15 +225,15 @@ def main(argv: list[str] | None = None) -> int:
         fetch(a.tag or pin["tag"], pin["rev"], a.asset or pin["asset"])
     elif a.cmd == "build":
         src = pathlib.Path(a.fluxen).resolve()
-        if not (src / "examples/renderer/Trunk.toml").exists():
+        if not (src / "crates/ui_leptos/Trunk.toml").exists():
             die(f"{src} does not look like a fluxen checkout")
         if not a.no_build:
-            subprocess.run(["trunk", "build", "--release"], cwd=src / "examples/renderer", check=True)
+            subprocess.run(["trunk", "build", "--release"], cwd=src / "crates/ui_leptos", check=True)
         rev = a.rev or subprocess.run(
             ["git", "-C", str(src), "rev-parse", "--short", "HEAD"],
             capture_output=True, text=True, check=True,
         ).stdout.strip()
-        install(src / "examples/renderer/dist", rev)
+        install(src / "crates/ui_leptos/dist", rev)
         if a.tag:
             tarball(ROOT / "dist-release", a.tag, rev)
     else:
