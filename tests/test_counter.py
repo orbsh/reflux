@@ -12,7 +12,7 @@ import unittest
 
 from reflux.app import App
 from reflux.routes import Routes
-from tests.fakes import FakeDevice
+from tests.fakes import run_sync, FakeDevice
 
 from examples.zh import demo_counter
 
@@ -21,7 +21,7 @@ def build() -> tuple[App, FakeDevice]:
     app = App(routes=Routes())
     demo_counter.register(app)
     device = FakeDevice(app=app, path=demo_counter.PAGE)
-    app._draw(device)
+    run_sync(app._draw(device))
     return app, device
 
 
@@ -38,7 +38,7 @@ def writes(device: FakeDevice, slot: str) -> list:
 
 def click(app: App, device: FakeDevice, name: str) -> None:
     """Press one of the page's buttons, by the name the page drew."""
-    assert app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.{name}", "data": 1})
+    assert run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.{name}", "data": 1}))
 
 
 class ThePage(unittest.TestCase):
@@ -62,7 +62,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_step_multiplies_the_press(self) -> None:
         app, device = build()
-        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "5"}})
+        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "5"}}))
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "5")
         click(app, device, "down")
@@ -70,14 +70,14 @@ class ThePage(unittest.TestCase):
 
     def test_a_step_that_is_not_a_number_is_refused_out_loud(self) -> None:
         app, device = build()
-        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "five"}})
+        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "five"}}))
         self.assertIn("five", writes(device, "counter.hint")[-1], "the reader is told what was wrong")
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "1", "and the step did not move")
 
     def test_the_step_is_clamped(self) -> None:
         app, device = build()
-        app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "99"}})
+        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "99"}}))
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "10")
 
@@ -148,14 +148,14 @@ class ItsState(unittest.TestCase):
         click(app, one, "up")
         click(app, one, "up")
         two = FakeDevice(id="second", app=app, path=demo_counter.PAGE)
-        app._draw(two)
+        run_sync(app._draw(two))
         self.assertEqual(writes(two, "counter.count"), ["0"], "the second tab starts at zero")
         self.assertEqual(writes(one, "counter.count")[-1], "2", "and the first is untouched")
 
     def test_the_value_is_seeded_once_not_per_draw(self) -> None:
         app, device = build()
         click(app, device, "up")
-        app._draw(device)  # a page turn: the tree is replaced, the data planes are not
+        run_sync(app._draw(device))  # a page turn: the tree is replaced, the data planes are not
         self.assertEqual(writes(device, "counter.count"), ["0", "1"], "no second seed pushing it back")
 
 
@@ -166,7 +166,7 @@ class BothTrees(unittest.TestCase):
         app = App(routes=Routes())
         english.register(app)
         device = FakeDevice(app=app, path=english.PAGE)
-        app._draw(device)
+        run_sync(app._draw(device))
         self.assertEqual(sorted(device.landings), [f"{english.PAGE}.{n}" for n in ("down", "reset", "set_step", "up")])
         self.assertEqual(writes(device, "counter.count"), ["0"])
 

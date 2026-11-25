@@ -17,27 +17,14 @@ from __future__ import annotations
 
 import inspect
 import json
+import asyncio
 import traceback
+from .settle import maybe
 from typing import Any, Callable, overload
 
 from .protocol import PING_DEST, PONG_DEST, RESERVED_PREFIX
 
 Handler = Callable[[Any, dict], None]
-
-
-def _refuse_coroutine(name: str, answered: Any) -> None:
-    """An `async def` handler needs P2 (ADR 0002): until the dispatcher awaits, refuse loudly.
-
-    A coroutine that is dropped is the worst kind of defect — nothing runs, nothing is logged,
-    and the client waits for a frame that was never built. Closing it and raising turns the
-    mistake into a line the app's own log already prints.
-    """
-    if inspect.iscoroutine(answered):
-        answered.close()
-        raise TypeError(
-            f"handler for {name!r} is async, but the dispatcher does not await yet "
-            "(ADR 0002 P2): write it as a plain function for now"
-        )
 
 
 class RegistryError(Exception):
@@ -139,7 +126,7 @@ class Registry:
         row = self._handlers.get(name)
         return bool(row and row[1])
 
-    def dispatch(self, device: Any, frame: Any) -> bool:
+    async def dispatch(self, device: Any, frame: Any) -> bool:
         """Hand one uplink frame to its handler, as a context. False when it was refused."""
         ctx = self._context(device, frame)
         if not isinstance(frame, dict) or not isinstance(frame.get("dest"), str):
@@ -163,15 +150,15 @@ class Registry:
             # A closure the page drew: it takes the event's value (no frame, no ctx — the slots it
             # writes it captured where it was written) and it is one connection's, so it is not in
             # this registry and `/status` does not list it.
-            return self._call_local(name, row[0], ctx, frame)
+            return await self._call_local(name, row[0], ctx, frame)
         row = self._handlers.get(name)
         if row is None:
             self.refused += 1
             self.log.append(f"unregistered event {name!r} from {ctx.id} on {ctx.path}")
             return False
-        return self._call(name, ctx, frame)
+        return await self._call(name, ctx, frame)
 
-    def announce(self, name: str, device: Any, frame: dict) -> bool:
+    async def announce(self, name: str, device: Any, frame: dict) -> bool:
         """Raise one of the host's own events (`connect` / `location` / `disconnect`).
 
         Nobody listening is the ordinary case — most apps hear none of them — so absent is not an
@@ -180,25 +167,28 @@ class Registry:
         """
         if name not in self._handlers:
             return False
-        return self._call(name, self._context(device, frame), frame)
+        return await self._call(name, self._context(device, frame), frame)
 
-    def _call(self, name: str, ctx: Any, frame: dict) -> bool:
+    async def _call(self, name: str, ctx: Any, frame: dict) -> bool:
         """One handler, one accounting — the only place a handler's exception is caught."""
         self.calls += 1
         try:
-            answered = self._handlers[name][0](ctx, frame)
-            _refuse_coroutine(name, answered)
+            await maybe(self._handlers[name][0], ctx, frame)
+        except asyncio.CancelledError:
+            raise
         except Exception:  # a handler's defect stays a log line; the device survives
             self.refused += 1
             self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")
             return False
         return True
 
-    def _call_local(self, name: str, fn: Any, ctx: Any, frame: dict) -> bool:
+    async def _call_local(self, name: str, fn: Any, ctx: Any, frame: dict) -> bool:
         """One closure landing point, one accounting — same rules as `_call`, one argument."""
         self.calls += 1
         try:
-            _refuse_coroutine(name, fn(frame.get("data")))
+            await maybe(fn, frame.get("data"))
+        except asyncio.CancelledError:
+            raise
         except Exception:  # a page's defect stays a log line; the connection survives
             self.refused += 1
             self.log.append(f"landing {name!r} raised:\n{traceback.format_exc()}")

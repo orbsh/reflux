@@ -10,6 +10,7 @@ from typing import Any, Callable
 from reflux import wire
 
 
+
 def run_sync(coro: Any) -> Any:
     """A coroutine on a fresh loop — how a synchronous test drives the async app (ADR 0002)."""
     return asyncio.run(coro)
@@ -58,7 +59,7 @@ class FakeDevice:
         """Draw the page this device stands on — the real `Device.draw`, through the app."""
         if self.app is None:
             raise RuntimeError("FakeDevice.draw: pass `app=` when the test needs a page drawn")
-        self.app._draw(self)
+        run_sync(self.app._draw(self))
 
     def go(self, url: str) -> None:
         """The real move, through the app's own splitter: the address changes, then the page is drawn."""
@@ -81,7 +82,7 @@ def page_nodes(app: Any, path: str = "/") -> list[dict]:
     tree takes the one the app actually draws: one fake device, one draw, the frame it got.
     """
     device = FakeDevice(path=path, app=app)
-    app._draw(device)
+    run_sync(app._draw(device))
     for sent in device.frames:
         for operation in sent:
             # The page arrives as `set routes <page-root>`: the markers are that root's first two

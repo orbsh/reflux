@@ -22,7 +22,7 @@ from reflux import Auth, wire
 from reflux.app import App, gated
 from reflux.routes import Routes
 from reflux.sdk import h
-from tests.fakes import FakeDevice
+from tests.fakes import run_sync, FakeDevice
 
 
 def sinks(node: object, out: list) -> list:
@@ -69,23 +69,23 @@ class AClosureIsALandingPoint(unittest.TestCase):
             )
 
         self.device = FakeDevice(app=self.app)
-        self.app._draw(self.device)
+        run_sync(self.app._draw(self.device))
 
     def test_the_frame_carries_a_name_not_a_function(self) -> None:
         addresses = sinks(drawn_page(self.device), [])
         self.assertEqual([a["dest"] for a in addresses], ["/.add"])
 
     def test_the_name_resolves_to_the_closure(self) -> None:
-        self.assertTrue(self.app.dests.dispatch(self.device, {"dest": "/.add", "data": 7}))
+        self.assertTrue(run_sync(self.app.dests.dispatch(self.device, {"dest": "/.add", "data": 7})))
         self.assertEqual(self.calls, [("add", 7)])
 
     def test_the_closure_gets_the_value_and_writes_its_own_slots(self) -> None:
-        self.app.dests.dispatch(self.device, {"dest": "/.add", "data": 3})
+        run_sync(self.app.dests.dispatch(self.device, {"dest": "/.add", "data": 3}))
         written = [op for frame in self.device.frames for op in frame if op.get("slot") == "rows"]
         self.assertEqual(written[-1]["data"]["source"]["default"], "row 3")
 
     def test_a_name_the_page_did_not_draw_is_refused(self) -> None:
-        self.assertFalse(self.app.dests.dispatch(self.device, {"dest": "/.nope", "data": 1}))
+        self.assertFalse(run_sync(self.app.dests.dispatch(self.device, {"dest": "/.nope", "data": 1})))
 
 
 class TheTableIsOneDraws(unittest.TestCase):
@@ -108,7 +108,7 @@ class TheTableIsOneDraws(unittest.TestCase):
             )
 
         device = FakeDevice(app=app)
-        app._draw(device)
+        run_sync(app._draw(device))
         self.assertEqual([a["dest"] for a in sinks(drawn_page(device), [])], ["/.pick", "/.pick"])
 
     def test_two_different_closures_are_two_names(self) -> None:
@@ -130,7 +130,7 @@ class TheTableIsOneDraws(unittest.TestCase):
             ctx.page(h.frame(*buttons, id="r"))
 
         device = FakeDevice(app=app)
-        app._draw(device)
+        run_sync(app._draw(device))
         self.assertEqual([a["dest"] for a in sinks(drawn_page(device), [])], ["/.hit", "/.hit#2"])
 
     def test_a_page_turn_replaces_the_table(self) -> None:
@@ -144,11 +144,11 @@ class TheTableIsOneDraws(unittest.TestCase):
             ctx.page(h.frame(h.loom(h.button("x"), sink=hit, submit=["button"], id="x"), id="r"))
 
         device = FakeDevice(app=app)
-        app._draw(device)
+        run_sync(app._draw(device))
         before = sorted(device.landings)
-        app._draw(device)
+        run_sync(app._draw(device))
         self.assertEqual(sorted(device.landings), before, "the same page draws the same names")
-        app.dests.dispatch(device, {"dest": before[0], "data": 1})
+        run_sync(app.dests.dispatch(device, {"dest": before[0], "data": 1}))
         self.assertTrue(before)
 
     def test_each_device_has_its_own_closures(self) -> None:
@@ -165,11 +165,11 @@ class TheTableIsOneDraws(unittest.TestCase):
             ctx.page(h.frame(h.loom(h.button("x"), sink=hit, submit=["button"], id="x"), id="r"))
 
         one, two = FakeDevice(id="one", app=app), FakeDevice(id="two", app=app)
-        app._draw(one)
-        app._draw(two)
+        run_sync(app._draw(one))
+        run_sync(app._draw(two))
         self.assertEqual(sorted(one.landings), sorted(two.landings), "the same names, per device")
-        app.dests.dispatch(one, {"dest": "/.hit", "data": "a"})
-        app.dests.dispatch(two, {"dest": "/.hit", "data": "b"})
+        run_sync(app.dests.dispatch(one, {"dest": "/.hit", "data": "a"}))
+        run_sync(app.dests.dispatch(two, {"dest": "/.hit", "data": "b"}))
         self.assertEqual(seen, [("one", "a"), ("two", "b")])
 
 
@@ -189,20 +189,20 @@ class GatedLandings(unittest.TestCase):
             ctx.page(h.frame(h.loom(h.button("secret"), sink=gated(secret), submit=["button"], id="s"), id="r"))
 
         self.device = FakeDevice(app=self.app)
-        self.app._draw(self.device)
+        run_sync(self.app._draw(self.device))
 
     def test_an_anonymous_click_never_reaches_the_closure(self) -> None:
         # The two lines the server runs for every uplink frame: the gate, then the dispatch.
         frame = {"dest": "/.secret", "data": "x"}
         refused = self.app._refuse_gated(self.device, frame)
         if not refused:
-            self.app.dests.dispatch(self.device, frame)
+            run_sync(self.app.dests.dispatch(self.device, frame))
         self.assertTrue(refused)
         self.assertEqual(self.calls, [], "the gate runs before the closure")
 
     def test_a_bound_device_reaches_it(self) -> None:
         self.device.data["user"] = "user-ada"
-        self.assertTrue(self.app.dests.dispatch(self.device, {"dest": "/.secret", "data": "x"}))
+        self.assertTrue(run_sync(self.app.dests.dispatch(self.device, {"dest": "/.secret", "data": "x"})))
         self.assertEqual(self.calls, ["x"])
 
 
@@ -225,9 +225,9 @@ class BothKindsLiveTogether(unittest.TestCase):
             ctx.page(h.frame(h.loom(h.button("local"), sink=local, submit=["button"], id="l"), id="r"))
 
         device = FakeDevice(app=app)
-        app._draw(device)
-        app.dests.dispatch(device, {"dest": "/.local", "data": 1})
-        app.dests.dispatch(device, {"dest": "demo.remote", "data": 2})
+        run_sync(app._draw(device))
+        run_sync(app.dests.dispatch(device, {"dest": "/.local", "data": 1}))
+        run_sync(app.dests.dispatch(device, {"dest": "demo.remote", "data": 2}))
         self.assertEqual(seen, [("local", 1), ("remote", 2)])
 
 

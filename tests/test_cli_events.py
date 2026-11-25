@@ -25,7 +25,7 @@ _CTX = Context(app=None, device=None)  # type: ignore[arg-type]  # only the slot
 from reflux import cli
 from reflux.app import App
 from reflux.sdk import dump
-from tests.fakes import FakeDevice  # noqa: F401
+from tests.fakes import run_sync, FakeDevice  # noqa: F401
 from tests.fakes import page_nodes
 
 
@@ -152,7 +152,7 @@ class EverySendableDestHasAHandler(unittest.TestCase):
         # device that drew the page, not in the app's registry. So the invariant is "every name the
         # page sends resolves where it was drawn" — which is the stronger half of the old check.
         device = FakeDevice(app=self.app)
-        self.app._draw(device)
+        run_sync(self.app._draw(device))
         sent = sent_dests(page_nodes(self.app, '/'))
         self.assertTrue(sent, "the home page has uplinks; an empty set means the walk is wrong")
         self.assertEqual(sent - self.registered - set(device.landings), set(),

@@ -168,7 +168,8 @@ class Auth:
     surface, never the mechanics around it.
     """
 
-    verify: Callable[[Any, dict[str, Any], str], str | None]
+    # A verifier may await (a database lookup): the dispatcher awaits what it returns.
+    verify: Callable[[Any, dict[str, Any], str], Any]
     view: Callable[[Any, str], Accrete] | None = None
     store: TokenStore | None = None
     idle_window: float = DEFAULT_IDLE_WINDOW

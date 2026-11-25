@@ -13,6 +13,7 @@ import unittest
 from reflux.dests import Registry, RegistryError
 
 from tests.fakes import FakeDevice
+from tests.fakes import run_sync
 
 
 class TestRegistration(unittest.TestCase):
@@ -50,7 +51,7 @@ class TestRegistration(unittest.TestCase):
 
         self.assertEqual(events.names(), ["chat.send"])
         device = FakeDevice()
-        self.assertTrue(events.dispatch(device, {"dest": "chat.send", "data": {}}))
+        self.assertTrue(run_sync(events.dispatch(device, {"dest": "chat.send", "data": {}})))
         self.assertEqual(len(device.seen), 1)
 
 
@@ -58,7 +59,7 @@ class TestDispatch(unittest.TestCase):
     def test_unregistered_name_is_refused_counted_and_logged(self) -> None:
         events = Registry()
         device = FakeDevice()
-        self.assertFalse(events.dispatch(device, {"dest": "ghost.press", "id": None, "data": {}}))
+        self.assertFalse(run_sync(events.dispatch(device, {"dest": "ghost.press", "id": None, "data": {}})))
         self.assertEqual(events.refused, 1)
         self.assertEqual(events.calls, 0)
         self.assertIn("ghost.press", events.log[-1])
@@ -68,7 +69,7 @@ class TestDispatch(unittest.TestCase):
         events = Registry()
         for bad in ("not a frame", [], {"id": None}, {"dest": 7}):
             with self.subTest(frame=bad):
-                self.assertFalse(events.dispatch(FakeDevice(), bad))
+                self.assertFalse(run_sync(events.dispatch(FakeDevice(), bad)))
         self.assertEqual(events.refused, 4)
 
     def test_a_handler_that_raises_keeps_the_device(self) -> None:
@@ -79,11 +80,11 @@ class TestDispatch(unittest.TestCase):
 
         events.register("boom.now", boom)
         device = FakeDevice()
-        self.assertFalse(events.dispatch(device, {"dest": "boom.now", "data": {}}))
+        self.assertFalse(run_sync(events.dispatch(device, {"dest": "boom.now", "data": {}})))
         self.assertIn("bad handler", events.log[-1])
         # and the next frame still gets through: a defect is a log line, not a dead device
         events.register("fine.now", lambda ctx, frame: None)
-        self.assertTrue(events.dispatch(device, {"dest": "fine.now", "data": {}}))
+        self.assertTrue(run_sync(events.dispatch(device, {"dest": "fine.now", "data": {}})))
 
 
 if __name__ == "__main__":

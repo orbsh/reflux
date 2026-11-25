@@ -332,8 +332,10 @@ class TestDevices(unittest.TestCase):
                 self.assertEqual(app.evict(id=device.id), 1)
                 self.assertIsNone(app.device(device.id))
                 self.assertEqual(app.live(), [])
-                self.assertEqual(heard, [(device.id, "evicted")])
+                # The close frame is the last thing the scheduled removal does, so waiting for it
+                # is waiting for the announce that came first.
                 self.assertIsNone(ws.recv(timeout=2.0))  # the close frame, then the socket ends
+                self.assertEqual(heard, [(device.id, "evicted")])
 
     def test_evict_takes_a_predicate_over_the_bag(self):
         app = bare_app()

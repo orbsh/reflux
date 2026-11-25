@@ -17,7 +17,7 @@ Status: **Accepted**（2026-11-25）。
 服务端搬到 asyncio，用 **aiohttp** 承载传输。
 
 - 一条连接 = 一个 task；`/ws` 是一条 `web.get` 路由，升级后是 `WebSocketResponse`。
-- 处理器写 `async def`，`await` 数据库与 HTTP 是原生的；同步处理器仍然合法，由框架用 `asyncio.to_thread` 兜住（§5）。
+- 处理器写 `async def`，`await` 数据库与 HTTP 是原生的；同步处理器仍然合法，由框架用 `asyncio.to_thread` 兜住（§5）。两种写法都过 `reflux/settle.py` 的 `maybe()`：协程函数就 await，普通函数进线程；普通函数返回可等待物也照样 await。
 - `ctx.emit` / `ctx.slot` / `ctx.device` **保持同步**：它们只是入队与读快照，不 await。await 只发生在处理器自己真的要等的时候，不扩散到写页面用的词表里。
 - 取消与超时是原生的：设备 task 结束 → 它派生的子任务（流式回复）被取消；`App(handler_timeout=30.0)` 用 `asyncio.timeout` 包住一次投递。
 
@@ -25,35 +25,40 @@ Status: **Accepted**（2026-11-25）。
 
 ## 4. 传输怎么落：aiohttp，删代码而不是加代码
 
+- **页面重画是一个排队项，不是一个 task**：`App.request_draw()` 往设备的 `outbox` 里放一个标记，writer 按序执行（`await _draw`）。画页要 await（页面处理器可能查库），而 task 会把它的帧排在调用者下一句 emit 之后——顺序会错。`_draw` 在没有 writer 的设备上（单测的假设备）把协程交回调用者，由它 await。
 - **HTTP**：`web.Application` + 一条静态路由（`web.static`）+ 一条兜底路由出 `index.html`（深链与刷新靠它）。今天 `SimpleHTTPRequestHandler` 白给的东西——条件请求、`HEAD`、`Content-Type`、range、路径不逃逸——交给 aiohttp，本仓不再维护那一层。缓存策略仍由本仓决定：`Cache-Control: no-store`（重建的页面永不需要硬刷新）。
 - **WebSocket**：`web.get("/ws")` → `WebSocketResponse`。`channel.py` 的帧编解码（掩码、分片、ping/pong、close code）**删掉**；`Channel` 退化成一层约 40 行的适配器（`recv`/`send` → `ws.receive_str`/`ws.send_str`），让 `Device`、门、测试夹具继续对着同一个接口说话。
-- **写侧**：`asyncio.Queue(maxsize)`；队列满 → 丢弃并标 `stale`，设备空闲时重画一次它的当前位置。今天 `stale` + `flush_device` 的修补语义保留，但前提变了——`await ws.drain()` 挂起的是那条协程自己，不是"一条被卡住的写线程"。
+- **写侧**：`outbox` 列表（有界）+ `asyncio.Event` + 一个 writer task，`await ws.send_str()` / `drain()`。丢弃语义逐条照旧（超容量丢中间、标 `stale`、空闲时用一帧 `create` 重画）。没用 `asyncio.Queue`：语义一样的容器换一个，只是把"丢中间"这条已有的规则重写一遍，不值。
 - **出站**：一条 `aiohttp.ClientSession` 在 `@app.startup` 里建、`@app.shutdown` 里关，挂在 `app.http` 上给处理器用（聊天页的 SSE 腿就是它）。这是这两个钩子存在的具体理由，不是仪式。
 
-## 5. 同步处理器：`to_thread`，与一条纪律
+## 5. 可等待的是什么
+
+`@app.on`（含 `connect` / `location` / `disconnect` 的 announce）、闭包落点、`@app.page` / 单页、`shell`、`Auth.verify` 都可以 `async def`。`app.view` 登记的渲染器**不在其中**：它在 `Slot.set` 里面被调用，而 `Slot` 的写是同步的——让渲染器可 await 就等于让每一次 `ctx.slot(...).patch(...)` 变成 await，那是把整个写页面的词表推翻。渲染器是"值 → 节点"，不是 I/O。
+
+## 6. 同步处理器：`to_thread`，与一条纪律
 
 同步处理器是合法写法（参考应用里大多就是同步的），框架把它 `await asyncio.to_thread(handler, ctx, frame)`：它占一个线程池槽位，不会卡住 loop。
 
 纪律写进文档：**在 loop 上不许阻塞**。同步 DB 驱动、`requests`、`time.sleep`、大块文件 I/O 只能出现在同步处理器里（由 `to_thread` 兜住），否则全部设备一起停。CPU 重的活自己丢线程池，框架不替部署决定。
 
-## 6. 生命周期与入口
+## 7. 生命周期与入口
 
 - `@app.startup` / `@app.shutdown`，可为 async，在 loop 上跑；`ClientSession`、连接池、后台 task 在这里建与关。
 - `App.serve()` 给 CLI（内部 `asyncio.run` + `AppRunner`/`TCPSite`）；`App.start()`/`stop()` 给测试与嵌入（同一套 runner，loop 跑在后台线程，停时 `call_soon_threadsafe(loop.stop)` 再 join）。`app.loop` 公开。
 - aiohttp 的 `web.run_app` 不用：它要独占 `asyncio.run`，而 `start()`/`stop()` 的测试形状需要一个可停的 runner。
 
-## 7. 超时、取消、异常面
+## 8. 超时、取消、异常面
 
 - `App(handler_timeout=30.0)`：`asyncio.timeout` 包住一次投递，超时 → 取消 → 记一条 → 设备存活。
 - 设备 task 结束时取消它派生的子任务：一个已经不在的连接不值得继续等查询结果。
 - `asyncio.CancelledError` **不吞**，继续向上。
 - 异常面不变：`dests._call` 仍是唯一捕获点，`Exception` → 计数 + 日志 + 设备存活。
 
-## 8. `ctx.turn()` 不变，代价照旧
+## 9. `ctx.turn()` 不变，代价照旧
 
 缓冲挂在 `ctx` 上，跨 `await` 仍然有效：`with ctx.turn(): … await … …` 是一帧。代价是跨一次网络往返的 turn 一直握着那批操作，客户端在这段时间里看不到东西——"一个 turn 里只发一次网络请求"是使用纪律。
 
-## 9. 谁要跟着改
+## 10. 谁要跟着改
 
 - `pyproject.toml`：加 `aiohttp>=3.9`；删掉那句 "the rest of reflux stays stdlib-only"——它已经不真（`pydantic-core` 是编译的），而且本仓第一次为传输付依赖账，值得写明是为什么。
 - `channel.py`：帧编解码删除；`accept_key` / `is_upgrade` 随 aiohttp 的握手一起删，只留 `Channel` 适配器。
@@ -64,14 +69,14 @@ Status: **Accepted**（2026-11-25）。
 - 文档：`docs/DESIGN.md:70` 那句 "`channel.py`（HTTP 升级 + 文本帧编解码，stdlib）" 改写；`HANDOFF` 记 `serve()` 与 `start()` 的分工、`to_thread` 是唯一跨界点。
 - 测试夹具：后台起服务的形状保留（`start()`/`stop()`），断言不变；门是端到端的，仍走真实端口。
 
-## 10. 代价
+## 11. 代价
 
 - **一个依赖与它的传递**：`aiohttp` 带 `multidict`/`yarl`/`frozenlist`/`aiosignal`/`attrs`。要在 NixOS 与 CI 里跟版本。
 - **一次性重写**：`app.py` 的那几个方法 + `server.py` + `cli.py` + 聊天页 + 夹具；净效果是删掉约 350 行（帧编解码 + HTTP 特例），加上约 300 行改造。十道门与全量测试复跑。
 - **阻塞传染**：asyncio 的真实代价，靠 §5 的规则与 `to_thread` 兜住。一个不守纪律的同步处理器现在会影响所有设备——在线程模型里它只影响自己。
 - **调试形状变了**：traceback 在 `await` 链上，"任务从未被 await"一类警告要当错误处理。
 
-## 11. 不做
+## 12. 不做
 
 - 不引 ASGI（`starlette`/`uvicorn`）：reflux 有自己的 CLI 与生命周期，aiohttp 一个包就给了 HTTP + WS + 出站客户端；将来若要跑在别人的应用服务器下再谈。
 - 不引 ORM、模板引擎或别的框架：那些是应用的事。

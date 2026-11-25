@@ -72,6 +72,7 @@ from urllib.parse import parse_qs
 from . import ingest, wire
 from .auth import Auth, Tokens, credentials_of
 from .channel import EVICTED, JUDGED_DEAD, WS_PATH, Channel, ChannelClosed
+from .settle import maybe
 from .dests import Registry
 from .protocol import (
     AUTH_SLOT,
@@ -297,7 +298,9 @@ class Device:
         """
         if self.app is None:
             raise RuntimeError("device.draw: this device is not attached to an app")
-        self.app._draw(self)
+        pending = self.app.request_draw(self)
+        if pending is not None:
+            self.app._spawn(pending)
 
     def send(self, frame: list[dict]) -> None:
         """Queue one frame out. The writer writes it; nobody blocks on the socket here.
@@ -356,6 +359,11 @@ class Device:
         """
         self.emits += 1
         self.send(wire.draw(*operations))
+
+
+# A page turn queued in a device's outbox (see `App.request_draw`). Identity, not value: it is a
+# marker in the outbound stream, never a frame.
+_DRAW = object()
 
 
 class _Turn:
@@ -484,13 +492,21 @@ class Context:
         return node
 
     def draw(self) -> None:
-        """Redraw the page this device stands on. The app draws it; the device is where it lands."""
-        self.app._draw(self.device)
+        """Redraw the page this device stands on. The app draws it; the device is where it lands.
+
+        A request, not a call: the page may await (a handler that queries), so it is queued behind
+        the frames already said and performed by the device's writer (ADR 0002).
+        """
+        pending = self.app.request_draw(self.device)
+        if pending is not None:
+            self.app._spawn(pending)
 
     def go(self, url: str) -> None:
         """Move this device's address, then draw — the server's own page turn (`Device.go`)."""
         self.device.path, self.device.query = split_location(url)
-        self.app._draw(self.device)
+        pending = self.app.request_draw(self.device)
+        if pending is not None:
+            self.app._spawn(pending)
 
 
 class App:
@@ -503,6 +519,7 @@ class App:
         *,
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
+        handler_timeout: float = 30.0,
         outbox: int = 256,
         shell: Callable[[Context], Any] | None = None,
         auth: Auth | None = None,
@@ -526,6 +543,9 @@ class App:
         self.shell: Callable[[Context], Any] = shell if shell is not None else default_shell
         # Live devices, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a device that is not its own.
+        # A handler that awaits forever must not hold a connection forever: one delivery, one budget.
+        # The coroutine is cancelled, the device survives, the log says why (ADR 0002 §7).
+        self.handler_timeout = handler_timeout
         self.devices: dict[Any, Device] = {}
         # The HTTP side: a path -> route table, where the channel is one route among others. The
         # default is the channel at `/ws`; `mount` moves it and adds the app's own paths.
@@ -561,7 +581,7 @@ class App:
 
     # --- the framework's own protocol -----------------------------------------------------
 
-    def _on_hello(self, ctx: Context, frame: dict) -> None:
+    async def _on_hello(self, ctx: Context, frame: dict) -> None:
         """The client says where it stands; the first frame answers, then `connect` is raised.
 
         A `token` in the hello is the same person coming back on a new socket — a refresh, a
@@ -575,12 +595,14 @@ class App:
         # `dest` / `id` / `data`), which is also where the client runtime puts it.
         payload = frame.get("data")
         self._adopt(device, payload.get("token") if isinstance(payload, dict) else None)
-        self._draw(device)
+        pending = self.request_draw(device)
+        if pending is not None:
+            await pending
         if not device.connected:
             device.connected = True
             # After the frame is queued: a handler that draws more lands on top of a page the
             # client already has, never under one it is about to lose.
-            self.dests.announce("connect", device, frame)
+            await self.dests.announce("connect", device, frame)
 
     def _adopt(self, device: Device, token: Any) -> None:
         """Bind this connection to the user a token names, or leave it anonymous."""
@@ -596,21 +618,23 @@ class App:
 
     # --- authentication: the three verbs the venue owns ------------------------------------
 
-    def _login(self, ctx: Context, frame: dict) -> None:
+    async def _login(self, ctx: Context, frame: dict) -> None:
         """The framework's `login` verb: prove the credential, then bind, mint and answer."""
-        self._attempt(ctx, frame, "login")
+        await self._attempt(ctx, frame, "login")
 
-    def _signup(self, ctx: Context, frame: dict) -> None:
+    async def _signup(self, ctx: Context, frame: dict) -> None:
         """The same act, said as `signup` — the mode reaches `verify`, which decides what to do."""
-        self._attempt(ctx, frame, "signup")
+        await self._attempt(ctx, frame, "signup")
 
-    def _attempt(self, ctx: Context, frame: dict, mode: str) -> None:
+    async def _attempt(self, ctx: Context, frame: dict, mode: str) -> None:
         device = ctx.device
         if self.auth is None or self.tokens is None:
             return
         credentials = credentials_of(frame)
         try:
-            user = self.auth.verify(ctx, credentials, mode)
+            user = await maybe(self.auth.verify, ctx, credentials, mode)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             # A deployment's verifier is a deployment's risk: a raise is a refusal here, and the
             # device survives it (the same rule every handler follows). The log carries the why.
@@ -630,9 +654,11 @@ class App:
         ctx.slot(AUTH_SLOT).set(
             h.frame(token_marker(token), h.text(f"已登录 {user}", variant="muted"))
         )
-        self._draw(device)
+        pending = self.request_draw(device)
+        if pending is not None:
+            await pending
 
-    def _logout(self, ctx: Context, frame: dict) -> None:
+    async def _logout(self, ctx: Context, frame: dict) -> None:
         """Forget the credential: the row goes, the connection unbinds, the surface comes back."""
         device = ctx.device
         if self.auth is None:
@@ -644,7 +670,9 @@ class App:
         # An EMPTY marker is how the browser's storage hears about it — leaving the node out would
         # say nothing, and the next hello would present a dead token.
         ctx.slot(AUTH_SLOT).set(h.frame(token_marker(""), self.auth.screen(ctx, "login")))
-        self._draw(device)
+        pending = self.request_draw(device)
+        if pending is not None:
+            await pending
 
     def _refuse_gated(self, device: Device, frame: dict) -> bool:
         """True when this frame was refused: its landing point needs a user and this device has none.
@@ -679,7 +707,7 @@ class App:
         ctx = self.context(device)
         ctx.slot(AUTH_SLOT).set(self.auth.screen(ctx, state))
 
-    def _on_nav(self, ctx: Context, frame: dict) -> None:
+    async def _on_nav(self, ctx: Context, frame: dict) -> None:
         """The page asked for another path — back or forward: the only navigation this wire has.
 
         The browser already moved its address bar before this arrived, so the framework only
@@ -687,8 +715,10 @@ class App:
         """
         device = ctx.device
         device.path, device.query = location_of(frame)
-        self._draw(device)
-        self.dests.announce(
+        pending = self.request_draw(device)
+        if pending is not None:
+            await pending
+        await self.dests.announce(
             "location",
             device,
             {"dest": "location", "data": {"path": device.path, "query": device.query}},
@@ -787,7 +817,23 @@ class App:
         """One delivery, ready to hand a handler: this app, this device, and what came in."""
         return Context(self, device, frame, match)
 
-    def _draw(self, device: Device) -> None:
+    def request_draw(self, device: Device) -> Any:
+        """Ask for a page turn — queued, not scheduled: a draw cannot overtake a frame already said.
+
+        Drawing is the one piece of outbound work that has to `await` (a page handler may query a
+        database), and a task would land its frames after anything the caller emits next. So the
+        request is written into the device's own outbox and the writer performs it in order.
+        """
+        if getattr(device, "_writer", None) is None:
+            # No writer task behind this device: a page drawn outside a connection (a unit test's
+            # fake, an app driven by hand). Hand the draw back so the caller can await it — a task
+            # would be dropped by whatever loop the caller is about to close.
+            return self._draw(device)
+        device.outbox.append(_DRAW)
+        device.wake()
+        return None
+
+    async def _draw(self, device: Device) -> None:
         """One frame for the device's current location: a create, or the ops the page gave for it.
 
         Private on purpose: the page is the app's, the act is the device's. `device.draw()` is how
@@ -797,13 +843,13 @@ class App:
             return
         ctx = self.context(device)
         if self._single is not None:
-            drawn = page_of(ctx, self._single(ctx, device.path), "the single page")
+            drawn = page_of(ctx, await maybe(self._single, ctx, device.path), "the single page")
         else:
             match = self.routes.match(device.path)
             drawn = None
             if match is not None:
                 ctx = self.context(device, match=match)
-                drawn = match.resolve(ctx)
+                drawn = await maybe(match.resolve, ctx)
         if drawn is None:  # nothing drew for this address: the app's own 404, not a blank page
             drawn = not_found(device.path)
         drawn, named = self._name_landings(device, drawn, device.path)
@@ -813,7 +859,7 @@ class App:
         frame: list[dict] = []
         if not device.shell_drawn:
             device.shell_drawn = True
-            frame.append(wire.create(self.shell(ctx)))
+            frame.append(wire.create(await maybe(self.shell, ctx)))
         frame.extend(into_routes(operations))
         device.emit(*frame)
 
@@ -919,12 +965,20 @@ class App:
             for device in list(self.devices.values())
             if (id is None or device.id == id) and (where is None or where(device))
         ]
-        for device in hit:
-            if not self._gone(device, reason):
-                continue
-            self._spawn(self._close_channel(device.channel, EVICTED))
-            self.stats["reclaimed"] += 1
+        # The table is the caller's answer, so it empties before this returns; the announce and the
+        # socket work (a close frame, then the drop) follow on the loop.
+        gone = [device for device in hit if self._forget(device)]
+        self._spawn(self._evict_now(gone, reason))
         return len(hit)
+
+    async def _evict_now(self, gone: list[Device], reason: str) -> None:
+        """What `evict` scheduled: tell the app each device is gone, then close its socket."""
+        for device in gone:
+            await self.dests.announce(
+                "disconnect", device, {"dest": "disconnect", "data": {"reason": reason}}
+            )
+            await self._close_channel(device.channel, EVICTED)
+            self.stats["reclaimed"] += 1
 
     async def watch(self) -> None:
         """One pass over the table: ping the live devices, reclaim the ones gone quiet.
@@ -942,7 +996,7 @@ class App:
             # Take it out before closing it: one removal, one accounting. Otherwise the reader
             # thread (woken by the shutdown below) could get there first and the same device
             # would be accounted twice — as reclaimed *and* as dead.
-            if not self._gone(device, "dead"):
+            if not await self._gone(device, "dead"):
                 continue
             await channel.close(JUDGED_DEAD)
             channel.abort()
@@ -1095,7 +1149,15 @@ class App:
                     continue
                 if self._refuse_gated(device, frame):
                     continue
-                self.dests.dispatch(device, frame)
+                try:
+                    async with asyncio.timeout(self.handler_timeout):
+                        await self.dests.dispatch(device, frame)
+                except TimeoutError:
+                    self.stats["refused"] += 1
+                    self.dests.log.append(
+                        f"handler for {frame.get('dest')!r} ran past {self.handler_timeout}s "
+                        f"({device.id} on {device.path})"
+                    )
         except ChannelClosed as exc:
             self.dests.log.append(f"device {device.id} closed: {exc}")
         finally:
@@ -1108,7 +1170,7 @@ class App:
                     await device._writer
             # Identity, not id: a device the watchdog already reclaimed is not this task's to
             # count, and no task can remove a device that is not its own.
-            if self._gone(device, "closed"):
+            if await self._gone(device, "closed"):
                 self.stats["reclaimed"] += 1
                 self.dests.log.append(f"device {device.id} reclaimed")
 
@@ -1132,7 +1194,11 @@ class App:
             return
         asyncio.create_task(coro)
 
-    def _gone(self, device: Device, reason: str) -> bool:
+    def _forget(self, device: Device) -> bool:
+        """Take a device out of the table once. Identity, not id: a device is only its own to remove."""
+        return self.devices.pop(device.channel, None) is not None
+
+    async def _gone(self, device: Device, reason: str) -> bool:
         """Take a device out of the table once — and let the app hear that it is gone.
 
         The one place that removes: `disconnect` cannot fire twice (both the reader thread and the
@@ -1141,7 +1207,7 @@ class App:
         """
         if self.devices.pop(device.channel, None) is None:
             return False
-        self.dests.announce(
+        await self.dests.announce(
             "disconnect", device, {"dest": "disconnect", "data": {"reason": reason}}
         )
         return True
@@ -1171,12 +1237,16 @@ class App:
         client may have missed the frame that built it), so the flag is cleared first.
         """
         while device.outbox:
-            if not await self._write(device.channel, device.outbox.pop(0)):
+            item = device.outbox.pop(0)
+            if item is _DRAW:
+                await self._draw(device)
+                continue
+            if not await self._write(device.channel, item):
                 return
         if device.stale:
             device.stale = False
             device.shell_drawn = False
-            self._draw(device)
+            await self._draw(device)
             frames, device.outbox = device.outbox, []
             for frame in frames:
                 if not await self._write(device.channel, frame):

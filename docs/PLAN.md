@@ -106,7 +106,7 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 每个阶段一个 commit、全门绿才进下一阶段。P1 里先加一条守卫：处理器返回协程时抛 `TypeError`（P2 之前不支持），不许静默丢弃。P2 的真正工作量在夹具：`tests/fakes.py` 加 `run_sync(coro)`，17 处 `app._draw(...)` 与 5+ 处 `app.handle(channel)` 跟着改形状。
 
 - [x] P1 传换 —— 2026-11-25：`server.py` 换成 aiohttp（静态 + index 回退 + `no-cache`、通道升级 → `WebSocketResponse`），`App.handle` 变协程、每设备一个 writer task（保留 `outbox` 列表 + `asyncio.Event`，shed / `stale` / resync 语义逐条照旧），看门狗变 task，`make_server` 返回同形状的 `Server` 垫片（`server_address` / `serve_forever` / `server_close`），六个 harness 调用点零改动；`Device.wake()` 管跨线程 emit；测试夹具迁到 async（`run_sync` + async channel），`settle()` 消失（`handle` 返回即写完）。350 例 + 十道门全绿。顺手补 `frames.rs` 跟着 `emit` 窗口的第 9 个参数
-- [ ] P2 用户代码可 await —— 未开工
+- [x] P2 用户代码可 await —— 2026-11-25：`reflux/settle.py` 的 `maybe()` 是唯一入口（协程函数 await，普通函数 `to_thread`，返回可等待物也 await）；`dests.dispatch` / `announce` / `_call` / `_call_local`、`App._draw` / `shell`、`@app.page` / 单页、`Auth.verify`、`connect` / `location` / `disconnect` 都可 await；`App(handler_timeout=30.0)` 用 `asyncio.timeout` 包住一次投递，超时取消 + 记一条 + 设备存活，`CancelledError` 不吞；**页面重画是 outbox 里的排队项**（`App.request_draw` + `_DRAW` 标记），不是 task——否则它的帧会排到调用者下一句 emit 之后；`evict` 的摘表仍是同步的（调用者的答案），关帧与 disconnect 通告在 loop 上跟进。`app.view` 的渲染器保持同步（它在 `Slot.set` 里，让写槽变成 await 等于推翻整个词表），ADR §5 记了理由。`tests/test_async_handlers.py` 九例：async 处理器 / 闭包落点 / 页面 / shell / 验证器、线程外跑、预算取消、同设备不交错、慢的不拖快的。362 例 + 十道门全绿
 - [ ] P3 生命周期与入口 —— 未开工
 - [ ] P4 聊天页 async 迭代 —— 未开工
 - [ ] P5 删死代码 + 文档 —— 未开工

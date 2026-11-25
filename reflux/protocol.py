@@ -18,6 +18,8 @@ from __future__ import annotations
 
 __all__ = [
     "AUTH_SLOT",
+    "PING_DEST",
+    "PONG_DEST",
     "AUTH_VERBS",
     "HOST_EVENTS",
     "LOGIN",
@@ -27,6 +29,12 @@ __all__ = [
     "ROUTES_SLOT",
     "SIGNUP",
 ]
+
+# The transport's own two names (ADR 0044, fluxen's `content::PING_DEST`/`PONG_DEST`). A probe is not an
+# event: it never reaches a handler, is never counted as a refusal, and is answered on the socket rather
+# than through the frame door (an answer is not a render instruction).
+PING_DEST = "__ping__"
+PONG_DEST = "__pong__"
 
 # How many operations one `draw` frame may carry. The producer refuses to build a frame over it
 # (`wire.draw`) and the server refuses to put one on a socket (`ingest.check_frame`): the same rule

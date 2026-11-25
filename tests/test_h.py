@@ -12,7 +12,7 @@ import unittest
 from reflux.app import App
 from reflux.routes import Routes
 from reflux.sdk import dump, h
-from tests.fakes import FakeDevice
+from tests.fakes import run_sync, FakeDevice
 
 
 class TheSameFrame(unittest.TestCase):
@@ -84,9 +84,9 @@ class AClosureInsideData(unittest.TestCase):
             )
 
         device = FakeDevice(app=app)
-        app._draw(device)
+        run_sync(app._draw(device))
         self.assertEqual(sorted(device.landings), ["/.hit"])
-        self.assertTrue(app.dests.dispatch(device, {"dest": "/.hit", "data": 1}))
+        self.assertTrue(run_sync(app.dests.dispatch(device, {"dest": "/.hit", "data": 1})))
         self.assertEqual(calls, [1])
 
 
