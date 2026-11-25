@@ -26,16 +26,35 @@ from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.application import App  # noqa: E402
 from reflux.sdk import h  # noqa: E402
+from reflux.slots import Slot  # noqa: E402
+
+# A name with no delivery: enough to read a slot (`source=`) — a bare string would be a constant.
+ECHO = Slot("echo")
 
 PAGE = "/"
 
 
 def tree() -> Any:
+    """Two ways to send, and a read to see what landed.
+
+    A field's exit is the loom it sits in (ADR 0032): the `tag` is the key in the gathered
+    `{field: value}`, the sink is where the group sends it, and Enter is what submits. The `text`
+    reads the `echo` slot, so whatever a handler writes there is visible on the page.
+    """
     return h.frame(
-        {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.nowhere", "type": "text"}}},
-        {"type": "input", "bind": {"value": {"kind": "dest", "dest": "gate.boom", "type": "text"}}},
-        # an emitter for the refused-frame case: bound to the `echo` data slot
-        {"type": "text", "id": "echo", "bind": {"value": {"kind": "source", "source": "echo"}}},
+        h.loom(
+            h.input(tag="nowhere", id="in-nowhere"),
+            sink="gate.nowhere",
+            submit=["enter"],
+            id="loom-nowhere",
+        ),
+        h.loom(
+            h.input(tag="boom", id="in-boom"),
+            sink="gate.boom",
+            submit=["enter"],
+            id="loom-boom",
+        ),
+        h.text(source=ECHO, id="echo"),
     )
 
 
