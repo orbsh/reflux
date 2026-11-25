@@ -140,9 +140,9 @@ def register(app: Any) -> None:
                 h.frame(
                     # 一个 `button` 住在 `bundle` 里，按下的时机由 bundle 的 `submit` 命名 —— 所以每次
                     # 按下都是一个 bundle 的提交，而不是按钮自己会说话（ADR 0032 §3）。
-                    h.bundle(h.button("−", sink=down), sink=down, submit=["button"], id="counter-down"),
-                    h.bundle(h.button("＋", sink=up), sink=up, submit=["button"], id="counter-up"),
-                    h.bundle(h.button("归零", sink=reset), sink=reset, submit=["button"], id="counter-reset"),
+                    h.bundle(h.button("−"), sink=down, submit=["button"], id="counter-down"),
+                    h.bundle(h.button("＋"), sink=up, submit=["button"], id="counter-up"),
+                    h.bundle(h.button("归零"), sink=reset, submit=["button"], id="counter-reset"),
                     horizontal=True,
                     grid={"grid-template-columns": "max-content max-content max-content", "gap": "8px",
                           "justify-content": "start"},

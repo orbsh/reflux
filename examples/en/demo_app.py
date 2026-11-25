@@ -70,7 +70,7 @@ def nav_bundle(label: str, dest: Slot) -> Accrete:
     The press is the bundle's own submit: `submit=["button"]` names the click as the timing, and the
     bundle holds the exit, so the button only says "send this group" (ADR 0032 §3).
     """
-    return h.bundle(h.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
+    return h.bundle(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict) -> Accrete:
@@ -90,7 +90,7 @@ def row_node(row: dict) -> Accrete:
     return h.bundle(
         h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
-        h.frame(h.button("Remove", sink=slots.row["remove"]),
+        h.frame(h.button("Remove"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots.row["remove"],
         submit=["button"],
@@ -159,7 +159,7 @@ def demo_view(ctx, state):
         h.bundle(
             h.input(tag="user", id="auth-user"),
             h.input(tag="pass", kind=JsType.password, id="auth-pass"),
-            h.button("Sign in", sink=slots(LOGIN)),
+            h.button("Sign in"),
             sink=slots(LOGIN),
             submit=["enter", "button"],
             id="auth-form",
@@ -273,7 +273,7 @@ def home_page(ctx, match):
                         "A row's identity is its id: ✕ removes by id, and a drop archives by id — the gesture itself says nothing; only the landing point speaks.",
                         variant="muted",
                     ),
-                    h.bundle(h.button("Add a row", sink=add_row), sink=add_row,
+                    h.bundle(h.button("Add a row"), sink=add_row,
                              submit=["button"], id="add-row"),
                     h.tiles(source=slots.rows, id="rows"),
                     # The landing point names its event and what it accepts; `accept` is one tag
@@ -313,7 +313,7 @@ def home_page(ctx, match):
                         id="login-fields",
                     ),
                     h.frame(
-                        h.button("Sign in", sink=slots(LOGIN)),
+                        h.button("Sign in"),
                         style={"flex": "0 0 auto", "align-self": "end"},
                         id="login-press",
                     ),
@@ -323,10 +323,10 @@ def home_page(ctx, match):
                 ),
                 h.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # Behind a declaration: a click here from a visitor never reaches the handler.
-                h.bundle(h.button("Secret", sink=gated(reveal)),
+                h.bundle(h.button("Secret"),
                          sink=gated(reveal), submit=["button"], id="vault"),
                 h.text(source=slots.secret, id="secret"),
-                h.bundle(h.button("Log out", sink=slots(LOGOUT)), sink=slots(LOGOUT),
+                h.bundle(h.button("Log out"), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
                 variant="card",

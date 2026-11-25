@@ -529,23 +529,19 @@ pub fn entry(children: &[Value], horizontal: Option<bool>, selector: Option<&str
 }
 
 /// Build a `button` node (the wire type `button`).
-pub fn button(value: Option<&str>, oneshot: Option<bool>, selector: Option<&str>, source: Option<Source>, sink: Option<Sink>, id: Option<&str>) -> Value {
+pub fn button(value: Option<&str>, oneshot: Option<bool>, selector: Option<&str>, source: Option<Source>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     put(&mut attrs, "oneshot", Value::Bool(oneshot.unwrap_or(false)));
     if let Some(v) = selector {
         put(&mut attrs, "selector", s(v));
     }
     let source = read(source, value);
-    let sink = emit_write(sink);
     let mut node = Map::new();
     if !attrs.is_empty() {
         put(&mut node, "attrs", Value::Object(attrs));
     }
     if let Some(v) = id {
         put(&mut node, "id", s(v));
-    }
-    if let Some(v) = sink {
-        put(&mut node, "sink", v.clone());
     }
     if let Some(v) = source {
         put(&mut node, "source", v.clone());

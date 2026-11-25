@@ -179,7 +179,7 @@ profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（
 | progress | 不进词表：纯展示、无交互，自绘部件走 `canvas` 的模块通道 |
 | link | **退场，不补替代**（2026-10-17 裁决）：accrete 没有锚点类型，渲染器也从不导航；词表里能上行事件的只有 `input`／`select` 与 `bundle` 的 `submit`（`textarea` 是 `input(multiline=True)`）。所以 link 这个元素没有了，锚点语义（中键或修饰键新开标签、悬停看地址、右键复制链接）也没有。「点一下就把事件送上去」还剩一扇门——canvas 的模块通道（模块拿到 `host.send`，与 `bundle` 的提交同一条上行腿），代价是应用自己写那个 ES 模块。页内导航怎么做见「客户端 runtime」 |
 
-同名那 8 项里还有两处不能按名字对：`button` 只在 `bundle` 里当提交器（没有 `sink` 就渲染成空 div）；`input` 的类型来自 `type`（`JsType`，两个通道上都可写），不在属性上。
+同名那 8 项里还有两处不能按名字对：`button` 只在它最近的、`submit` 点名了 `button` 的 `bundle` 里画出来（它就是那个组的确认键，自己不带 `sink`、**没有出口**，ADR 0039 §2a）；`input` 的类型来自 `kind`（`JsType`），不在属性上。
 
 accrete 那侧比应用面宽的其余根变体——版面容器与栅格（`frame`：`style` 是内联样式面，`dir`／`wrap` 定轴向与折行）、内容区（`panel`：`fold`／`popup`／`layer` 是它 `place` × `state` 上的格子）、模块宿主（`canvas`；`chart`／`editor`／`diagram` 曾经的名字现在都是它的实例）、网格与条目（`tiles` 的 `fields` + `entry`，表头是 `header.layers` 行的格子，`window` 是一次窗口的大小）、SVG——是 fluxen 自己的语义面，现在都进了应用面。两个新面同样进来了：拖拽的两端都长在 `frame` 上（ADR 0034：`draggable` 让这个框带着自己的子树当货物，`accept` + `sink` 让它当落点，一次 drop 只送上货物的 `{id, tag}`——货物本身不旅行），`forcegraph` 是原生关系图（ADR 0029：渲染与布局都在 wasm 里，所以它没有 `url`、没有模块契约，`style` 是类型化词表而不是 `canvas` 的 `options` 动态袋；因为它没有角色 class 也没有 DOM id，T3 只能证明它挂出了一个尺寸非零的画布）。现在不暴露的只剩 `stamp`（`tmpl` 的替换节点；它只在展开期有意义，展开后渲染器画一个空槽）。
 
@@ -358,7 +358,7 @@ def only(ctx, path):
 def shell(ctx):
     return h.frame(
         h.text("示例站点", variant="heading-1"),
-        h.bundle(h.button("首页", sink=ctx.slot.go.home), sink=ctx.slot.go.home, submit=["button"]),
+        h.bundle(h.button("首页"), sink=ctx.slot.go.home, submit=["button"]),
         h.frame(source=ctx.slot.routes, id="routes"),   # 页面就画在这里
     )
 ```
@@ -492,7 +492,7 @@ def on_disconnect(device, frame):
 **计数器页**（`examples/zh/demo_counter.py`，2026-11-24）：前面几页各讲一件事，这一页不讲内容——一个数、三个按钮、一个步长输入、一小段有上限的历史——所以它写出来的每一行都只是 API 的用法：路由的装饰器写在模块自己的 `register(app)` 里（页面模块不能 import 应用），三个按钮与输入框是闭包落点，历史用列表槽的 `append`/`remove`（超上限删最早一条），值挂在 `ctx.data` 上所以两个标签页各数各的。它是"新读者从哪里开始"的答案。
 
 **两种落点，一条界线**（2026-11-24）：一个上行帧在 wire 上只带一个名字（`dest`），所以"谁回答它"有两种写法，而它们的分界不是风格，是**名字是否需要先于一次绘制存在**。
-- **闭包**（`sink=add_row`，或 `sink=gated(save)`）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{字段: {data}}`），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
+- **闭包**（持有出口的那个节点上的 `sink=add_row`，或 `sink=gated(save)`——按钮所在的 `bundle` 是最常见的一处）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{字段: {data}}`），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
 - **名字**（`@app.on(slot)`）：必须先于任何绘制存在的那几类——一个槽有多个来源（同页被工作线程和用户同时写的状态行、走查页被拖拽落点和编辑器回传同时写的 `echo`）、身份不在页面里的（一行一个 id，名字归行持有）、框架自己的动词（`reflux:login`）、跨页或全局的事件。
 门（`auth`）跟落点走：`gated(fn)` 说的是"这个落点只给绑了用户的设备"，声明地点因此在写出落点的那一行，而不是在处理器上。闭包落点不在 `dests` 表里，所以 `cli dests` 看不到它们；检查改成了绘制时的不变量——**画出来的每个 sink 名都必须在绘制它的那台设备上解析得到**（`tests/test_cli_events.py` 用 `FakeDevice` 画一次页面再核）。`tests/test_landings.py` 钉住机制本身：命名、按函数身份去重、按连接隔离、换页换表、`gated` 先于闭包运行、两套落点同页共存。 Rust SDK 跟着给了同一个形状（`sdks/rust/src/landings.rs` 的 `Landings`：`bind(name, closure)` 返回名字、`bind_gated` 带上门、同一个名字两次仍是一个落点）—— 差别只在名字要由调用方写出来，因为 Rust 运行时没有函数名；`gate_t10` 的页面用例通过它取名字，两侧帧仍然逐字节相等。
 

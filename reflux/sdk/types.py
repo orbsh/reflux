@@ -271,7 +271,6 @@ class BundleAttr(BaseModel):
 class Button(BaseModel):
     attrs: ButtonAttr | None = None
     id: str | None = None
-    sink: Sink | None = None
     source: Source | None = None
     type: Literal['button'] = 'button'
 

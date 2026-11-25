@@ -60,15 +60,16 @@ fn local_slot(slot: &str, path: &str) -> Source {
     }
 }
 
-/// The button of a one-button bundle: its label is a `source`, its exit the bundle's own `sink`.
-fn press(label: &str, sink: &str) -> Value {
-    button(Some(label), None, None, None, Some(remote_sink(sink)), None)
+/// The button of a one-button bundle: its label is a `source`, and a press submits the bundle, which
+/// holds the exit (ADR 0039 §2a — a button has no `sink` of its own).
+fn press(label: &str) -> Value {
+    button(Some(label), None, None, None, None)
 }
 
 /// A one-button bundle — the vocabulary's only clickable, and the demo's way between pages.
 fn nav_bundle(label: &str, event: &str) -> Value {
     bundle(
-        &[press(label, event)],
+        &[press(label)],
         None,  // reset,
         None,  // selector,
         None,  // sends,
@@ -120,7 +121,7 @@ fn row_node(id: &str, value: &str) -> Value {
             None,
         ),
         frame(
-            &[button(Some("删"), None, None, None, Some(remove.clone()), None)],
+            &[button(Some("删"), None, None, None, None)],
             None,
             None,
             None,
@@ -198,7 +199,7 @@ fn home() -> Value {
                 Some(TextVariant::Muted),
             ),
             bundle(
-                &[press("加一行", &add_row_sink)],
+                &[press("加一行")],
                 None,  // reset,
                 None,  // selector,
                 None,  // sends,
@@ -257,7 +258,7 @@ fn home() -> Value {
                         None,
                     ),
                     frame(
-                        &[press("登录", LOGIN)],
+                        &[press("登录")],
                         None,
                         None,
                         None,
@@ -292,7 +293,7 @@ fn home() -> Value {
                 None,
             ),
             bundle(
-                &[press("私密", &reveal_sink)],
+                &[press("私密")],
                 None,  // reset,
                 None,  // selector,
                 None,  // sends,
@@ -302,7 +303,7 @@ fn home() -> Value {
                 Some("vault")),
             text(None, None, None, Some(remote_slot(SECRET)), Some("secret"), None),
             bundle(
-                &[press("退出", LOGOUT)],
+                &[press("退出")],
                 None,  // reset,
                 None,  // selector,
                 None,  // sends,
@@ -460,7 +461,7 @@ fn login_surface() -> Value {
                         Some("pass"),
                         Some("auth-pass"),
                     ),
-                    press("确认登录", LOGIN),
+                    press("确认登录"),
                 ],
                 None,  // reset,
                 None,  // selector,

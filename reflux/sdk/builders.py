@@ -163,14 +163,12 @@ def button(
     oneshot: bool = False,
     selector: str | None = None,
     source: Any = None,
-    sink: Any = None,
     id: str | None = None,
 ) -> Button:
     """Build a `button` node (the wire type `button`)."""
     attrs = drop_none(oneshot=oneshot, selector=selector)
     source = as_source(source, default=value)
-    sink = as_sink(sink)
-    return parse(drop_none(type='button', attrs=attrs, source=source, sink=sink, id=id), Button)
+    return parse(drop_none(type='button', attrs=attrs, source=source, id=id), Button)
 
 
 def image(

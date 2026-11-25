@@ -146,9 +146,9 @@ def register(app: Any) -> None:
                 h.frame(
                     # A `button` lives inside a `bundle`, and the bundle's `submit` names the press —
                     # so each press is a bundle's submit, not a button that speaks on its own (ADR 0032 §3).
-                    h.bundle(h.button("−", sink=down), sink=down, submit=["button"], id="counter-down"),
-                    h.bundle(h.button("＋", sink=up), sink=up, submit=["button"], id="counter-up"),
-                    h.bundle(h.button("Reset", sink=reset), sink=reset, submit=["button"], id="counter-reset"),
+                    h.bundle(h.button("−"), sink=down, submit=["button"], id="counter-down"),
+                    h.bundle(h.button("＋"), sink=up, submit=["button"], id="counter-up"),
+                    h.bundle(h.button("Reset"), sink=reset, submit=["button"], id="counter-reset"),
                     horizontal=True,
                     grid={"grid-template-columns": "max-content max-content max-content", "gap": "8px",
                           "justify-content": "start"},

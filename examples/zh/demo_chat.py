@@ -121,14 +121,14 @@ def page(ctx: Context, match) -> None:
             h.frame(
                 h.bundle(
                     h.input(tag="text", id="composer"),
-                    h.button("发送", sink=slots.chat.send),
+                    h.button("发送"),
                     sink=slots.chat.send,
                     submit=["enter", "button"],
                     reset="clear",
                     id="send",
                 ),
                 h.bundle(
-                    h.button("停止", sink=slots.chat.stop),
+                    h.button("停止"),
                     sink=slots.chat.stop,
                     submit="button",
                     id="stop",

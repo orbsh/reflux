@@ -146,7 +146,6 @@
       "item": false,
       "channels": {
         "source": true,
-        "sink": true,
         "default": true
       }
     },

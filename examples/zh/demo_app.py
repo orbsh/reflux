@@ -60,7 +60,7 @@ def nav_bundle(label: str, dest: Slot) -> Accrete:
     按下就是 bundle 自己的提交：`submit=["button"]` 把这次点击命名为时机，出口也归 bundle 持有，
     所以按钮只说"发这一组"（ADR 0032 §3）。
     """
-    return h.bundle(h.button(label, sink=dest), sink=dest, submit=["button"], id=f"nav-{dest.name}")
+    return h.bundle(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict) -> Accrete:
@@ -78,7 +78,7 @@ def row_node(row: dict) -> Accrete:
     return h.bundle(
         h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
-        h.frame(h.button("删", sink=slots.row["remove"]),
+        h.frame(h.button("删"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots.row["remove"],
         submit=["button"],
@@ -146,7 +146,7 @@ def demo_view(ctx, state):
         h.bundle(
             h.input(tag="user", id="auth-user"),
             h.input(tag="pass", kind=JsType.password, id="auth-pass"),
-            h.button("确认登录", sink=slots(LOGIN)),
+            h.button("确认登录"),
             sink=slots(LOGIN),
             submit=["enter", "button"],
             id="auth-form",
@@ -253,7 +253,7 @@ def home_page(ctx, match):
                         "行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。",
                         variant="muted",
                     ),
-                    h.bundle(h.button("加一行", sink=add_row), sink=add_row,
+                    h.bundle(h.button("加一行"), sink=add_row,
                              submit=["button"], id="add-row"),
                     h.tiles(source=slots.rows, id="rows"),
                     # 落点说出它的事件和它收什么；`accept` 是一个 tag（或 any），所以别的 tag 的
@@ -292,7 +292,7 @@ def home_page(ctx, match):
                         id="login-fields",
                     ),
                     h.frame(
-                        h.button("登录", sink=slots(LOGIN)),
+                        h.button("登录"),
                         style={"flex": "0 0 auto", "align-self": "end"},
                         id="login-press",
                     ),
@@ -302,10 +302,10 @@ def home_page(ctx, match):
                 ),
                 h.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # 在一句声明后面：访客在这里的点击永远到不了处理器。
-                h.bundle(h.button("私密", sink=gated(reveal)),
+                h.bundle(h.button("私密"),
                          sink=gated(reveal), submit=["button"], id="vault"),
                 h.text(source=slots.secret, id="secret"),
-                h.bundle(h.button("退出", sink=slots(LOGOUT)), sink=slots(LOGOUT),
+                h.bundle(h.button("退出"), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
                 variant="card",

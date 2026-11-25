@@ -316,9 +316,9 @@ def home_page(ctx, match):
 
     return h.frame(
         h.bundle(h.input(tag="name"), sink=echo, submit=["enter"]),
-            # the renderer draws a button only when it carries a sink, and reads that sink as nothing
-            # more than "I am this group's confirm key" — the press sends the bundle's own sink
-            h.bundle(h.button("加一行", sink=add_row), sink=add_row, submit=["button"]),
+            # a button has no exit of its own: a press submits the bundle, which owns the sink, the
+            # payload and the id (ADR 0039 §2a)
+            h.bundle(h.button("加一行"), sink=add_row, submit=["button"]),
             h.text(source=slots.echo),
         )
     )

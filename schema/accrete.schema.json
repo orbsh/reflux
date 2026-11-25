@@ -124,16 +124,6 @@
             "null"
           ]
         },
-        "sink": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Sink"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "source": {
           "anyOf": [
             {

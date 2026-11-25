@@ -244,9 +244,10 @@ class ProfileTest(unittest.TestCase):
         self.assertNotIn("sink", typed)
         with self.assertRaises(TypeError):
             sdk.input(tag="name", sink="save")  # a field has no sink to give
-        # The write belongs to the node that owns the exit: a button, or the bundle around fields.
-        self.assertEqual(sdk.dump(sdk.button("提交", sink=Slot("submit")))["sink"],
-                         {"dest": "submit", "scope": "remote"})
+        # The write belongs to the bundle: the one node that owns an exit for its fields and its
+        # button. A button is not a party to the send (ADR 0039 §2a), so it refuses one.
+        with self.assertRaises(TypeError):
+            sdk.button("提交", sink="submit")  # a button has no exit of its own
         self.assertEqual(sdk.dump(sdk.bundle(sink="compose"))["sink"],
                          {"dest": "compose", "scope": "remote"})
         # A local landing is the bundle's too: one draw, one write, the reset still applies.

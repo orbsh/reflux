@@ -148,7 +148,7 @@ def default_view(ctx: Any, state: str) -> Accrete:
         h.bundle(
             h.input(tag="username", id="auth-user"),
             h.input(tag="password", kind=JsType.password, id="auth-pass"),
-            h.button("继续", sink=ctx.slot(verb)),
+            h.button("继续"),
             sink=ctx.slot(verb),
             submit=["enter", "button"],
             id="auth-form",

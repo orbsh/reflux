@@ -103,7 +103,7 @@ class TheAddressesInNodes(unittest.TestCase):
         self.assertEqual(h.text(source=self.ctx.slot["status"]).source.slot, "status")
 
     def test_a_sink_handle_reaches_the_wire_as_its_name(self) -> None:
-        node = h.bundle(h.button("send", sink=self.ctx.slot("chat.send")), sink=self.ctx.slot("chat.send"))
+        node = h.bundle(h.button("send"), sink=self.ctx.slot("chat.send"))
         self.assertEqual(node.sink.dest, "chat.send")
 
     def test_a_bare_value_is_a_constant_on_a_read_and_a_name_on_a_write(self) -> None:

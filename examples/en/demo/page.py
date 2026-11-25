@@ -267,7 +267,7 @@ def control(label: str) -> Accrete:
     the page.
     """
     return h.bundle(
-        h.button(label, sink=TOGGLE),
+        h.button(label),
         sink=TOGGLE,
         submit="button",
         id="demo-toggle",
@@ -457,7 +457,7 @@ def review_form(s: Demo) -> Accrete:
                     )
                     for key, kind, initial, name, *_ in scene.REVIEW
                 ),
-                h.button("Submit review", sink=s.review),
+                h.button("Submit review"),
                 grid={"grid-template-columns": "repeat(3, minmax(0, 1fr)) auto", "gap": "8px", "align-items": "center"},
                 id="review-fields",
             ),

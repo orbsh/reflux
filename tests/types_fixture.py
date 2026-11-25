@@ -40,7 +40,9 @@ def field(tag: str, **rest: Any) -> dict:
 
 # A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind). It
 # lives inside a `bundle` — that is the only place the renderer mounts one.
-BUTTON: dict = {"type": "button", "source": {"default": "提交"}, "sink": {"dest": "gate.button"}}
+# A button reads its label and sends nothing itself: a press submits the enclosing bundle, which
+# holds the exit (ADR 0039 §2a).
+BUTTON: dict = {"type": "button", "source": {"default": "提交"}}
 
 
 NODES: dict[str, dict] = {

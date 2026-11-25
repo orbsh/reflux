@@ -58,7 +58,7 @@ def tree() -> Any:
         h.bundle(
             field("who", id="who-in"),
             field("n", id="n-in"),
-            h.button("送", sink=Slot("gate.form")),
+            h.button("送"),
             sink=Slot("gate.form"),
             submit=["button"],
             id="the-form",

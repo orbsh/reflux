@@ -19,7 +19,7 @@ class TheSameFrame(unittest.TestCase):
     def test_attribute_form_and_data_form_agree(self) -> None:
         written = h.frame(
             h.text("hi", variant="muted"),
-            h.button("go", sink="x"),
+            h.button("go"),
             grid={"gap": "8px"},
             variant="card",
             id="root",
@@ -28,7 +28,7 @@ class TheSameFrame(unittest.TestCase):
             (
                 "frame",
                 {"grid": {"gap": "8px"}, "variant": "card", "id": "root"},
-                [("text", {"variant": "muted"}, "hi"), ("button", {"sink": "x"}, "go")],
+                [("text", {"variant": "muted"}, "hi"), ("button", {}, "go")],
             )
         )
         self.assertEqual(dump(written), dump(as_data))
@@ -73,7 +73,15 @@ class AClosureInsideData(unittest.TestCase):
 
         @app.page("/", title="t")
         def home(ctx, match):
-            ctx.page(h.node(("frame", {"id": "r"}, [("button", {"sink": hit, "id": "b"}, "press")])))
+            # The landing rides the bundle: a press is the bundle's send, not the button's.
+            ctx.page(
+                h.node(
+                    ("frame", {"id": "r"}, [
+                        ("bundle", {"sink": hit, "submit": ["button"], "id": "g"},
+                         [("button", {"id": "b"}, "press")]),
+                    ])
+                )
+            )
 
         device = FakeDevice(app=app)
         app._draw(device)

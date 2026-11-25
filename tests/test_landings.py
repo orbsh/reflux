@@ -1,4 +1,5 @@
-"""A closure as a landing point: `sink=add_row`, and the name the wire gets instead.
+"""A closure as a landing point: `sink=add_row` on the bundle its button submits, and the name the
+wire gets instead.
 
 Two kinds of landing point, one wire. The registry's (`@app.on(slot)`) is a name that exists before
 any page is drawn — the answer to "one slot, several sources". The closure's is sugar for the common
@@ -7,7 +8,7 @@ case, a page and the handler it answers with written as one thought:
     def add_row(value):                 # the value, not a frame
         slots.rows.append(row(...))
 
-    h.button("Add a row", sink=add_row)
+    h.bundle(h.button("Add a row"), sink=add_row, submit=["button"])
 
 The framework names it at draw time (`<path>.<function>`), registers it on the device being drawn, and
 replaces the draw's table on the next turn. These cases pin that contract.
@@ -59,7 +60,13 @@ class AClosureIsALandingPoint(unittest.TestCase):
                 self.calls.append(("add", value))
                 slots.rows.append(h.text(f"row {value}"))
 
-            ctx.page(h.frame(h.text("t"), h.button("Add a row", sink=add), id="root"))
+            ctx.page(
+                h.frame(
+                    h.text("t"),
+                    h.bundle(h.button("Add a row"), sink=add, submit=["button"], id="add-row"),
+                    id="root",
+                )
+            )
 
         self.device = FakeDevice(app=self.app)
         self.app._draw(self.device)
@@ -92,7 +99,13 @@ class TheTableIsOneDraws(unittest.TestCase):
 
         @app.page("/", title="t")
         def home(ctx, match):
-            ctx.page(h.frame(h.button("a", sink=pick, id="a"), h.button("b", sink=pick, id="b"), id="r"))
+            ctx.page(
+                h.frame(
+                    h.bundle(h.button("a"), sink=pick, submit=["button"], id="a"),
+                    h.bundle(h.button("b"), sink=pick, submit=["button"], id="b"),
+                    id="r",
+                )
+            )
 
         device = FakeDevice(app=app)
         app._draw(device)
@@ -113,7 +126,7 @@ class TheTableIsOneDraws(unittest.TestCase):
                 def hit(value, name=name):
                     pass
 
-                buttons.append(h.button(name, sink=hit, id=name))
+                buttons.append(h.bundle(h.button(name), sink=hit, submit=["button"], id=name))
             ctx.page(h.frame(*buttons, id="r"))
 
         device = FakeDevice(app=app)
@@ -123,9 +136,12 @@ class TheTableIsOneDraws(unittest.TestCase):
     def test_a_page_turn_replaces_the_table(self) -> None:
         app = App(routes=Routes())
 
+        def hit(value):
+            pass
+
         @app.page("/", title="t")
         def home(ctx, match):
-            ctx.page(h.frame(h.button("x", sink=lambda value: None, id="x"), id="r"))
+            ctx.page(h.frame(h.bundle(h.button("x"), sink=hit, submit=["button"], id="x"), id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)
@@ -146,7 +162,7 @@ class TheTableIsOneDraws(unittest.TestCase):
             def hit(value):
                 seen.append((who, value))
 
-            ctx.page(h.frame(h.button("x", sink=hit, id="x"), id="r"))
+            ctx.page(h.frame(h.bundle(h.button("x"), sink=hit, submit=["button"], id="x"), id="r"))
 
         one, two = FakeDevice(id="one", app=app), FakeDevice(id="two", app=app)
         app._draw(one)
@@ -170,7 +186,7 @@ class GatedLandings(unittest.TestCase):
             def secret(value):
                 self.calls.append(value)
 
-            ctx.page(h.frame(h.button("secret", sink=gated(secret), id="s"), id="r"))
+            ctx.page(h.frame(h.bundle(h.button("secret"), sink=gated(secret), submit=["button"], id="s"), id="r"))
 
         self.device = FakeDevice(app=self.app)
         self.app._draw(self.device)
@@ -206,7 +222,7 @@ class BothKindsLiveTogether(unittest.TestCase):
             def local(value):
                 seen.append(("local", value))
 
-            ctx.page(h.frame(h.button("local", sink=local, id="l"), id="r"))
+            ctx.page(h.frame(h.bundle(h.button("local"), sink=local, submit=["button"], id="l"), id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)

@@ -264,7 +264,7 @@ def control(label: str) -> Accrete:
     走一个槽，而不是画进页面里。
     """
     return h.bundle(
-        h.button(label, sink=TOGGLE),
+        h.button(label),
         sink=TOGGLE,
         submit="button",
         id="demo-toggle",
@@ -450,7 +450,7 @@ def review_form(s: Demo) -> Accrete:
                     )
                     for key, kind, initial, name, *_ in scene.REVIEW
                 ),
-                h.button("提交复核", sink=s.review),
+                h.button("提交复核"),
                 grid={"grid-template-columns": "repeat(3, minmax(0, 1fr)) auto", "gap": "8px", "align-items": "center"},
                 id="review-fields",
             ),
