@@ -90,3 +90,42 @@ def page_nodes(app: Any, path: str = "/") -> list[dict]:
             if operation.get("action") == "set" and operation.get("slot") == "routes":
                 return [operation["data"]]
     raise AssertionError(f"no page was drawn for {path!r}")
+
+def ids(nodes: list[dict]) -> list[str]:
+    """Every node id in a subtree, depth first — the shape of a page, without its words."""
+    out: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, (list, tuple)):
+            for kid in node:
+                walk(kid)
+            return
+        if not isinstance(node, dict):
+            return
+        if "id" in node:
+            out.append(node["id"])
+        walk(node.get("children") or [])
+
+    walk(nodes)
+    return out
+
+
+def texts(nodes: list[dict]) -> list[str]:
+    """Every `default` text a subtree carries — what a reader actually sees."""
+    out: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, (list, tuple)):
+            for kid in node:
+                walk(kid)
+            return
+        if not isinstance(node, dict):
+            return
+        source = node.get("source")
+        if isinstance(source, dict) and isinstance(source.get("default"), str):
+            out.append(source["default"])
+        walk(node.get("children") or [])
+
+    walk(nodes)
+    return out
+

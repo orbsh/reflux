@@ -361,7 +361,7 @@ def only(ctx, path):
 - 请求路径按**逐段**百分号解码（`%2F` 不许裂段），静态段与捕获段都按解码后的文本比较。
 - `layout` 是一个普通 callable：`layout(ctx, match, page)`，页面由它自己安排（没有 outlet、没有嵌套机制）。它**返回**包好的节点——它是变换，不是处理器，框架拿它的结果当这一页。`Match.resolve(ctx)` 把两者组成这一页的结构——导航那一侧只需要调它。
 - **`@app.hooks.inspect("<path>")`** 把这张应用自己的声明以 JSON 发在 HTTP 上：路由（路径、来源模块、元数据字段）、上行落点（名字、`builtin`/`app`、来源 `module.qualname`）、槽名、已注册的口子、HTTP 挂点。处理器是门——它拿到整张表，可以拒绝（`(403, {...})`）、裁剪或包一层；不注册这个口子就什么都不发。source 列守着同一个规矩：写哪儿报哪儿。命令行曾有两个动词（`routes` / `dests`）打印同样的东西，删了——一份要人手工对齐的静态表，迟早与运行中的应用说的不是一回事。
-  目标写法是显式的 `module:attr`，**不猜**（不试 `make_app`、再试 `app`）——猜出来的约定没人找得到，错误信息直接说形状并停下。表里只有注册表本身，`calls`／`refused`／`log` 不进来：那是运行中的数字，混进「存在什么」会让新进程看起来像有数据。这条动词**没有 Rust 对应物**：注册表属于宿主（`App` 实例），不属于生产者的词表。
+  目标写法是显式的 `module:attr`，**不猜**（不试 `app`、再试 `demo`）——猜出来的约定没人找得到，错误信息直接说形状并停下。表里只有注册表本身，`calls`／`refused`／`log` 不进来：那是运行中的数字，混进「存在什么」会让新进程看起来像有数据。这条动词**没有 Rust 对应物**：注册表属于宿主（`App` 实例），不属于生产者的词表。
 
 ### 外框与 `routes` 槽
 
@@ -500,7 +500,7 @@ def on_disconnect(device, frame):
 
 **只有这一个应用，四页**（2026-11-24 合并）：`examples/zh/demo_app.py` 拥有外框与 `/`、`/about`，`examples/zh/demo_chat.py` 是 `/chat`，`examples/zh/demo/page.py` 是 `/demo`，名字集中在 `examples/zh/demo_slots.py`。此前是两份应用（`demo_app` 加 `examples/app` 的概览＋对话），合并的理由是它们答的是同一个问题——「一个应用长什么样」——而概览页的图表与 3D 由走查页覆盖得更彻底。删掉的那一半里唯一不可替代的是对话页，它整套搬了过来，行为与断言都留着：`tests/test_chat_example.py` 25 例（含 SSE 读取器对本地桩、异步读器与同步读器逐条对齐、启动钩子把会话交给模型）、`tools/gate_chat.py` 12 条（真 socket + Chromium）。`/status` 这个 operator 端点随之进了 `demo_app`，`tests/test_example_status.py` 钉它。
 
-**同一份应用，两种语言**（2026-11-24）：`examples/zh/` 与 `examples/en/` 是同一个参考应用写了两遍，不是一棵树上盖一张文案表——打开哪一种语言的那棵树，里面就只有那一种语言（界面文字、注释、函数文档）。两棵树各有自己的路由表（`create_app()` —— 框架那个单例（`reflux.site.app`）只有一个，两个演示会写进同一张表），所以两版可以同时起服务，各自的 `/` 互不占用；页面模块跨模块时不能 import 应用（`python3 -m examples.X.demo_app` 时应用模块以 `__main__` 跑，import 出去就是第二份），所以页在 `register(app)` 里以调用式声明（`app.page("/chat", title="对话")(page)`），而不是装饰器。查看它们的是 `hooks.inspect`（不在命令行里另造一份）。守着这条规矩的是 `tests/test_two_trees.py`：两棵树把每条路由各画一次、逐节点比对 id（结构必须一样，只有文字该不同），再看 `examples/en/` 里有没有汉字、`examples/zh/` 里有没有英文 docstring。
+**同一份应用，两种语言**（2026-11-24）：`examples/zh/` 与 `examples/en/` 是同一个参考应用写了两遍，不是一棵树上盖一张文案表——打开哪一种语言的那棵树，里面就只有那一种语言（界面文字、注释、函数文档）。两棵树各自是一个站点（`reflux.site` 里那个 app 一个进程只有一个，两棵树写同一张表就会撞在 `/` 上——第二个 import 直接报 `already mounted`），所以两版不能在同一进程里并存，各自的 `/` 于是在各自进程里；页面模块跨模块时不能 import 应用（`python3 -m examples.X.demo_app` 时应用模块以 `__main__` 跑，import 出去就是第二份），所以页在 `register(app)` 里以调用式声明（`app.page("/chat", title="对话")(page)`），而不是装饰器。查看它们的是 `hooks.inspect`（不在命令行里另造一份）。守着这条规矩的是 `tests/test_two_trees.py`：它在两个进程里各画一次两棵树、逐节点比对 id（结构必须一样，只有文字该不同），再看 `examples/en/` 里有没有汉字、`examples/zh/` 里有没有英文 docstring。
 
 **计数器页**（`examples/zh/demo_counter.py`，2026-11-24）：前面几页各讲一件事，这一页不讲内容——一个数、三个按钮、一个步长输入、一小段有上限的历史——所以它写出来的每一行都只是 API 的用法：路由的装饰器写在模块自己的 `register(app)` 里（页面模块不能 import 应用），三个按钮与输入框是闭包落点，历史用列表槽的 `append`/`remove`（超上限删最早一条），值挂在 `ctx.data` 上所以两个标签页各数各的。它是"新读者从哪里开始"的答案。
 

@@ -38,11 +38,12 @@ import argparse
 import json
 from pathlib import Path
 
-from reflux.application import Context, create_app, gated
+from reflux.application import Context, gated
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.server import Request, Response
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, JsType, Source
+from reflux.site import app  # 本进程的站点：声明都挂在它上面，演示不建 app
 from reflux.slots import Slot
 
 from . import demo_slots
@@ -99,10 +100,6 @@ class State:
 
 
 state = State()
-
-# 一个部署一个 app。演示用 `create_app()` 而不是框架那个单例，因为 zh 与 en 两棵树要在同一个进程里
-# 并存（`test_two_trees`）：单例只有一个，两个演示会写进同一张表、同一个 dest 注册表。
-app = create_app()
 
 
 @app.hooks.shell()
@@ -428,15 +425,6 @@ demo_counter.register(app)
 demo_settings.register(app)
 
 
-def make_app() -> App:
-    """演示的应用 —— 本模块被导入时建好，在这里交出去。
-
-    名字是工厂式的，因为部署就是这么给应用命名的（`reflux.cli`、`App.serve_forever`、各个门）。
-    只有一个应用：它的路由与处理器都是模块级声明，所以导入两次得到一张表，不是两张。
-    """
-    return app
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="examples.zh.demo_app", description="Serve the reference app.")
     ap.add_argument("--port", type=int, default=8000, help="0 picks a free port (default: 8000)")
@@ -461,7 +449,6 @@ def main(argv: list[str] | None = None) -> int:
     demo_chat.settings.model = demo_chat.OpenAI() if args.model == "openai" else demo_chat.Scripted(window=args.window)
     demo_settings.settings.path = Path(args.settings)
     demo_settings.settings.load()  # 已存的选择就是这个应用的开场白（ADR 0001 §5）
-    app = make_app()
     demo_chat.share_http(app, demo_chat.settings.model)
 
     server = app.start(0 if args.port == 0 else args.port, args.host)

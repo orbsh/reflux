@@ -113,7 +113,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
     chat_page.settings.model = Scripted(window=WINDOW)
     chat_page.settings.delay = 0.01
     chat_page.settings.window = WINDOW
-    app = example.make_app()
+    app = example.app
     srv = app.serve(port=0)
     port = int(srv.server_address[1])
     checks: list[tuple[str, bool, str]] = []
@@ -262,7 +262,7 @@ def browser_phase() -> list[tuple[str, bool, str]]:
     chat_page.settings.model = Scripted(window=WINDOW)
     chat_page.settings.delay = 0.01
     chat_page.settings.window = WINDOW
-    app = example.make_app()
+    app = example.app
     checks: list[tuple[str, bool, str]] = []
     with open_page(app=app, path=PAGE, settle=0.6) as (cdp, base):
         body = cdp.eval("document.body.innerText") or ""

@@ -142,7 +142,7 @@ class TestPageResolution(unittest.TestCase):
 
 class TestTheDemoApp(unittest.TestCase):
     def test_the_demo_declares_routes_and_handlers(self) -> None:
-        app = demo.make_app()
+        app = demo.app
         for path in ("/", "/about", "/chat", "/demo"):
             with self.subTest(path=path):
                 self.assertIsNotNone(app.routes.match(path))
@@ -175,7 +175,7 @@ class TestTheDemoApp(unittest.TestCase):
 
     def test_the_demo_page_sends_its_slot_seed_before_the_page(self) -> None:
         """The rows are a send (`ctx.emit`), so they leave as their own frames, before the page."""
-        app = demo.make_app()
+        app = demo.app
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         frames = device.frames
@@ -188,14 +188,14 @@ class TestTheDemoApp(unittest.TestCase):
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
         """A slot outlives a page turn, so the seed is once per device — not once per turn."""
-        app = demo.make_app()
+        app = demo.app
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         run_sync(app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}}))
         self.assertEqual([op["action"] for op in drawn(device)], ["set"])
 
     def test_the_demo_page_carries_the_two_markers(self) -> None:
-        app = demo.make_app()
+        app = demo.app
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/about"}}))
         root = page_of(device)
@@ -207,14 +207,14 @@ class TestTheDemoApp(unittest.TestCase):
         self.assertEqual(markers, {"reflux:path": "/about", "reflux:title": "关于"})
 
     def test_the_about_page_is_structure_only(self) -> None:
-        app = demo.make_app()
+        app = demo.app
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/about"}}))
         # This page seeds no slots, so the turn is the frame (a first visit draws it too) and the page.
         self.assertEqual([op["action"] for op in drawn(device)], ["create", "set"])
 
     def test_a_navigation_submit_answers_with_the_new_page_and_path(self) -> None:
-        app = demo.make_app()
+        app = demo.app
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         run_sync(

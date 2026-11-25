@@ -121,7 +121,7 @@ def click_label(cdp: Cdp, label: str, *, nth: int = 0) -> None:
 
 
 def main() -> int:
-    app = demo.make_app()
+    app = demo.app
     checks: list[tuple[str, bool, str]] = []
     base_url = ""
 

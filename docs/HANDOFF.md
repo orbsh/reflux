@@ -135,7 +135,7 @@ README 里明说的「不做」，要做等于另开一轮。
 
 - `canvas` 没有一条真浏览器门（要外部部署件，见 DESIGN 的属性落空清单；`chart`／`editor`／`diagram` 已是它的实例，一并归在这里）。
 - 这三件是**已落地**的，列在这里是为了说明它们不在「未做」里：标记糖（`reflux.sdk.markers` + `sdks/rust/src/markers.rs`
-  手写同一份约定，不进 vocabulary）、`reflux dests` CLI（显式 `module:attr` 目标，不猜 `make_app`；没有 Rust 对应物，
+  手写同一份约定，不进 vocabulary）、`reflux dests` CLI（显式 `module:attr` 目标，不猜 `app`；没有 Rust 对应物，
   注册表属于宿主）、`text` 的 `local` 落点与它的 `path` 随行键（`gate_t2` 的 vals 平面检查已从手写 dict 换成构造器）。
 - 示例应用不持久化、不做账号与刷新后的历史（会话挂在连接上，刷新即新对话）；没有工具调用与检索；没有 token 计量与
   限流。`model.OpenAI` 的 SSE 读器用本地 stub 测过，**没有对真端点跑过**（本机没有 key）——别把它当已验收。

@@ -17,7 +17,7 @@ from cdp import console_errors, open_page  # noqa: E402
 
 from examples.zh import demo_app as example  # noqa: E402
 
-with open_page(app=example.make_app(), path="/counter", settle=1.0) as (cdp, base):
+with open_page(app=example.app, path="/counter", settle=1.0) as (cdp, base):
     text = cdp.eval("document.body.innerText")
     print("--- body text ---")
     print(str(text)[:500])

@@ -63,14 +63,14 @@ def table(title: str, header: list[str], rows: list[list[str]]) -> None:
 
 def _ctx():
     """A delivery with no device: these frames are built and measured, never sent."""
-    return demo.make_app().context(None)
+    return demo.app.context(None)
 
 
 def _page_nodes(path: str = "/") -> list[dict]:
     """The nodes the app sends for `path`: its route, drawn once into a fake device."""
     from tests.fakes import page_nodes
 
-    return page_nodes(demo.make_app(), path)
+    return page_nodes(demo.app, path)
 
 
 def seed_frame() -> list[dict]:
@@ -117,7 +117,7 @@ true
 
 
 def section_mutations() -> None:
-    app = demo.make_app()
+    app = demo.app
     rows: list[list[str]] = []
     with open_page(path="/", app=app, settle=0.5) as (cdp, base):
         device = next(iter(app.live()), None)
@@ -179,7 +179,7 @@ def section_paint() -> None:
 
     runs: list[float] = []
     dcls: list[float] = []
-    app = demo.make_app()
+    app = demo.app
     with open_page(path="/", app=app, settle=0.3) as (cdp, base):
         cdp.call("Page.addScriptToEvaluateOnNewDocument", source=PAINT)
         for _ in range(3):
@@ -278,7 +278,7 @@ def check_cost() -> list[list[str]]:
 
 
 def section_cpu() -> None:
-    app = demo.make_app()
+    app = demo.app
     app.on("measure.ping", lambda ctx, frame: ctx.emit(wire.set("echo", h.text("pong"))))
     server = app.make_server(0)
     port = server.server_address[1]

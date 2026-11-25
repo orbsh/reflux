@@ -22,7 +22,7 @@ from examples.zh.demo import scene
 from tests.fakes import FakeDevice
 
 # The page lives in the reference app; one built app serves every case, the way the gates build one.
-app = _app.make_app()
+app = _app.app
 
 PAGE = demo.PAGE
 ROW = demo.ROW_ID

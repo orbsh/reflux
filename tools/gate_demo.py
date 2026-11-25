@@ -123,7 +123,7 @@ def beat_of(op: dict) -> str:
 
 def socket_phase() -> list[tuple[str, bool, str]]:
     checks: list[tuple[str, bool, str]] = []
-    app = example.make_app()
+    app = example.app
     srv = app.make_server(0)
     global PORT
     PORT = int(srv.server_address[1])
@@ -349,7 +349,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
 
 def browser_phase() -> list[tuple[str, bool, str]]:
     checks: list[tuple[str, bool, str]] = []
-    with open_page(app=example.make_app(), path="/demo", settle=0.8) as (cdp, base):
+    with open_page(app=example.app, path="/demo", settle=0.8) as (cdp, base):
         drawn = wait_for(lambda: "未开始" in (cdp.eval("document.body.innerText") or ""), timeout=20)
         checks.append(
             (

@@ -132,7 +132,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as where:
         demo_settings.settings.path = Path(where) / "settings.json"
         demo_settings.settings.state = dict(DEFAULTS)
-        app = example.make_app()
+        app = example.app
 
         with open_page(app=app, path=PAGE, settle=0.7) as (cdp, base):
             drawn = wait_for(lambda: "设置" in (cdp.eval("document.body.innerText") or ""))

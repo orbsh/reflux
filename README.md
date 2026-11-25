@@ -30,7 +30,7 @@ The wheel is self-contained: it carries the page (`reflux/www/`) with the pinned
 inside it, so a server started from an installed reflux serves pages without a network request and
 without any build step on your side.
 
-    python3 -c "from examples.zh.demo_app import make_app; make_app().serve_forever(8000)"
+    python3 -c "from examples.zh.demo_app import app; app.serve_forever(8000)"
 
 The loom is put in **while the wheel is built** (`hatch_build.py`): it downloads the release
 `vendor/pin.json` names, verifies that the manifest on disk is that revision, and copies `www/` in as

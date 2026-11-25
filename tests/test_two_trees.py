@@ -3,19 +3,26 @@
 The rule the trees are built on is a reader's: open the tree for your language and find nothing else in
 it — UI text, comments and docstrings all in that language. Code cannot check prose's language, so these
 cases check what can be checked: the two trees draw the same page (same node ids, in the same places),
-each is CJK-free or CJK-only as its tree says, and the two apps are separate route tables so both can
-serve `/` at once.
+and each is CJK-free or CJK-only as its tree says.
+
+A tree is a site, and a site is one app per process (`reflux.site`), so the two trees cannot be imported
+into one interpreter — both would register `/` and `/v1/inspect` on the same app. The comparison
+therefore runs each tree in its own process, which is also how they are served.
 """
 
 from __future__ import annotations
 
+import functools
+import json
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
-from examples.en import demo_app as en_app
-from examples.zh import demo_app as zh_app
-from tests.fakes import page_nodes
+from tests.fakes import ids, texts
+
+ROOT = Path(__file__).resolve().parents[1]
 
 CJK = re.compile(r"[\u4e00-\u9fff]")
 ANY = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")  # CJK text or punctuation
@@ -23,23 +30,30 @@ WORD = re.compile(r"[A-Za-z]{3,}")  # a run of letters, i.e. an English word
 PAGES = ("/", "/about", "/chat", "/counter", "/demo", "/settings")
 
 
-def ids(nodes: list[dict]) -> list[str]:
-    """Every node id in a subtree, depth first — the shape of the page, without its words."""
-    out: list[str] = []
+@functools.cache
+def drawn(package: str) -> dict:
+    """One tree, drawn in its own process: its routes, and each page's ids and texts.
 
-    def walk(node) -> None:
-        if isinstance(node, (list, tuple)):
-            for kid in node:
-                walk(kid)
-            return
-        if not isinstance(node, dict):
-            return
-        if "id" in node:
-            out.append(node["id"])
-        walk(node.get("children") or [])
+    Cached: a page is a real draw, and the two cases below (`same tree`, `the words differ`) both want
+    the same picture.
+    """
+    script = f"""
+import json
+from tests.fakes import ids, page_nodes, texts
+from {package}.demo_app import app
 
-    walk(nodes)
-    return out
+answer = {{"routes": [route.path for route in app.routes], "pages": {{}}}}
+for path in {list(PAGES)!r}:
+    nodes = page_nodes(app, path)
+    answer["pages"][path] = {{"ids": ids(nodes), "texts": texts(nodes)}}
+print(json.dumps(answer, ensure_ascii=False))
+"""
+    run = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120
+    )
+    if run.returncode != 0:
+        raise AssertionError(f"{package} did not answer in its own process:\n{run.stderr[-1200:]}")
+    return json.loads(run.stdout)
 
 
 def texts(nodes: list[dict]) -> list[str]:
@@ -104,28 +118,31 @@ def docstrings(path: Path) -> list[tuple[int, str]]:
 
 class SameShape(unittest.TestCase):
     def test_the_two_trees_declare_the_same_pages(self) -> None:
-        self.assertEqual([r.path for r in zh_app.make_app().routes], list(PAGES))
-        self.assertEqual([r.path for r in en_app.make_app().routes], list(PAGES))
+        self.assertEqual(drawn("examples.zh")["routes"], list(PAGES))
+        self.assertEqual(drawn("examples.en")["routes"], list(PAGES))
 
     def test_every_page_draws_the_same_tree_in_both_trees(self) -> None:
+        zh, en = drawn("examples.zh")["pages"], drawn("examples.en")["pages"]
         for path in PAGES:
             with self.subTest(path=path):
-                self.assertEqual(
-                    ids(page_nodes(en_app.make_app(), path)),
-                    ids(page_nodes(zh_app.make_app(), path)),
-                    "the two trees must be the same page: same ids, same order",
-                )
+                self.assertEqual(en[path]["ids"], zh[path]["ids"],
+                                 "the two trees must be the same page: same ids, same order")
 
     def test_the_words_are_the_ones_that_differ(self) -> None:
-        english = " ".join(texts(page_nodes(en_app.make_app(), "/")))
-        chinese = " ".join(texts(page_nodes(zh_app.make_app(), "/")))
+        english = " ".join(drawn("examples.en")["pages"]["/"]["texts"])
+        chinese = " ".join(drawn("examples.zh")["pages"]["/"]["texts"])
         self.assertTrue(english and chinese)
         self.assertFalse(CJK.search(english), f"Chinese left in the English page: {english[:80]}")
         self.assertTrue(CJK.search(chinese), "the Chinese page has no Chinese in it")
 
-    def test_the_two_apps_are_separate_tables(self) -> None:
-        self.assertIsNot(zh_app.make_app(), en_app.make_app())
-        self.assertIsNot(zh_app.make_app().routes, en_app.make_app().routes)
+    def test_two_trees_are_two_sites(self) -> None:
+        """Not a limitation to work around: the second tree's import is what says they are two sites."""
+        both = subprocess.run(
+            [sys.executable, "-c", "import examples.zh.demo_app, examples.en.demo_app"],
+            cwd=ROOT, capture_output=True, text=True, timeout=120,
+        )
+        self.assertNotEqual(both.returncode, 0)
+        self.assertIn("already", both.stderr, "the collision has to name itself")
 
 
 class Sources(unittest.TestCase):

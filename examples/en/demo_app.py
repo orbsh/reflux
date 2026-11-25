@@ -48,11 +48,12 @@ import argparse
 import json
 from pathlib import Path
 
-from reflux.application import Context, create_app, gated
+from reflux.application import Context, gated
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.server import Request, Response
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, JsType, Source
+from reflux.site import app  # this process's site: declarations hang on it, the demo builds nothing
 from reflux.slots import Slot
 
 from . import demo_slots
@@ -112,11 +113,6 @@ class State:
 
 
 state = State()
-
-# One app per deployment. The demo builds its own with `create_app()` rather than using the framework's
-# single `reflux.app`, because the zh and en trees have to coexist in one process (`test_two_trees`):
-# there is one singleton, and two demos would share its table and its dest registry.
-app = create_app()
 
 
 @app.hooks.shell()
@@ -451,16 +447,6 @@ walkthrough.register(app)
 walkthrough.install(app)
 
 
-def make_app() -> App:
-    """The demo's app — built when this module was imported, returned here.
-
-    The name is a factory's because that is how a deployment names an app (`reflux.cli`,
-    `App.serve_forever`, the gates). There is one app: its routes and handlers are module-level
-    declarations, so importing twice gives one table, not two.
-    """
-    return app
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="examples.zh.demo_app", description="Serve the reference app.")
     ap.add_argument("--port", type=int, default=8000, help="0 picks a free port (default: 8000)")
@@ -485,7 +471,6 @@ def main(argv: list[str] | None = None) -> int:
     demo_chat.settings.model = demo_chat.OpenAI() if args.model == "openai" else demo_chat.Scripted(window=args.window)
     demo_settings.settings.path = Path(args.settings)
     demo_settings.settings.load()  # what was stored is this app's opening line (ADR 0001 §5)
-    app = make_app()
     demo_chat.share_http(app, demo_chat.settings.model)
 
     server = app.start(0 if args.port == 0 else args.port, args.host)

@@ -45,7 +45,7 @@ def wait_for(condition, timeout: float = 5.0) -> bool:
 
 
 def browser_phase() -> list[tuple[str, bool, str]]:
-    app = demo.make_app()
+    app = demo.app
     checks: list[tuple[str, bool, str]] = []
     with open_page(app=app) as (cdp, base):
         opened = wait_for(lambda: app.stats["issued"] == 1 and len(app.live()) == 1)

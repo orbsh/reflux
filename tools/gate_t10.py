@@ -84,7 +84,7 @@ def _ctx():
     """A delivery with no device: these frames are built and compared, never sent."""
     import examples.zh.demo_app as demo
 
-    return demo.make_app().context(None)
+    return demo.app.context(None)
 
 
 def _page_nodes(path: str) -> list[dict]:
@@ -92,7 +92,7 @@ def _page_nodes(path: str) -> list[dict]:
     import examples.zh.demo_app as demo
     from tests.fakes import page_nodes
 
-    return page_nodes(demo.make_app(), path)
+    return page_nodes(demo.app, path)
 
 
 def rust_frames() -> list[bytes]:
