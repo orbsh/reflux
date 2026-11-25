@@ -324,6 +324,21 @@ def main() -> int:
             )
         )
 
+        # 16 — the transport clock, held open past both heartbeat windows. The renderer probes at 5 s of
+        #      silence and closes the socket to reconnect at 10 s; a pong the server sends without awaiting
+        #      its `async` channel never leaves, so an idle page used to reconnect every ten seconds. The
+        #      server counts the probes it answered, and a reconnect would have let go of the connection.
+        before_pongs = app.dests.pongs
+        time.sleep(12.0)
+        steady = app.dests.pongs > before_pongs and len(app.live()) >= 1  # a reload may still be letting go
+        checks.append(
+            (
+                "an idle page past the heartbeat window keeps its connection",
+                bool(steady),
+                f"pongs+{app.dests.pongs - before_pongs} live={len(app.live())}",
+            )
+        )
+
         errors = console_errors(cdp)
         checks.append(("zero console errors", not errors, "none" if not errors else str(errors)))
 

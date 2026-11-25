@@ -19,12 +19,16 @@ from tests.fakes import FakeDevice
 
 
 class Socket:
-    """The bit of `Channel` the answer uses: one text frame out."""
+    """The bit of `Channel` the answer uses: one text frame out.
+
+    `async` on purpose — the real channel's `send` is a coroutine, and a sync fake here would let a pong
+    that is never awaited look like it was sent (it was: the connection reconnected every ten seconds).
+    """
 
     def __init__(self) -> None:
         self.sent: list[str] = []
 
-    def send(self, text: str) -> None:
+    async def send(self, text: str) -> None:
         self.sent.append(text)
 
 
@@ -42,9 +46,10 @@ class ProbeTest(unittest.TestCase):
 
     def test_a_probe_is_answered_on_the_socket(self) -> None:
         self.assertTrue(run_sync(self.app.dests.dispatch(self.device, self.probe())))
-        self.assertEqual(len(self.socket.sent), 1)
+        self.assertEqual(len(self.socket.sent), 1, "the answer was awaited, not dropped as a coroutine")
         answer = json.loads(self.socket.sent[0])
         self.assertEqual(answer["dest"], PONG_DEST)
+        self.assertEqual(self.app.dests.pongs, 1, "and it is counted, which is what a gate can read")
 
     def test_a_probe_is_not_an_event(self) -> None:
         run_sync(self.app.dests.dispatch(self.device, self.probe()))

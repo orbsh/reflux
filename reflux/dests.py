@@ -43,6 +43,7 @@ class Registry:
         self._builtin: set[str] = set()
         self.calls = 0
         self.refused = 0
+        self.pongs = 0  # probes answered on the socket: not events, not refusals, but countable
         self.log: list[str] = []
 
     # --- registration (startup: loud, never a silent overwrite) ---------------------------
@@ -140,7 +141,11 @@ class Registry:
             channel = getattr(device, "channel", None)
             if channel is not None:
                 try:
-                    channel.send(json.dumps({"dest": PONG_DEST, "data": None}, separators=(",", ":")))
+                    # `Channel.send` is async: a pong that is not awaited never leaves, the renderer's
+                    # `last_inbound` never moves, and at `dead_ms` of silence it closes the socket to
+                    # reconnect — an idle page then reconnects forever. Await it.
+                    await channel.send(json.dumps({"dest": PONG_DEST, "data": None}, separators=(",", ":")))
+                    self.pongs += 1
                 except Exception:  # a dead socket is the reader's problem, not this frame's
                     pass
             return True
