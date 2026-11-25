@@ -1187,11 +1187,12 @@
     },
     "Select": {
       "additionalProperties": false,
+      "description": "An option field (ADR 0031 §2): a list plane of nodes, one of which is the current choice. ADR 0049 adds the\nthree shapes in `SelectAttr` — folded, a direction, several choices — without a second node.",
       "properties": {
         "attrs": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ClassAttr"
+              "$ref": "#/$defs/SelectAttr"
             },
             {
               "type": "null"
@@ -1236,6 +1237,52 @@
         },
         "tag": {
           "description": "The field's name inside an enclosing loom (same rule as `input`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SelectAttr": {
+      "description": "The three shapes a `select` can take, all optional and all defaulting to the plain inline list (ADR 0049).",
+      "properties": {
+        "class": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dir"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which way the options run: `row` is a row of buttons, `col` (the default) a list. It lays out both\nthe standing form and what a fold opens."
+        },
+        "expand": {
+          "description": "Whether the options fold away behind the current choice (`true`) or stand in the page as they are\n(the default). Open and closed is the renderer's own state — it never travels.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "multiple": {
+          "description": "Whether more than one option may be chosen. A single choice is one key; several are a list of them,\nwhich is what the field then packs.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "selector": {
           "type": [
             "string",
             "null"

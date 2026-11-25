@@ -622,10 +622,16 @@ pub fn input(horizontal: Option<bool>, selector: Option<&str>, source: Option<So
 }
 
 /// Build a `select` node (the wire type `select`).
-pub fn select(horizontal: Option<bool>, selector: Option<&str>, source: Option<Source>, options: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
+pub fn select(dir: Option<Value>, expand: Option<bool>, multiple: Option<bool>, selector: Option<&str>, source: Option<Source>, options: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
-    if let Some(v) = horizontal {
-        put(&mut attrs, "horizontal", Value::Bool(v));
+    if let Some(v) = dir {
+        put(&mut attrs, "dir", v.clone());
+    }
+    if let Some(v) = expand {
+        put(&mut attrs, "expand", Value::Bool(v));
+    }
+    if let Some(v) = multiple {
+        put(&mut attrs, "multiple", Value::Bool(v));
     }
     if let Some(v) = selector {
         put(&mut attrs, "selector", s(v));

@@ -104,14 +104,29 @@ def set_field(cdp, name: str, value: str) -> bool:
     return True
 
 
-def click_tile(cdp, name: str, index: int):
-    """Click one row of a `select` — the option rows are the box's children; a layer follows them."""
+def open_menu(cdp, name: str):
+    """Open a folded select: its face is a `.select-trigger` and the rows only exist while it is open."""
     select = SELECTS.index(name)
     return cdp.eval(
         "(() => {"
         f"const box = document.querySelectorAll('#settings-page .select')[{select}];"
         "if (!box) return null;"
-        f"const tile = box.children[{index}];"  # the option rows are the box's children; a layer follows them
+        "const trigger = box.querySelector('.select-trigger');"
+        "if (!trigger) return null; trigger.click(); return true;"
+        "})()"
+    )
+
+
+def click_tile(cdp, name: str, index: int):
+    """Click one row of an open menu — the rows are the `.select-menu`'s children."""
+    select = SELECTS.index(name)
+    return cdp.eval(
+        "(() => {"
+        f"const box = document.querySelectorAll('#settings-page .select')[{select}];"
+        "if (!box) return null;"
+        "const menu = box.querySelector('.select-menu');"
+        "if (!menu) return null;"
+        f"const tile = menu.querySelectorAll('.as-stretch')[{index}];"
         "if (!tile) return null; tile.click(); return true;"
         "})()"
     )
@@ -239,13 +254,18 @@ def main() -> int:
                 )
             )
 
-            # 4. the border style is picked from its own list of words
+            # 4. the border style is a folded select: the page holds the word in force, a click opens the five,
+            #    and choosing one closes it again (ADR 0049)
+            opened = open_menu(cdp, "border-style")
+            shown = cdp.eval("document.querySelectorAll('#settings-page .select-menu').length") or 0
             click_tile(cdp, "border-style", demo_settings.KEYWORDS.index("dashed"))
             dashed = wait_for(lambda: custom(cdp, "border-style") == "dashed")
+            closed = wait_for(lambda: (cdp.eval("document.querySelectorAll('#settings-page .select-menu').length") or 0) == 0)
             checks.append(
                 (
-                    "the border style is a click, and it reaches :root",
-                    bool(dashed) and root_attr(cdp, "border-style") == "dashed",
+                    "a folded select opens, takes a word, closes, and the word reaches :root",
+                    bool(opened) and shown == 1 and bool(dashed) and bool(closed)
+                    and root_attr(cdp, "border-style") == "dashed",
                     f"data-border-style={root_attr(cdp, 'border-style')!r} --border-style={custom(cdp, 'border-style')!r}",
                 )
             )
@@ -268,6 +288,36 @@ def main() -> int:
                     "sketch is mirrored for the renderer",
                     bool(toggled and mirrored),
                     f"data-sketch={root_attr(cdp, 'sketch')!r}",
+                )
+            )
+
+            # 6b. the skin answers the same box with the pen: the fold is a box in both modes — drawn edge
+            #     and drawn shadow under the skin, painted edge and soft shadow without it
+            opened_skin = open_menu(cdp, "border-style")
+            drawn = wait_for(
+                lambda: cdp.eval(
+                    "(() => {const m = document.querySelector('#settings-page .select-menu');"
+                    "if (!m) return ''; return (m.getAttribute('data-rough') || '-') + '|' + m.querySelectorAll('svg.rough').length;})()"
+                )
+                == "ready|1"
+            )
+            edge = cdp.eval(
+                "(() => {const m = document.querySelector('#settings-page .select-menu');"
+                "if (!m) return null; const cs = getComputedStyle(m);"
+                "return cs.borderTopColor + '|' + cs.backgroundColor + '|' + getComputedStyle(document.body).backgroundColor;})()"
+            ) or ""
+            from_skin = "rgba(0, 0, 0, 0)" in edge or "transparent" in edge
+            same_panel = edge.split("|")[1:2] == edge.split("|")[2:3]  # the skin paints no panel: the page shows through
+            dismissed = cdp.eval(
+                "(() => {const s = document.querySelector('#settings-page .select-scrim'); if (!s) return false;"
+                " s.click(); return true;})()"
+            )
+            shut = wait_for(lambda: (cdp.eval("document.querySelectorAll('#settings-page .select-menu').length") or 0) == 0)
+            checks.append(
+                (
+                    "under the skin the fold is drawn, not painted",
+                    bool(opened_skin) and bool(drawn) and from_skin and same_panel and bool(dismissed) and bool(shut),
+                    f"drawn={bool(drawn)} edge={edge!r}",
                 )
             )
 

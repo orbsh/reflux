@@ -357,9 +357,11 @@ def field(name: str, kind: str, value: Any) -> Accrete:
         # A `select` takes its option rows from the slot in `source` (this renderer reads `source`, not
         # `options` — see ADR 0001 §9). The value does not come from here: the `tag` gives it a copy inside
         # the group, and the group packs and sends it.
+        # A folded one: the page shows the word in force, and a click opens the five (ADR 0049).
         control = h.select(
             tag=name,
             selector="cfg",
+            expand=True,
             source=Source(slot=WORDS_SLOT),
             id=f"cfg-{name}",
         )

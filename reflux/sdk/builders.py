@@ -209,7 +209,9 @@ def input(
 
 def select(
     *,
-    horizontal: bool | None = None,
+    dir: Dir | str | None = None,
+    expand: bool | None = None,
+    multiple: bool | None = None,
     selector: str | None = None,
     source: Any = None,
     options: Any = None,
@@ -217,7 +219,7 @@ def select(
     id: str | None = None,
 ) -> Select:
     """Build a `select` node (the wire type `select`)."""
-    attrs = drop_none(horizontal=horizontal, selector=selector)
+    attrs = drop_none(dir=dir, expand=expand, multiple=multiple, selector=selector)
     source = as_source(source)
     options = as_source(options)
     return parse(drop_none(type='select', attrs=attrs, source=source, options=options, id=id, tag=tag), Select)

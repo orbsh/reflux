@@ -341,9 +341,11 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     elif kind == "keyword":
         # 一个 `select` 的选项行由它的 `source` 那个槽给（这一版渲染器读的是 `source`，不是 `options`；
         # 见 ADR 0001 §9）。值不从这里来：`tag` 让它在组里有自己的一份，组负责打包与上行。
+        # 折起来的一个：页面上只站当前那个词，点开才是五个（`expand`，ADR 0049）。
         control = h.select(
             tag=name,
             selector="cfg",
+            expand=True,
             source=Source(slot=WORDS_SLOT),
             id=f"cfg-{name}",
         )

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Debounce", "Dir", "Direction", "DiscAttr", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Disc", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Debounce", "Dir", "Direction", "DiscAttr", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SelectAttr", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Disc", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -165,6 +165,23 @@ class ResetMode(Enum):
     keep = 'keep'
     clear = 'clear'
     default = 'default'
+
+
+class SelectAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    dir: Dir | None = Field(
+        None,
+        description='Which way the options run: `row` is a row of buttons, `col` (the default) a list. It lays out both\nthe standing form and what a fold opens.',
+    )
+    expand: bool | None = Field(
+        None,
+        description="Whether the options fold away behind the current choice (`true`) or stand in the page as they are\n(the default). Open and closed is the renderer's own state — it never travels.",
+    )
+    multiple: bool | None = Field(
+        None,
+        description='Whether more than one option may be chosen. A single choice is one key; several are a list of them,\nwhich is what the field then packs.',
+    )
+    selector: str | None = None
 
 
 class Sink(BaseModel):
@@ -573,7 +590,7 @@ class Select(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    attrs: ClassAttr | None = None
+    attrs: SelectAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
     options: Source | None = Field(
@@ -619,6 +636,7 @@ FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
 Header.model_rebuild()
 ImageAttr.model_rebuild()
+SelectAttr.model_rebuild()
 Sink.model_rebuild()
 SizeAttr.model_rebuild()
 Source.model_rebuild()
