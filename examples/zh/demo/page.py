@@ -65,11 +65,11 @@ __all__ = [
 
 # ---- 这一页画图用的模块宿主 -------------------------------------------
 
-HERE = Path(__file__).resolve().parents[2]  # 仓库根：examples/zh/demo/ 在下面两级
+HERE = Path(__file__).resolve().parents[3]  # 仓库根：examples/zh/demo/ 在下面三级
 VENDOR = HERE / "www" / "static" / "vendor"
-ASSETS = Path(
-    os.environ.get("REFLUX_ASSETS", HERE.parent / "fluxen" / "examples" / "renderer" / "assets")
-)
+# 模块宿主来自 fluxen 检出（`tools/vendor.py --fluxen ../fluxen` 同一个约定）。它的演示资源搬过家：
+# 老布局 `assets/<名字>`，现在 `assets/modules/<名字>` —— 两条都探，别让一次搬家把整页的模块变成空气。
+ASSETS = Path(os.environ.get("REFLUX_ASSETS", HERE.parent / "fluxen" / "assets"))
 
 CHART_URL = "/assets/g2chart/index.js"
 VIEWER_URL = "/assets/3dbrowser/index.js"
@@ -82,7 +82,7 @@ TRUCK_URL = "/assets/splatviewer/truck.ksplat"
 def _find(name: str, probe: str) -> Path | None:
     """一个模块的目录：先找本地 vendor 副本，再找 fluxen 检出。
     """
-    for where in (VENDOR / name, ASSETS / name):
+    for where in (VENDOR / name, ASSETS / name, ASSETS / "modules" / name):
         if (where / probe).exists():
             return where
     return None
