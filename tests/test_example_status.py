@@ -21,7 +21,7 @@ class TestStatus(unittest.TestCase):
     def test_it_answers_json_with_the_pages(self):
         self.assertEqual(self.answer.status, 200)
         self.assertEqual(self.answer.content_type, "application/json")
-        self.assertEqual(sorted(self.body["routes"]), ["/", "/about", "/chat", "/counter", "/demo"])
+        self.assertEqual(sorted(self.body["routes"]), ["/", "/about", "/chat", "/counter", "/demo", "/settings"])
 
     def test_it_reports_the_table_the_counters_and_the_modules(self):
         self.assertIn("/status", self.body["mounts"])

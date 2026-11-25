@@ -22,7 +22,7 @@ from typing import Any, Protocol
 from reflux.app import Context
 from reflux.slots import Slot
 
-__all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_COUNTER", "GO_DEMO", "GO_HOME", "slots_of", "table"]
+__all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_COUNTER", "GO_DEMO", "GO_SETTINGS", "GO_HOME", "slots_of", "table"]
 
 
 class _Row(Protocol):
@@ -44,7 +44,7 @@ class _Chat(Protocol):
 
 
 class _Go(Protocol):
-    """导航的五个去处 —— frame 的 `dest` 就是名字。
+    """导航的六个去处 —— frame 的 `dest` 就是名字。
     """
 
     home: Slot
@@ -52,6 +52,14 @@ class _Go(Protocol):
     demo: Slot
     chat: Slot
     counter: Slot
+    settings: Slot
+
+
+class _Settings(Protocol):
+    """设置页的唯一一行回答：哪一条被收了，哪一条没有。
+    """
+
+    note: Slot
 
 
 class DemoSlots(Protocol):
@@ -70,6 +78,8 @@ class DemoSlots(Protocol):
 
     messages: Slot  # 对话页的记录 —— 列表槽，一条气泡追加一次
     status: Slot  # 对话页的状态行
+
+    settings: _Settings  # 设置页的答复行
 
     row: _Row
     vault: _Vault
@@ -96,8 +106,9 @@ def table(app: Any) -> DemoSlots:
 
 
 # 导航表单把客户端送去哪里。frame 的 `dest` 就是目标的名字。
-GO_HOME, GO_ABOUT, GO_DEMO, GO_CHAT, GO_COUNTER = (
+GO_HOME, GO_ABOUT, GO_DEMO, GO_CHAT, GO_COUNTER, GO_SETTINGS = (
     Slot("go.home"), Slot("go.about"), Slot("go.demo"), Slot("go.chat"), Slot("go.counter"),
+    Slot("go.settings"),
 )
 GO = {
     GO_HOME.name: "/",
@@ -105,4 +116,5 @@ GO = {
     GO_DEMO.name: "/demo",
     GO_CHAT.name: "/chat",
     GO_COUNTER.name: "/counter",
+    GO_SETTINGS.name: "/settings",
 }

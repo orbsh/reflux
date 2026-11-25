@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from reflux.app import App, Context, gated
 from reflux.auth import Auth
@@ -47,7 +48,7 @@ from reflux.sdk.types import Accrete, JsType, Source
 from reflux.slots import Slot
 
 from . import demo_slots
-from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, DemoSlots, slots_of
+from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, GO_SETTINGS, DemoSlots, slots_of
 
 
 # 一张卡片：带 profile `card` 变体的 frame，子节点竖排，高度由自己撑。
@@ -109,6 +110,9 @@ def shell(ctx: Context) -> Accrete:
     `min-height: 0`，因为 grid 条目的自动最小尺寸就是它的内容 —— 不写这一条，这一行会随页面一起长高，
     外壳的 `1fr` 就只是个愿望。读槽会滚动，所以一页可以比窗口更高。
     """
+    # 页面选项先落地：槽的写是一次 send，而页面那一帧在 `_draw` 末尾才发，所以新连接的第一帧
+    # 就带着用户的选择（ADR 0001 §5）。
+    demo_settings.seed(ctx)
     return h.frame(
         h.frame(
             h.text("reflux 参考应用", variant="heading-3"),
@@ -117,7 +121,8 @@ def shell(ctx: Context) -> Accrete:
             nav_loom("走查", GO_DEMO),
             nav_loom("对话", GO_CHAT),
             nav_loom("计数器", GO_COUNTER),
-            grid={"grid-template-columns": "1fr auto auto auto auto auto", "gap": "8px", "align-items": "center"},
+            nav_loom("设置", GO_SETTINGS),
+            grid={"grid-template-columns": "1fr auto auto auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
         h.frame(
@@ -369,6 +374,7 @@ def on_archive(ctx, frame) -> None:
 @app.on(slots(GO_DEMO.name))
 @app.on(slots(GO_CHAT.name))
 @app.on(slots(GO_COUNTER.name))
+@app.on(slots(GO_SETTINGS.name))
 def on_go(ctx, frame) -> None:
     """一次把客户端送走的提交：新结构，加上新的路径标记。
     """
@@ -402,7 +408,7 @@ def status(request: Request) -> Response:
 
 # 住在各自模块里的两页：导入它们就是在这个应用上声明它们的路由（它们需要
 # `app` 已存在，所以这两行 import 放在这里而不是文件顶部）。
-from . import demo_chat, demo_counter  # noqa: E402
+from . import demo_chat, demo_counter, demo_settings  # noqa: E402
 from .demo import page as walkthrough  # noqa: E402
 
 # 走查页自带四条上行和它画图用的模块宿主；对话页在它声明页面的地方声明它那两条。
@@ -410,6 +416,7 @@ walkthrough.register(app)
 walkthrough.install(app)
 demo_chat.register(app, slots)
 demo_counter.register(app)
+demo_settings.register(app)
 
 
 def make_app() -> App:
@@ -435,12 +442,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="seconds between the chat's chunks (default: 0.02)")
     ap.add_argument("--window", type=int, default=demo_chat.settings.window,
                     help="turns of chat context the model sees (default: 12)")
+    ap.add_argument("--settings", default=".demo-settings.json",
+                    help="where the settings page keeps its choices (default: ./.demo-settings.json)")
     args = ap.parse_args(argv)
     walkthrough.settings.pace = args.pace
     walkthrough.settings.hold = args.hold
     demo_chat.settings.delay = args.delay
     demo_chat.settings.window = args.window
     demo_chat.settings.model = demo_chat.OpenAI() if args.model == "openai" else demo_chat.Scripted(window=args.window)
+    demo_settings.settings.path = Path(args.settings)
+    demo_settings.settings.load()  # 已存的选择就是这个应用的开场白（ADR 0001 §5）
     app = make_app()
     demo_chat.share_http(app, demo_chat.settings.model)
 

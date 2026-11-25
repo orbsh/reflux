@@ -10,11 +10,44 @@
  * 凭证是第三条标记（`reflux:token`），也是它替浏览器保管的唯一一件东西：框架说一次，它存下来，
  * 下次握手带上，空标记就没收。存的是浏览器自己的存储，所以刷新还是同一个用户——这正是 token 存在
  * 的理由；下行帧它看不见，凭证只能走标记。
+ *
+ * 第五件事是 `STYLE` 那张表（ADR 0001 §3）：页面选项的成员被渲染器镜像成文档根上的 `data-<member>`，
+ * 而 CSS 读不到属性值——`attr()` 落不进 `var()`——所以把值变成 `--*` 必须有人做，做的人就是这里。
+ * 表是**闭集**：表里没有的成员一概不碰（`sketch` 归渲染器，它按 `data-sketch` 画边框），值域校验
+ * 也在表里，因为 `data-*` 是任何人都能写的面。
  */
 const PATH_ID = "reflux:path";
 const TITLE_ID = "reflux:title";
 const TOKEN_ID = "reflux:token";
 const TOKEN_KEY = "reflux:token";
+
+// 页面选项 -> :root 的自定义属性。表是白名单：成员不在表里，就不上色。
+// `accent` 只收 #rrggbb（`--accent` 是 core.css 的颜色令牌），`round` 只收 0–24 的整数（`--round` 是
+// 注册过的 <length>，所以要补 px）。
+const STYLE = {
+  accent: {
+    variable: "--accent",
+    check: (raw) => (/^#[0-9a-fA-F]{6}$/.test(raw.trim()) ? raw.trim().toLowerCase() : null),
+  },
+  round: {
+    variable: "--round",
+    check: (raw) => {
+      const value = Number(raw);
+      return Number.isInteger(value) && value >= 0 && value <= 24 ? `${value}px` : null;
+    },
+  },
+};
+
+function paint() {
+  // 属性 -> 自定义属性。值不合法就把这一条撤掉（回到 core.css 的缺省），不猜一个近似的。
+  const root = document.documentElement;
+  for (const [member, rule] of Object.entries(STYLE)) {
+    const raw = root.getAttribute(`data-${member}`);
+    const value = raw === null ? null : rule.check(raw);
+    if (value === null) root.style.removeProperty(rule.variable);
+    else root.style.setProperty(rule.variable, value);
+  }
+}
 
 // "/" -> ""：<base> 的前缀本身，不带尾斜杠。
 const base = (() => {
@@ -125,4 +158,9 @@ export function start() {
     characterData: true, // attributes 故意不看：输入框的 class 天天在变
   });
   mirror(); // 首屏：DOM 里已有的那批标记
+  paint(); // 首屏的页面选项（渲染器可能比这里先跑）
+  new MutationObserver(paint).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: Object.keys(STYLE).map((member) => `data-${member}`),
+  });
 }

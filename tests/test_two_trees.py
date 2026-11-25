@@ -20,7 +20,7 @@ from tests.fakes import page_nodes
 CJK = re.compile(r"[\u4e00-\u9fff]")
 ANY = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")  # CJK text or punctuation
 WORD = re.compile(r"[A-Za-z]{3,}")  # a run of letters, i.e. an English word
-PAGES = ("/", "/about", "/chat", "/counter", "/demo")
+PAGES = ("/", "/about", "/chat", "/counter", "/demo", "/settings")
 
 
 def ids(nodes: list[dict]) -> list[str]:
@@ -63,16 +63,26 @@ def texts(nodes: list[dict]) -> list[str]:
 
 
 def comments(path: Path) -> list[tuple[int, str]]:
-    """Every comment in a file, full-line or trailing — the prose a reader also reads."""
+    """Every comment in a file, full-line or trailing — the prose a reader also reads.
+
+    Read through `tokenize`, not `str.find("#")`: a `#` inside a string (a colour literal, a CSS
+    selector) is a value, not a comment, and judging it as prose flags correct code.
+    """
+    import io
+    import tokenize
+
     out: list[tuple[int, str]] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        cut = line.find("#")
-        if cut < 0:
-            continue
-        body = line[cut:]
-        if body.startswith(("# noqa", "# type:", "#!")):
-            continue  # a directive, not prose
-        out.append((number, body))
+    source = path.read_text(encoding="utf-8")
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type != tokenize.COMMENT:
+                continue
+            body = token.string
+            if body.startswith(("# noqa", "# type:", "#!")):
+                continue  # a directive, not prose
+            out.append((token.start[0], body))
+    except (tokenize.TokenError, IndentationError):
+        return out
     return out
 
 

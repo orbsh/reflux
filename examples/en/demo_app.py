@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from reflux.app import App, Context, gated
 from reflux.auth import Auth
@@ -57,7 +58,7 @@ from reflux.sdk.types import Accrete, JsType, Source
 from reflux.slots import Slot
 
 from . import demo_slots
-from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, DemoSlots, slots_of
+from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, GO_SETTINGS, DemoSlots, slots_of
 
 
 # A card: a frame with the profile's `card` variant, its children stacked and its own height.
@@ -123,6 +124,9 @@ def shell(ctx: Context) -> Accrete:
     automatic minimum is its content — without it this row grows with the page and the shell's `1fr`
     is only a wish. The reader scrolls, so a page may be taller than the window.
     """
+    # The page options land first: a slot write is a send, and the page's frame leaves at the end of
+    # `_draw`, so a new connection's first frame already carries the user's choices (ADR 0001 §5).
+    demo_settings.seed(ctx)
     return h.frame(
         h.frame(
             h.text("reflux reference app", variant="heading-3"),
@@ -131,7 +135,8 @@ def shell(ctx: Context) -> Accrete:
             nav_loom("Walkthrough", GO_DEMO),
             nav_loom("Chat", GO_CHAT),
             nav_loom("Counter", GO_COUNTER),
-            grid={"grid-template-columns": "1fr auto auto auto auto auto", "gap": "8px", "align-items": "center"},
+            nav_loom("Settings", GO_SETTINGS),
+            grid={"grid-template-columns": "1fr auto auto auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
         h.frame(
@@ -388,6 +393,7 @@ def on_archive(ctx, frame) -> None:
 @app.on(slots(GO_DEMO.name))
 @app.on(slots(GO_CHAT.name))
 @app.on(slots(GO_COUNTER.name))
+@app.on(slots(GO_SETTINGS.name))
 def on_go(ctx, frame) -> None:
     """A submit that moves the client: the new structure and the new path marker."""
     ctx.go(GO[frame["dest"]])
@@ -421,7 +427,7 @@ def status(request: Request) -> Response:
 
 # The two pages that live in their own modules: importing them is what declares their routes on this
 # app (they need `app` to exist, which is why the imports are here and not at the top).
-from . import demo_chat, demo_counter  # noqa: E402
+from . import demo_chat, demo_counter, demo_settings  # noqa: E402
 from .demo import page as walkthrough  # noqa: E402
 
 # Each page declares its own route and uplinks in its own `register`: the module is the page, and the
@@ -430,6 +436,7 @@ from .demo import page as walkthrough  # noqa: E402
 # `__main__`, and `from .demo_app import app` would build a second copy of it.)
 demo_chat.register(app, slots)
 demo_counter.register(app)
+demo_settings.register(app)
 walkthrough.register(app)
 walkthrough.install(app)
 
@@ -458,12 +465,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="seconds between the chat's chunks (default: 0.02)")
     ap.add_argument("--window", type=int, default=demo_chat.settings.window,
                     help="turns of chat context the model sees (default: 12)")
+    ap.add_argument("--settings", default=".demo-settings.json",
+                    help="where the settings page keeps its choices (default: ./.demo-settings.json)")
     args = ap.parse_args(argv)
     walkthrough.settings.pace = args.pace
     walkthrough.settings.hold = args.hold
     demo_chat.settings.delay = args.delay
     demo_chat.settings.window = args.window
     demo_chat.settings.model = demo_chat.OpenAI() if args.model == "openai" else demo_chat.Scripted(window=args.window)
+    demo_settings.settings.path = Path(args.settings)
+    demo_settings.settings.load()  # what was stored is this app's opening line (ADR 0001 §5)
     app = make_app()
     demo_chat.share_http(app, demo_chat.settings.model)
 

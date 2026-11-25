@@ -122,13 +122,24 @@ def socket_phase() -> list[tuple[str, bool, str]]:
             # 1 — the page, and the one seed it needs. The seed is a send in its own right (`device.emit`
             # in the page hook), so it lands as one frame and the page as the next — never folded in.
             ws.send({"dest": "reflux:hello", "data": {"path": PAGE}})
-            hello = [ws.recv(timeout=3), ws.recv(timeout=3)]
-            ops = [op.get("action") for frame in hello for op in frame]
+            # One seed per `set` and the page last: the status line (the page's own), the page options
+            # (the shell's, ADR 0001), then the structure. Read up to the `create` — folding any of
+            # them into another frame would be the defect this checks for.
+            frames = []
+            for _ in range(6):
+                frames.append(ws.recv(timeout=3))
+                if any(op.get("action") == "create" for op in frames[-1]):
+                    break
+            ops = [op.get("action") for frame in frames for op in frame]
+            # The page's frame carries the `create` and the `routes` write together; what this checks
+            # is that everything *before* the first `create` is a seed, not the page.
+            first = ops.index("create") if "create" in ops else -1
+            slots = [op.get("slot") for frame in frames for op in frame if op.get("action") == "set"]
             checks.append(
                 (
-                    "hello seeds the status line, then draws the page, in two frames",
-                    ops[:2] == ["set", "create"] and hello[0][0].get("slot") == "status",
-                    f"ops={ops}",
+                    "hello seeds its slot(s), then draws the page as its own frame",
+                    first > 0 and set(ops[:first]) == {"set"} and "status" in slots,
+                    f"ops={ops} seeds={slots}",
                 )
             )
 

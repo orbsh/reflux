@@ -256,7 +256,7 @@ class Frames(unittest.TestCase):
 
     def test_the_page_is_one_route_of_the_application(self):
         """A second address is the table's business now, not this page's: `/chat` or nothing."""
-        self.assertEqual([route.path for route in demo_app.make_app().routes], ["/", "/about", "/chat", "/counter", "/demo"])
+        self.assertEqual([route.path for route in demo_app.make_app().routes], ["/", "/about", "/chat", "/counter", "/demo", "/settings"])
         self.assertIsNone(demo_app.make_app().routes.match("/nope"))
 
     def test_prompt_unwraps_the_renderers_field_shape(self):

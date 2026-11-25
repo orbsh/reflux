@@ -31,6 +31,15 @@
   `app.start(...)` / `app.stop()`（嵌入与测试：自己拥有 server，可重复停）；`app.http` 是服务期的共享
   `ClientSession`，`@app.startup` / `@app.shutdown` 建与关。手写的 WebSocket 编解码（`accept_key`／`is_upgrade`／
   `upgrade`／`Channel`）随旧传输删除，`channel.py` 只剩 `WsChannel` 这个包装。
+- 设置页已落地（ADR 0001）：`/settings` 三个成员（`sketch`/`accent`/`round`）走页面选项槽 `__CONFIG__`——组的出口
+  `Sink(dest="__CONFIG__", scope="both", path="/")` 让改本地立刻生效、同时上行；`www/static/reflux.js` 的 `STYLE` 表把渲染器
+  镜像的 `data-*` 落到 `:root` 的 `--accent`/`--round`（闭集 + 值域，值不合法就撤掉那条属性）；服务端 `on_config` 做白名单与
+  值域、节流原子落盘（`--settings <path>`，缺省 `./.demo-settings.json`，已入 `.gitignore`），每台设备第一次被画时把已存对象写进
+  槽。`tools/gate_settings.py` 十条真浏览器门。
+- **渲染器的引导契约（2026-11-25 换 rev 撞到的）**：`window.fluxen.send` 是渲染器**第一次渲染时**才发布的（`mount_to` 排队），
+  所以 `www/index.html` 在 `mount()` 之后要等这个把手出现再 `start()` 客户端 runtime——不等就会抛
+  「window.fluxen.send is missing」并且整页静默空白。渲染器本版还会在 bool 字段上打一条 `<svg> viewBox` 警告（Chromium），
+  那是 fluxen 侧的事，门里按**逐字匹配**过滤掉它，别的错误照样失败。
 - 示例应用已落地：`examples/chat/`（AI 对话）——六个后端行为（会话态／流式／停止／单飞／应用层两道门／
   模型失败变气泡）各有断言，`tools/gate_chat.py` 12 条（9 条走真 socket、3 条在真 Chromium），
   `examples/chat/walkthrough.py` 是它的快速演示（借 fluxen `examples/walkthrough.py` 的形状）。

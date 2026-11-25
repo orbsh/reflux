@@ -130,6 +130,7 @@ class TestTheDemoApp(unittest.TestCase):
         self.assertEqual(
             sorted(app.dests.names()),
             [
+                "__CONFIG__",
                 "chat.send",
                 "chat.stop",
                 "demo.pin",
@@ -142,6 +143,7 @@ class TestTheDemoApp(unittest.TestCase):
                 "go.counter",
                 "go.demo",
                 "go.home",
+                "go.settings",
                 "reflux:hello",
                 "reflux:login",
                 "reflux:logout",
@@ -160,8 +162,10 @@ class TestTheDemoApp(unittest.TestCase):
         frames = device.frames
         self.assertEqual(device.frames[-1][0]["action"], "create")
         seeds = [frame for frame in frames[:-1]]
-        self.assertEqual([op["action"] for frame in seeds for op in frame], ["append", "append"])
-        self.assertEqual({op["slot"] for frame in seeds for op in frame}, {"rows"})
+        # Three sends precede the page: the page's two rows (its handler runs first), then the shell's
+        # page-options seed. What matters is that all three are in before the page's `create`.
+        self.assertEqual([op["action"] for frame in seeds for op in frame], ["append", "append", "set"])
+        self.assertEqual([op["slot"] for frame in seeds for op in frame], ["rows", "rows", "__CONFIG__"])
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
         """A slot outlives a page turn, so the seed is once per device — not once per turn."""

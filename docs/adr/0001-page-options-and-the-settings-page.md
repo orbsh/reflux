@@ -1,6 +1,6 @@
 # 0001 — 设置页：选项槽、双写，和谁给 CSS 上色
 
-Status: **Accepted**（2026-11-25）。
+Status: **Accepted**（2026-11-25），**已落地**：`examples/{zh,en}/demo_settings.py` + `www/static/reflux.js` 的 `STYLE` 表 + `tools/gate_settings.py`（十条门）。
 
 ## 1. 三条需求，一个已有的机制
 

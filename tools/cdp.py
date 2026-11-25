@@ -350,7 +350,11 @@ def _same_origin(url: str, base: str) -> bool:
 def console_errors(cdp: Cdp) -> list[str]:
     out: list[str] = []
     for params in cdp.of("Runtime.exceptionThrown"):
-        out.append(str(params.get("exceptionDetails", {}).get("text")))
+        # `text` is only "Uncaught"; the description is the message plus the stack's first frame, which
+        # is what a reader needs to tell a renderer warning from a page defect.
+        details = params.get("exceptionDetails", {}) or {}
+        message = (details.get("exception") or {}).get("description") or details.get("text")
+        out.append(str(message))
     for params in cdp.of("Log.entryAdded"):
         if params.get("entry", {}).get("level") == "error":
             out.append(str(params["entry"].get("text")))

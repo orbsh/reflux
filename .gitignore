@@ -12,3 +12,6 @@ www/static/vendor/
 dist-release/
 dist/
 reflux/www/
+
+# 参考应用记住的页面选项（设置页）
+.demo-settings.json
