@@ -17,7 +17,7 @@ from typing import Any
 
 from reflux import ingest, wire
 from reflux.app import App, Device
-from reflux.channel import Channel
+from tests.fakes import run_sync
 from reflux.ingest import Refused
 from reflux.sdk import h
 from reflux.slots import Slot
@@ -270,7 +270,7 @@ class TestTheUplink(unittest.TestCase):
                 self.assertIn(expects, str(caught.exception))
 
 
-class ScriptedChannel(Channel):
+class ScriptedChannel:
     """A connection that delivers the frames it was given, then closes."""
 
     def __init__(self, *messages: dict) -> None:
@@ -280,16 +280,23 @@ class ScriptedChannel(Channel):
         self.closed_with: int | None = None
         self.aborted = False
 
-    def __iter__(self):
-        yield from self.messages
+    def __aiter__(self) -> "ScriptedChannel":
+        self._script = iter(self.messages)
+        return self
 
-    def send(self, text: str) -> None:
+    async def __anext__(self) -> str:
+        try:
+            return next(self._script)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+    async def send(self, text: str) -> None:
         self.frames.append(json.loads(text))
 
-    def ping(self, payload: bytes = b"") -> None:
+    async def ping(self, payload: bytes = b"") -> None:
         pass
 
-    def close(self, code: int = 1000) -> None:
+    async def close(self, code: int = 1000) -> None:
         self.closed_with = code
 
     def abort(self) -> None:
@@ -343,7 +350,7 @@ class TestTheInboundDoor(unittest.TestCase):
             {"dest": "gate.ok", "id": 7, "data": {}},                     # refused: id is not a string
             {"dest": "gate.ok", "data": {"n": 2}},                        # dispatched
         )
-        app.handle(channel)  # returns when the scripted connection ends
+        run_sync(app.handle(channel))  # returns when the scripted connection ends
 
         self.assertEqual(len(seen), 1, seen)
         self.assertEqual(seen[0]["data"], {"n": 2})

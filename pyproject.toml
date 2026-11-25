@@ -7,8 +7,11 @@ readme = "README.md"
 dependencies = [
     # The generated SDK's type layer (reflux/sdk/types.py) is pydantic models: the type layer is an
     # off-the-shelf JSON-Schema consumer's output, not something we hand-write (see docs/DESIGN.md
-    # 「生产者」). Only the SDK needs it — the rest of reflux stays stdlib-only.
+    # 「生产者」). Only the SDK needs it.
     "pydantic>=2",
+    # The transport (ADR 0002): HTTP, the WebSocket handshake, and the outbound client a handler
+    # awaits. One dependency replaces a hand-written codec and an `http.server` special case.
+    "aiohttp>=3.9",
 ]
 
 [project.scripts]

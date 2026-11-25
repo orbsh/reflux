@@ -1,10 +1,10 @@
 """The WebSocket channel: one per device, ops down and uplinks up, JSON text frames.
 
-stdlib only, like everything else on the producer side. The handshake is the HTTP upgrade the
-browser asks for on ``GET /ws``; after that it is frames, and the codec is deliberately the
-smallest one that is still correct: text frames, fragmentation reassembled, ping answered,
-close answered. A binary frame closes the connection — the protocol is JSON text, and a second
-encoding would mean a second schema to keep in step.
+Two shapes live here, and only one of them is on the serving path. `WsChannel` is the one the
+aiohttp server hands to `App.handle`: a `WebSocketResponse` seen as a channel, so framing, masking,
+fragmentation, ping/pong and the close handshake are aiohttp's. `Channel` is the hand-written
+codec this repository used before that (and the byte-level tests still exercise it); it is deleted
+with them, not extended.
 
 Two things this layer owns because it is the layer that knows them: ``last_seen`` (every byte
 read from the peer counts as activity — the watchdog judges a device by it, so a peer that
@@ -25,7 +25,9 @@ import hashlib
 import struct
 import threading
 import time
-from typing import IO, Iterator
+from typing import IO, Any, Iterator
+
+from aiohttp import WSMsgType
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 WS_PATH = "/ws"
@@ -192,3 +194,61 @@ def upgrade(handler) -> Channel:
     handler.end_headers()
     handler.close_connection = True
     return Channel(handler.rfile, handler.wfile, handler.connection)
+
+
+class WsChannel:
+    """A `WebSocketResponse` seen as a channel — the five things `App` and `Device` ask of one.
+
+    Reading is the same read loop `Channel.__iter__` gave: text frames in, and `None`
+    (as `StopAsyncIteration`) once the peer is gone. Ping/pong and fragmentation never reach this
+    layer: aiohttp answers control frames and reassembles messages, which is the whole reason this
+    class is a wrapper and not a codec.
+    """
+
+    def __init__(self, ws: Any) -> None:
+        self.ws = ws
+        self.closed = False
+        self.last_seen = time.monotonic()
+
+    async def recv(self) -> str | None:
+        message = await self.ws.receive()
+        if message.type is WSMsgType.TEXT:
+            self.last_seen = time.monotonic()
+            return message.data
+        if message.type is WSMsgType.BINARY:
+            # The wire here is JSON text; a binary frame is still bytes we can read, and refusing it
+            # would only turn a producer's mistake into a silent hang.
+            self.last_seen = time.monotonic()
+            return message.data.decode("utf-8", "replace")
+        if message.type in (WSMsgType.PING, WSMsgType.PONG):
+            self.last_seen = time.monotonic()
+            return ""
+        self.closed = True
+        return None
+
+    def __aiter__(self) -> "WsChannel":
+        return self
+
+    async def __anext__(self) -> str:
+        message = await self.recv()
+        if message is None:
+            raise StopAsyncIteration
+        return message
+
+    async def send(self, text: str) -> None:
+        await self.ws.send_str(text)
+
+    async def ping(self) -> None:
+        if not self.closed:
+            await self.ws.ping()
+
+    async def close(self, code: int = 1000) -> None:
+        self.closed = True
+        await self.ws.close(code=code)
+
+    def abort(self) -> None:
+        """Drop the transport without a close handshake — the peer is not going to read it."""
+        self.closed = True
+        writer = getattr(self.ws, "_writer", None)
+        if writer is not None:
+            writer.transport.abort()

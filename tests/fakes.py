@@ -2,9 +2,34 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+import threading
+import time
+from typing import Any, Callable
 
 from reflux import wire
+
+
+def run_sync(coro: Any) -> Any:
+    """A coroutine on a fresh loop — how a synchronous test drives the async app (ADR 0002)."""
+    return asyncio.run(coro)
+
+
+def background_loop() -> asyncio.AbstractEventLoop:
+    """A loop in a daemon thread: what an app needs when a test wants its tasks to tick."""
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, name="test-loop", daemon=True).start()
+    return loop
+
+
+async def until(predicate: Callable[[], bool], timeout: float = 2.0) -> bool:
+    """Poll a predicate without blocking the loop — the async twin of a wait loop in a test."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(0.005)
+    return predicate()
 
 
 class FakeDevice:

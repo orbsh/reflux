@@ -5,22 +5,27 @@ and its assets are a second one (``/static/``), which is what keeps a deep link 
 asset reference against the deep-link directory. Prefixes are matched longest first.
 
 Each mount serves its own modules and pinned assets, same-origin, with caching off (a rebuilt page
-must never need a hard refresh), upgrades ``GET /ws`` to the channel, and hands any *page path*
+must never need a hard refresh), upgrades the channel route to a WebSocket, and hands any *page path*
 (no file extension, no such file) to that mount's ``index.html`` — which is what makes a deep link
-or a reload work: the client boots and asks the producer what lives at that path. Without an app
-it is a plain static server and holds no device.
+or a reload work: the client boots and asks the producer what lives at that path. Without an app it
+is a plain static server and holds no device.
+
+The transport is asyncio (ADR 0002): aiohttp owns HTTP and the WebSocket handshake, one task per
+connection, and the loop runs in a thread of its own so `make_server` keeps the blocking shape its
+callers — the gates, `tools/serve.py`, `tools/cdp.py` — already speak.
 """
 
 from __future__ import annotations
 
-import functools
+import asyncio
+import mimetypes
+import threading
 from dataclasses import dataclass, field
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import parse_qs
 
-from .channel import is_upgrade, upgrade
+from aiohttp import web
 
 # A mount entry that is the websocket channel rather than a callable: the socket is one route in the
 # same table as the app's own paths, and nothing in the table knows it is special until it is served.
@@ -29,7 +34,7 @@ CHANNEL = object()
 
 @dataclass(frozen=True)
 class Request:
-    """One HTTP request, as a mounted route sees it — the facts, and nothing of `http.server`."""
+    """One HTTP request, as a mounted route sees it — the facts, and nothing of aiohttp."""
 
     method: str
     path: str
@@ -64,6 +69,7 @@ def as_response(answered: Any) -> Response:
         return Response(404, "not found")
     return Response(200, _body(answered))
 
+
 # Deterministic content types: don't leave module MIME to the host's /etc/mime.types,
 # because a wrong type makes the browser refuse the module.
 _TYPES = {
@@ -76,121 +82,230 @@ _TYPES = {
     ".txt": "text/plain",
 }
 
+NO_CACHE = "no-cache"
 
-class PageHandler(SimpleHTTPRequestHandler):
-    extensions_map = {**SimpleHTTPRequestHandler.extensions_map, **_TYPES}
 
-    def end_headers(self) -> None:
-        self.send_header("Cache-Control", "no-cache")
-        super().end_headers()
+def _content_type(path: Path) -> str:
+    known = _TYPES.get(path.suffix.lower())
+    if known:
+        return known
+    guessed = mimetypes.guess_type(path.name)[0]
+    return guessed or "application/octet-stream"
 
-    def do_GET(self) -> None:
-        if self._serve_route():
-            return
-        page = self.path.split("?", 1)[0]
 
-        prefix, root = self._mount(page)
-        if prefix is None:
-            self.send_error(404, "nothing mounted here")
-            return
-        if prefix == "/" and page + "/" in self._mounts():
-            # "/static" without its slash: send the browser to the mounted root, or every
-            # relative reference on that page would resolve against "/" instead.
-            self.send_response(301)
-            self.send_header("Location", page + "/")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-        if prefix != "/":
-            self.directory = str(root)
-            self.path = page[len(prefix) - 1 :] + self.path[len(page) :]
+def _inside(remainder: str) -> str | None:
+    """A mount-relative path with every escape removed — or None when the request tried one.
 
-        # A page path is served that mount's index: the client boots and asks the producer what
-        # lives there (that is what makes a deep link and a reload work at all). Anything that
-        # looks like a file is served — or 404s — as a file: a missing module must never come
-        # back as HTML, or the browser would fail on it in a way nobody can read.
-        if not Path(self.path.split("?", 1)[0]).suffix and not Path(
-            self.translate_path(self.path)
-        ).is_file():
-            self.path = "/index.html"
-        super().do_GET()
+    The mount's directory is the ceiling: `..` is dropped rather than followed, so no spelling of a
+    path can reach outside the tree the operator named.
+    """
+    parts: list[str] = []
+    for piece in remainder.split("/"):
+        if piece in ("", "."):
+            continue
+        if piece == "..":
+            return None
+        parts.append(piece)
+    return "/".join(parts)
 
-    def do_POST(self) -> None:
-        if not self._serve_route():
-            self.send_error(405, "no route here takes a POST")
 
-    def _serve_route(self) -> bool:
-        """The app's own table answers first — the channel, or a path it mounted. True = answered.
+async def _serve_file(path: Path, status: int = 200) -> web.Response:
+    payload = await asyncio.to_thread(path.read_bytes)
+    return web.Response(
+        status=status,
+        body=payload,
+        content_type=_content_type(path),
+    )
 
-        The channel is one entry in that table (`CHANNEL`), which is what makes the socket a route
-        rather than a special case of the server: this method is the only place that knows the
-        difference, and it is one `is` test.
-        """
-        app = getattr(self.server, "app", None)
-        if app is None:
-            return False
-        page = self.path.split("?", 1)[0]
-        route = getattr(app, "mounts", {}).get(page)
-        if route is None:
-            return False
+
+def _split_type(content_type: str) -> tuple[str, str | None]:
+    """`"text/plain; charset=utf-8"` → `("text/plain", "utf-8")`.
+
+    aiohttp refuses a charset inside the type argument — one header, two parameters, and it owns
+    the spelling. The `Response` dataclass keeps the old single-string shape so a route can still
+    say `text/html; charset=utf-8`.
+    """
+    kind, _, rest = content_type.partition(";")
+    charset = None
+    for part in rest.split(";"):
+        key, _, value = part.strip().partition("=")
+        if key.lower() == "charset" and value:
+            charset = value.strip().strip('"')
+    return kind.strip(), charset
+
+
+def _response(answered: Response) -> web.Response:
+    payload = answered.body.encode("utf-8") if isinstance(answered.body, str) else answered.body
+    kind, charset = _split_type(answered.content_type)
+    return web.Response(status=answered.status, body=payload, content_type=kind, charset=charset)
+
+
+def build_application(
+    app: Any,
+    mounts: dict[str, Path],
+) -> web.Application:
+    """One aiohttp application for a mount table, with the app's own routes in front of it."""
+
+    application = web.Application()
+    application["mounts"] = mounts
+    application["reflux"] = app
+
+    async def prepare(request: web.Request, response: web.StreamResponse) -> None:
+        # A rebuilt page must never need a hard refresh: every response revalidates.
+        response.headers["Cache-Control"] = NO_CACHE
+
+    application.on_response_prepare.append(prepare)
+
+    async def serve(request: web.Request) -> web.StreamResponse:
+        page = request.path
+        route = (app.mounts.get(page) if app is not None else None)
+
         if route is CHANNEL:
-            if not is_upgrade(self.headers):
-                self.send_error(426, "this route is the websocket channel")
-                return True
-            # The connection stops being HTTP here: the app reads frames until it closes.
-            app.handle(upgrade(self))
-            return True
-        if isinstance(route, (str, Path)):
-            return False  # a directory mount: the static path below serves it, file by file
-        length = int(self.headers.get("Content-Length") or 0)
-        request = Request(
-            method=getattr(self, "command", "GET") or "GET",
-            path=page,
-            query=parse_qs(self.path.split("?", 1)[1], keep_blank_values=True) if "?" in self.path else {},
-            headers={key.lower(): value for key, value in self.headers.items()},
-            peer=self.client_address[0] if self.client_address else None,
-            body=self.rfile.read(length) if length else b"",
-        )
+            if request.headers.get("Upgrade", "").lower() != "websocket":
+                return web.Response(status=426, text="this route is the websocket channel")
+            return await _upgrade(app, request)
+
+        if route is not None and not isinstance(route, (str, Path)):
+            return await _route(app, route, page, request)
+
+        if request.method not in ("GET", "HEAD"):
+            # Only the app's own routes take a body; a static path answers GET/HEAD and nothing else.
+            return web.Response(status=405, text="no route here takes a POST")
+
+        if page + "/" in mounts:
+            # "/static" without its slash: send the browser to the mounted root, or every relative
+            # reference on that page would resolve against "/" instead.
+            raise web.HTTPMovedPermanently(page + "/")
+
+        prefix, root = _mount(mounts, page)
+        if prefix is None:
+            return web.Response(status=404, text="nothing mounted here")
+
+        remainder = page[len(prefix) :] if prefix != "/" else page[1:]
+        safe = _inside(remainder)
+        if safe is None:
+            return web.Response(status=404, text="nothing mounted here")
+
+        target = root / safe if safe else root
+        looks_like_page = not Path(safe).suffix
+        if target.is_dir() or (looks_like_page and not target.is_file()):
+            index = root / "index.html"
+            if not index.is_file():
+                return web.Response(status=404, text="nothing mounted here")
+            return await _serve_file(index)
+        if not target.is_file():
+            # A missing module must never come back as HTML, or the browser fails unreadably.
+            return web.Response(status=404, text="not found")
+        return await _serve_file(target)
+
+    application.router.add_route("*", "/{tail:.*}", serve)
+    return application
+
+
+async def _route(app: Any, route: Any, page: str, request: web.Request) -> web.Response:
+    """The app's own callable route: a `Request` in, a `Response` / pair / body out."""
+    length = request.content_length or 0
+    facts = Request(
+        method=request.method,
+        path=page,
+        query={key: list(values) for key, values in request.query.items()},
+        headers={key.lower(): value for key, value in request.headers.items()},
+        peer=request.remote,
+        body=await request.read() if length else b"",
+    )
+    try:
+        answered = route(facts)
+        if asyncio.iscoroutine(answered):
+            answered = await answered
+    except Exception as bad:  # a route's defect is the route's: answer it, keep serving
+        print(f"[http] route {page!r} raised: {bad!r}", flush=True)
+        return web.Response(status=500, text="the route raised")
+    return _response(as_response(answered))
+
+
+async def _upgrade(app: Any, request: web.Request) -> web.StreamResponse:
+    """The connection stops being HTTP here: the app reads frames until it closes."""
+    from .channel import WsChannel
+
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    await app.handle(WsChannel(ws))
+    return ws
+
+
+def _mount(mounts: dict[str, Path], page: str) -> tuple[str | None, Path | None]:
+    """(prefix, directory) with the longest matching prefix winning — or (None, None)."""
+    for prefix in sorted(mounts, key=len, reverse=True):
+        if page.startswith(prefix):
+            return prefix, mounts[prefix]
+    return None, None
+
+
+class Server:
+    """A bound server with the blocking shape its callers already speak.
+
+    `http.server`'s interface is what the gates, `tools/cdp.py`, `tools/serve.py` and the packaging
+    tests hold: `server_address`, `serve_forever()`, `shutdown()`. The transport underneath is
+    aiohttp on a loop of its own thread, so those callers do not learn that anything moved.
+    """
+
+    def __init__(self, application: web.Application, host: str, port: int) -> None:
+        self._web = application
+        self.app = application["reflux"]
+        self.mounts = application["mounts"]
+        self._stopped = threading.Event()
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, name="reflux-loop", daemon=True)
+        self._thread.start()
+        self._runner: web.AppRunner | None = None
+        self.server_address = self._call(self._start(host, port))
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        """The loop this server runs on — what a watchdog task needs to exist on."""
+        return self._loop
+
+    # --- the blocking interface ---------------------------------------------------------
+
+    def serve_forever(self) -> None:
+        """Block until `shutdown()` — the loop itself has been running since construction."""
+        self._stopped.wait()
+
+    def shutdown(self) -> None:
+        """Stop the site, close the loop and let the thread go. Safe to call twice."""
+        if self._stopped.is_set():
+            return
         try:
-            answered = as_response(route(request))
-        except Exception as bad:  # a route's defect is the route's: answer it, keep serving
-            print(f"[http] route {page!r} raised: {bad!r}", flush=True)
-            self.send_error(500, "the route raised")
-            return True
-        payload = answered.body.encode("utf-8") if isinstance(answered.body, str) else answered.body
-        self.send_response(answered.status)
-        self.send_header("Content-Type", answered.content_type)
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        if payload:
-            self.wfile.write(payload)
-        return True
+            if self.app is not None:
+                # The watchdog is a task on this loop; ending the app first is what keeps the
+                # loop from being closed under a sleeping task.
+                self.app.stop()
+            if self._runner is not None:
+                self._call(self._runner.cleanup())
+        finally:
+            self._stopped.set()
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._thread.join(timeout=5)
 
-    def _mounts(self) -> dict:
-        return getattr(self.server, "mounts", None) or {}
+    def server_close(self) -> None:
+        self.shutdown()
 
-    def _mount(self, page: str):
-        """(prefix, directory) with the longest matching prefix winning — or (None, None)."""
-        mounts = self._mounts()
-        for prefix in sorted(mounts, key=len, reverse=True):
-            if page.startswith(prefix):
-                return prefix, Path(mounts[prefix])
-        return None, None
+    def close(self) -> None:
+        self.shutdown()
 
-    def finish(self) -> None:
-        """Close the connection, tolerating a peer that vanished mid-write.
+    # --- inside the loop ---------------------------------------------------------------
 
-        A websocket client that hangs up leaves `super().finish()` flushing into a dead socket;
-        the device accounting has already run by then (`App.handle` caught the close), so the
-        stack trace would only be noise about the TCP half of an event we handled.
-        """
-        try:
-            super().finish()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+    def _call(self, coro: Any, timeout: float = 10.0) -> Any:
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout)
 
-    def log_message(self, format: str, *args) -> None:
-        print(f"[http] {self.address_string()} {format % args}", flush=True)
+    async def _start(self, host: str, port: int) -> tuple[str, int]:
+        self._runner = web.AppRunner(self._web, access_log=None)
+        await self._runner.setup()
+        site = web.TCPSite(self._runner, host, port)
+        await site.start()
+        assert self._runner.addresses, "aiohttp did not report a bound address"
+        bound_host, bound_port = self._runner.addresses[0][:2]
+        return str(bound_host), int(bound_port)
 
 
 def make_server(
@@ -200,15 +315,15 @@ def make_server(
     app=None,
     *,
     mounts: dict[str, str | Path] | None = None,
-) -> ThreadingHTTPServer:
-    """Return a bound (not yet serving) HTTP server for `root`, or for a table of mounts.
+) -> Server:
+    """Return a bound (not yet serving) server for `root`, or for a table of mounts.
 
     `port=0` picks a free port; read it back from ``server.server_address[1]``. Passing `app`
-    attaches the channel at `/ws` (it needs only ``handle(channel)``).
+    attaches the channel at its route (it needs only ``await handle(channel)``).
 
     `mounts` maps a URL prefix to a directory — ``{"/": page, "/static/": assets}`` serves the page
-    and its assets from one origin. Prefixes
-    are matched longest first; every mount needs its own `index.html`.
+    and its assets from one origin. Prefixes are matched longest first; every mount needs its own
+    `index.html`.
     """
     if mounts is None:
         if root is None:
@@ -225,9 +340,5 @@ def make_server(
         raise FileNotFoundError(
             f"the page mount {base_prefix!r} has no index.html ({table[base_prefix]})"
         )
-    base = table[base_prefix]
-    handler = functools.partial(PageHandler, directory=str(base))
-    server = ThreadingHTTPServer((host, port), handler)
-    server.app = app  # type: ignore[attr-defined]
-    server.mounts = table  # type: ignore[attr-defined]
-    return server
+    application = build_application(app, table)
+    return Server(application, host, port)

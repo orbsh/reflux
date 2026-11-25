@@ -67,7 +67,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 
 已落地（T4）：壳连上 `/ws` 即发 hello，生产者的应用在收到它时发出这个设备的首帧（一帧里既有 `create`，也可以顺手把视图要读的槽播下去）。hello 带地址，声明了 `auth=` 的应用还带 `token`（命中就在画页之前把这条连接绑回同一个人，见「设备与身份」）；没有就不写这个字段。首帧入队之后，框架对应用 raise 一次 `connect`（见「宿主事件」）。
 
-传输落地的形状：`reflux/channel.py`（HTTP 升级 + 文本帧编解码，stdlib）、`reflux/dests.py`（上行落点注册表）、`reflux/app.py`（伺服壳 + `/ws` + 注册表；一个连接一个 device）。
+传输落地的形状：`reflux/server.py`（aiohttp 承载静态与 index 回退、通道升级，ADR 0002）、`reflux/channel.py`（`WsChannel` 把 `WebSocketResponse` 说成通道；手写编解码还在，等 P5 删）、`reflux/dests.py`（上行落点注册表）、`reflux/app.py`（伺服壳 + `/ws` + 注册表；一个连接一个 device）。
 
 ### 组件形状
 

@@ -59,11 +59,12 @@ from __future__ import annotations
 
 import json
 import secrets
+import asyncio
+import contextlib
 import threading
 import time
 import traceback
 from dataclasses import dataclass, field
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs
@@ -261,7 +262,13 @@ class Device:
         self._record = record
         self._stats = stats
         self._note = note or (lambda line: None)
-        self._wake = threading.Event()
+        self._wake = asyncio.Event()
+        self._closing = False  # the reader loop ended: the writer flushes once and stops
+        self._writer: asyncio.Task | None = None
+        try:
+            self._loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:  # a device a test made by hand, outside any loop
+            self._loop = None
 
     def go(self, url: str) -> None:
         """Stand somewhere else and draw it — the server's own page turn.
@@ -315,16 +322,31 @@ class Device:
         self.outbox.append(frame)
         self.sent += 1
         self._record("send", frame)
-        self._wake.set()
+        self.wake()
+
+    def wake(self) -> None:
+        """Tell the writer there is work — from the loop, or from a thread that is not the loop.
+
+        A handler runs on the loop, a long-lived producer (a chat reply, a timer) often does not,
+        and an `asyncio.Event` may only be set from inside its own loop. This is the one place that
+        knows the difference.
+        """
+        loop = self._loop
+        if loop is None:
+            self._wake.set()
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            self._wake.set()
+        else:
+            loop.call_soon_threadsafe(self._wake.set)
 
     def _refuse(self, reason: str) -> None:
         self._stats["refused"] += 1
         self._note(f"refused frame for {self.id} on {self.path}: {reason}")
-
-    def await_frames(self, timeout: float = 0.5) -> None:
-        """Block until a frame is queued — or the timeout, so a live device stays checked."""
-        self._wake.wait(timeout)
-        self._wake.clear()
 
     def emit(self, *operations: dict) -> None:
         """Send a batch of operations as one turn — the frame is the list itself.
@@ -521,7 +543,8 @@ class App:
         self.outbox = outbox  # frames a device may queue before the middle is shed
         self.log: list[tuple[str, Any]] = []  # every frame in and out, in order
         self._stop = threading.Event()
-        self._watchdog: threading.Thread | None = None
+        self._watchdog: Any = None  # a Task inside the loop, a concurrent Future from outside
+        self._loop: asyncio.AbstractEventLoop | None = None
         self.dests.builtin(f"{RESERVED_PREFIX}hello", self._on_hello)
         self.dests.builtin(f"{RESERVED_PREFIX}nav", self._on_nav)
         # Authentication, when the app declared it. `auth=None` is a legal deployment: no gate, and
@@ -899,12 +922,11 @@ class App:
         for device in hit:
             if not self._gone(device, reason):
                 continue
-            device.channel.close(EVICTED)
-            device.channel.abort()
+            self._spawn(self._close_channel(device.channel, EVICTED))
             self.stats["reclaimed"] += 1
         return len(hit)
 
-    def watch(self) -> None:
+    async def watch(self) -> None:
         """One pass over the table: ping the live devices, reclaim the ones gone quiet.
 
         A device is judged by its channel's ``last_seen`` — every byte read from the peer counts,
@@ -915,20 +937,20 @@ class App:
         now = time.monotonic()
         for channel, device in list(self.devices.items()):
             if now - channel.last_seen < self.dead_after:
-                channel.ping()
+                await channel.ping()
                 continue
             # Take it out before closing it: one removal, one accounting. Otherwise the reader
             # thread (woken by the shutdown below) could get there first and the same device
             # would be accounted twice — as reclaimed *and* as dead.
             if not self._gone(device, "dead"):
                 continue
-            channel.close(JUDGED_DEAD)
+            await channel.close(JUDGED_DEAD)
             channel.abort()
             self.stats["dead"] += 1
             self.dests.log.append(f"device {device.id} judged dead ({self.dead_after}s quiet)")
 
-    def start_watchdog(self) -> None:
-        """Start the thread that ticks ``watch()`` — one per server, so every server reclaims.
+    def start_watchdog(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
+        """Start the task that ticks ``watch()`` — one per server, so every server reclaims.
 
         The stop flag is re-armed here: `stop()` ends a run, and serving the same app again (a gate
         that runs two phases against one app) starts a fresh one — otherwise the new watchdog would
@@ -937,18 +959,32 @@ class App:
         if self._watchdog is not None:
             return
         self._stop = threading.Event()
+        self._loop = loop or self._loop
 
-        def tick() -> None:
-            while not self._stop.wait(self.heartbeat):
-                self.watch()
+        async def tick() -> None:
+            while not self._stop.is_set():
+                await asyncio.sleep(self.heartbeat)
+                if self._stop.is_set():
+                    return
+                await self.watch()
 
-        self._watchdog = threading.Thread(target=tick, name="reflux-watchdog", daemon=True)
-        self._watchdog.start()
+        if self._loop is None:
+            # No loop yet (a bare App in a unit test): the caller will start one.
+            self._watchdog = None
+            return
+        # Scheduled from whichever thread asked: the loop may be somebody else's (a server's).
+        self._watchdog = asyncio.run_coroutine_threadsafe(tick(), self._loop)
 
     def stop(self) -> None:
         """End the watchdog (the gates and tests call this on the way out)."""
         self._stop.set()
-        self._watchdog = None
+        task, self._watchdog = self._watchdog, None
+        loop = self._loop
+        if task is not None and loop is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:  # the loop is already being torn down
+                pass
 
     # --- serving --------------------------------------------------------------------------
 
@@ -989,7 +1025,7 @@ class App:
         if self.mounts.pop(path, None) is None:
             raise KeyError(f"nothing mounted at {path!r}")
 
-    def make_server(self, port: int = 0, host: str = "127.0.0.1") -> ThreadingHTTPServer:
+    def make_server(self, port: int = 0, host: str = "127.0.0.1") -> Any:
         mounts: dict[str, str | Path] = {"/": self.root}
         static = self.root / "static"
         if static.is_dir():
@@ -1000,10 +1036,10 @@ class App:
             if isinstance(route, (str, Path)):
                 mounts[path.rstrip("/") + "/"] = route  # a directory mount is a prefix, with the slash
         server = make_server(self.root, port, host, app=self, mounts=mounts)
-        self.start_watchdog()
+        self.start_watchdog(server.loop)
         return server
 
-    def serve(self, port: int = 8000, host: str = "127.0.0.1") -> ThreadingHTTPServer:
+    def serve(self, port: int = 8000, host: str = "127.0.0.1") -> Any:
         """Start serving and return the bound server (call ``serve_forever`` to block)."""
         server = self.make_server(port, host)
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -1026,7 +1062,7 @@ class App:
 
     # --- one connection -------------------------------------------------------------------
 
-    def handle(self, channel: Channel) -> None:
+    async def handle(self, channel: Any) -> None:
         """Read this connection's frames until it goes away: the device lives and dies with it."""
         device = Device(
             secrets.token_hex(4), channel, self._record, self.stats, self.outbox, self.dests.log.append
@@ -1034,12 +1070,12 @@ class App:
         device.app = self
         self.devices[channel] = device
         self.stats["issued"] += 1
-        # Writing is a thread of its own, so nothing that produces a frame can be held by a client
-        # that stopped reading (this reader thread included: a slow client must not be able to stall
-        # the very thread that would drain it).
-        threading.Thread(target=self._pump, args=(device,), name="reflux-writer", daemon=True).start()
+        # Writing is a task of its own, so nothing that produces a frame can be held by a client
+        # that stopped reading (this reader task included: a slow client must not be able to stall
+        # the very task that would drain it).
+        device._writer = asyncio.create_task(self._pump(device))
         try:
-            for raw in channel:
+            async for raw in channel:
                 try:
                     frame = json.loads(raw)
                 except ValueError:
@@ -1063,11 +1099,38 @@ class App:
         except ChannelClosed as exc:
             self.dests.log.append(f"device {device.id} closed: {exc}")
         finally:
-            # Identity, not id: a device the watchdog already reclaimed is not this thread's to
-            # count, and no thread can remove a device that is not its own.
+            # The writer flushes what the last handlers said, then stops: `handle` returning means
+            # the client has been told everything this connection produced.
+            device._closing = True
+            device.wake()
+            if device._writer is not None:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await device._writer
+            # Identity, not id: a device the watchdog already reclaimed is not this task's to
+            # count, and no task can remove a device that is not its own.
             if self._gone(device, "closed"):
                 self.stats["reclaimed"] += 1
                 self.dests.log.append(f"device {device.id} reclaimed")
+
+    async def _close_channel(self, channel: Any, code: int) -> None:
+        """Tell the client why, then drop the transport — the order the close frame depends on."""
+        try:
+            await channel.close(code)
+        finally:
+            channel.abort()
+
+    def _spawn(self, coro: Any) -> None:
+        """Run a coroutine where it belongs: as a task on the loop, or on ours from a plain thread."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop = getattr(self, "_loop", None)
+            if loop is not None:
+                asyncio.run_coroutine_threadsafe(coro, loop)
+            else:
+                asyncio.run(coro)
+            return
+        asyncio.create_task(coro)
 
     def _gone(self, device: Device, reason: str) -> bool:
         """Take a device out of the table once — and let the app hear that it is gone.
@@ -1083,18 +1146,23 @@ class App:
         )
         return True
 
-    def _pump(self, device: Device) -> None:
+    async def _pump(self, device: Device) -> None:
         """Write one device's frames until it is no longer live.
 
-        One thread per device, on purpose: writing is the only step that can block on a client, so
-        a slow client blocks *its own* writer and nobody else's. The loop ends when the device
-        leaves the table — the reader thread removes it on close, the watchdog on a dead peer.
+        One task per device, on purpose: writing is the only step that can wait on a client, so a
+        slow client suspends *its own* writer and nobody else's — the loop stays free, which is the
+        whole difference from the thread it replaces.
         """
-        while self.devices.get(device.channel) is device:
-            device.await_frames()
-            self.flush_device(device)
+        while True:
+            await device._wake.wait()
+            device._wake.clear()
+            await self.flush_device(device)
+            if device._closing:
+                # One last pass after the reader stopped: what the final handlers said still goes.
+                await self.flush_device(device)
+                return
 
-    def flush_device(self, device: Device) -> None:
+    async def flush_device(self, device: Device) -> None:
         """Write what this device has waiting, then repair it if frames were shed.
 
         The repair only happens when the queue is *empty*: the client is reading again by then, so a
@@ -1103,15 +1171,17 @@ class App:
         client may have missed the frame that built it), so the flag is cleared first.
         """
         while device.outbox:
-            if not self._write(device.channel, device.outbox.pop(0)):
+            if not await self._write(device.channel, device.outbox.pop(0)):
                 return
         if device.stale:
             device.stale = False
             device.shell_drawn = False
             self._draw(device)
             frames, device.outbox = device.outbox, []
-            if all(self._write(device.channel, frame) for frame in frames):
-                self.stats["resync"] += 1
+            for frame in frames:
+                if not await self._write(device.channel, frame):
+                    return
+            self.stats["resync"] += 1
 
     def _record(self, direction: str, frame: Any) -> None:
         """Keep the frame — minus anything that must not sit in a process log.
@@ -1137,10 +1207,10 @@ class App:
             return {**frame, "data": "«redacted»"}
         return frame
 
-    def _write(self, channel: Channel, frame: list[dict]) -> bool:
+    async def _write(self, channel: Any, frame: list[dict]) -> bool:
         """One frame onto the socket. False when the client cannot take it — then it is its own."""
         try:
-            channel.send(json.dumps(frame, ensure_ascii=False))
+            await channel.send(json.dumps(frame, ensure_ascii=False))
             return True
         except (ChannelClosed, OSError, ValueError) as exc:
             self.dests.log.append(f"write failed: {exc}")

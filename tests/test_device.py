@@ -10,12 +10,14 @@ once — that is what the empty `messages` list gives.
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 import unittest
 
 from reflux.app import App
-from reflux.channel import JUDGED_DEAD, Channel
+from reflux.channel import JUDGED_DEAD
+from tests.fakes import background_loop, run_sync
 
 
 def counts(**over: int) -> dict[str, int]:
@@ -23,7 +25,7 @@ def counts(**over: int) -> dict[str, int]:
     return {"issued": 0, "reclaimed": 0, "dead": 0, "shed": 0, "resync": 0, "refused": 0, **over}
 
 
-class FakeChannel(Channel):
+class FakeChannel:
     """A channel as the device table sees it, with a record of what was done to it.
 
     Subclassed rather than duck-typed so the double stays assignable to what `handle()` takes; it
@@ -40,19 +42,23 @@ class FakeChannel(Channel):
         self.aborted = False
         self.frames: list[str] = []
 
-    def __iter__(self):
+    def __aiter__(self):
         # `hold` keeps the connection in the table for the duration of a test; released, the
         # reader ends at once and the device is reclaimed, which is the clean-close path.
-        self.hold.wait()
-        yield from ()
+        return self
 
-    def send(self, text: str) -> None:
+    async def __anext__(self) -> str:
+        while not self.hold.is_set():
+            await asyncio.sleep(0.005)
+        raise StopAsyncIteration
+
+    async def send(self, text: str) -> None:
         self.frames.append(text)
 
-    def ping(self, payload: bytes = b"") -> None:
+    async def ping(self, payload: bytes = b"") -> None:
         self.pings += 1
 
-    def close(self, code: int = 1000) -> None:
+    async def close(self, code: int = 1000) -> None:
         self.closed_with = code
 
     def abort(self) -> None:
@@ -62,7 +68,8 @@ class FakeChannel(Channel):
 def run_connections(app: App, *channels: FakeChannel) -> list[threading.Thread]:
     """Start one `handle()` thread per channel and wait until they are all registered."""
     threads = [
-        threading.Thread(target=app.handle, args=(channel,), daemon=True) for channel in channels
+        threading.Thread(target=run_sync, args=(app.handle(channel),), daemon=True)
+        for channel in channels
     ]
     for thread in threads:
         thread.start()
@@ -83,14 +90,14 @@ class TestDeviceLifecycle(unittest.TestCase):
 
     def test_closing_reclaims_the_device(self) -> None:
         channel = FakeChannel()
-        self.app.handle(channel)  # returns as soon as the connection ends
+        run_sync(self.app.handle(channel))  # returns as soon as the connection ends
         self.assertEqual(len(self.app.devices), 0)
         self.assertEqual(self.app.stats, counts(issued=1, reclaimed=1))
 
     def test_a_live_device_is_pinged_and_kept(self) -> None:
         channel = FakeChannel(hold=True)
         run_connections(self.app, channel)
-        self.app.watch()
+        run_sync(self.app.watch())
         self.assertEqual(channel.pings, 1)
         self.assertIn(channel, self.app.devices)
         self.assertEqual(self.app.stats["dead"], 0)
@@ -99,7 +106,7 @@ class TestDeviceLifecycle(unittest.TestCase):
     def test_a_device_gone_quiet_is_judged_dead_and_reclaimed(self) -> None:
         channel = FakeChannel(quiet_for=1.0, hold=True)  # long past dead_after
         run_connections(self.app, channel)
-        self.app.watch()
+        run_sync(self.app.watch())
         self.assertNotIn(channel, self.app.devices)
         self.assertEqual(self.app.stats["dead"], 1)
         self.assertEqual(channel.closed_with, JUDGED_DEAD)
@@ -108,7 +115,7 @@ class TestDeviceLifecycle(unittest.TestCase):
     def test_only_the_quiet_one_is_reclaimed(self) -> None:
         live, quiet = FakeChannel(hold=True), FakeChannel(quiet_for=1.0, hold=True)
         threads = run_connections(self.app, live, quiet)
-        self.app.watch()
+        run_sync(self.app.watch())
         self.assertIn(live, self.app.devices)
         self.assertEqual(live.pings, 1)
         self.assertNotIn(quiet, self.app.devices)
@@ -126,7 +133,7 @@ class TestDeviceLifecycle(unittest.TestCase):
     def test_the_watchdog_thread_ticks_the_pass(self) -> None:
         channel = FakeChannel(quiet_for=1.0, hold=True)
         run_connections(self.app, channel)
-        self.app.start_watchdog()
+        self.app.start_watchdog(background_loop())
         deadline = time.monotonic() + 2.0
         while self.app.devices and time.monotonic() < deadline:
             time.sleep(0.01)

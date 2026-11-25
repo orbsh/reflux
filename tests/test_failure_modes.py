@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 import time
@@ -18,13 +19,13 @@ import unittest
 
 from reflux import wire
 from reflux.app import App
-from reflux.channel import Channel
+from tests.fakes import run_sync
 from reflux.protocol import MAX_OPS_PER_FRAME
 from reflux.sdk import h
 
 
-class BlockingChannel(Channel):
-    """A channel whose writer blocks inside `send` until it is let go."""
+class BlockingChannel:
+    """A channel whose writer waits inside `send` until it is let go."""
 
     def __init__(self) -> None:
         self.hold = threading.Event()  # keeps the connection in the table
@@ -34,19 +35,26 @@ class BlockingChannel(Channel):
         self.closed_with: int | None = None
         self.aborted = False
 
-    def __iter__(self):
-        self.hold.wait()
-        yield from ()
+    def __aiter__(self) -> "BlockingChannel":
+        return self
 
-    def send(self, text: str) -> None:
+    async def __anext__(self) -> str:
+        while not self.hold.is_set():
+            await asyncio.sleep(0.005)
+        raise StopAsyncIteration
+
+    async def send(self, text: str) -> None:
         self.inside.set()
-        self.gate.wait(5.0)
+        # Waits without holding the loop: the point of the test is that this client's slowness
+        # suspends its own writer and nobody else's.
+        while not self.gate.is_set():
+            await asyncio.sleep(0.005)
         self.written.append(text)
 
-    def ping(self, payload: bytes = b"") -> None:
+    async def ping(self, payload: bytes = b"") -> None:
         pass
 
-    def close(self, code: int = 1000) -> None:
+    async def close(self, code: int = 1000) -> None:
         self.closed_with = code
 
     def abort(self) -> None:
@@ -54,13 +62,14 @@ class BlockingChannel(Channel):
 
 
 class FastChannel(BlockingChannel):
-    def send(self, text: str) -> None:
+    async def send(self, text: str) -> None:
         self.written.append(text)
 
 
 def run_connections(app: App, *channels: Channel) -> list[threading.Thread]:
     threads = [
-        threading.Thread(target=app.handle, args=(channel,), daemon=True) for channel in channels
+        threading.Thread(target=run_sync, args=(app.handle(channel),), daemon=True)
+        for channel in channels
     ]
     for thread in threads:
         thread.start()

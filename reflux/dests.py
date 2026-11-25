@@ -15,12 +15,29 @@ legitimate use of that prefix.
 
 from __future__ import annotations
 
+import inspect
+import json
 import traceback
 from typing import Any, Callable, overload
 
-from .protocol import RESERVED_PREFIX
+from .protocol import PING_DEST, PONG_DEST, RESERVED_PREFIX
 
 Handler = Callable[[Any, dict], None]
+
+
+def _refuse_coroutine(name: str, answered: Any) -> None:
+    """An `async def` handler needs P2 (ADR 0002): until the dispatcher awaits, refuse loudly.
+
+    A coroutine that is dropped is the worst kind of defect — nothing runs, nothing is logged,
+    and the client waits for a frame that was never built. Closing it and raising turns the
+    mistake into a line the app's own log already prints.
+    """
+    if inspect.iscoroutine(answered):
+        answered.close()
+        raise TypeError(
+            f"handler for {name!r} is async, but the dispatcher does not await yet "
+            "(ADR 0002 P2): write it as a plain function for now"
+        )
 
 
 class RegistryError(Exception):
@@ -130,6 +147,16 @@ class Registry:
             self.log.append(f"malformed frame from {ctx.id}: {frame!r}")
             return False
         name = frame["dest"]
+        if name == PING_DEST:
+            # The transport's clock (ADR 0044): answered here, on the socket, and never counted as an
+            # event or a refusal — a probe is not something the app said or could say.
+            channel = getattr(device, "channel", None)
+            if channel is not None:
+                try:
+                    channel.send(json.dumps({"dest": PONG_DEST, "data": None}, separators=(",", ":")))
+                except Exception:  # a dead socket is the reader's problem, not this frame's
+                    pass
+            return True
         local = getattr(device, "landings", None) or {}
         row = local.get(name)
         if row is not None:
@@ -159,7 +186,8 @@ class Registry:
         """One handler, one accounting — the only place a handler's exception is caught."""
         self.calls += 1
         try:
-            self._handlers[name][0](ctx, frame)
+            answered = self._handlers[name][0](ctx, frame)
+            _refuse_coroutine(name, answered)
         except Exception:  # a handler's defect stays a log line; the device survives
             self.refused += 1
             self.log.append(f"handler for {name!r} raised:\n{traceback.format_exc()}")
@@ -170,7 +198,7 @@ class Registry:
         """One closure landing point, one accounting — same rules as `_call`, one argument."""
         self.calls += 1
         try:
-            fn(frame.get("data"))
+            _refuse_coroutine(name, fn(frame.get("data")))
         except Exception:  # a page's defect stays a log line; the connection survives
             self.refused += 1
             self.log.append(f"landing {name!r} raised:\n{traceback.format_exc()}")

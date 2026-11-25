@@ -21,43 +21,43 @@ import unittest
 
 from reflux.app import App
 from reflux.auth import Auth, Tokens
-from reflux.channel import Channel
+from tests.fakes import run_sync
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, SIGNUP
 
 
-class Scripted(Channel):
-    """A connection with a script: yields its frames, then ends (so `handle` returns)."""
+class Scripted:
+    """A connection with a script: yields its frames, then ends (so `handle` returns).
+
+    The async channel `App.handle` reads (ADR 0002): `async for` in, `await send` out. Frames are
+    written before `handle` returns, so a test reads `frames` without waiting for anything.
+    """
 
     def __init__(self, *frames: dict) -> None:
         self.script = [json.dumps(frame) for frame in frames]
         self.last_seen = time.monotonic()
         self.frames: list[list[dict]] = []
 
-    def __iter__(self):
-        yield from self.script
+    def __aiter__(self) -> "Scripted":
+        self._script = iter(self.script)
+        return self
 
-    def send(self, text: str) -> None:
+    async def __anext__(self) -> str:
+        try:
+            return next(self._script)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+    async def send(self, text: str) -> None:
         self.frames.append(json.loads(text))
 
-    def ping(self, payload: bytes = b"") -> None:
+    async def ping(self, payload: bytes = b"") -> None:
         pass
 
-    def close(self, code: int = 1000) -> None:
+    async def close(self, code: int = 1000) -> None:
         pass
 
-    def abort(self) -> None:
+    async def abort(self) -> None:
         pass
-
-
-def settle(channel: Scripted, minimum: int = 1, timeout: float = 2.0) -> None:
-    """Wait for the writer thread to drain what the handlers queued.
-
-    Frames are queued per device and written by that device's own thread, so `handle` returning does
-    not mean the client has them yet. Polling is the honest wait; a sleep would only be luckier.
-    """
-    deadline = time.monotonic() + timeout
-    while len(channel.frames) < minimum and time.monotonic() < deadline:
-        time.sleep(0.005)
 
 
 def ops_on(channel: Scripted, slot: str) -> list[dict]:
@@ -96,8 +96,7 @@ class TestTheGate(unittest.TestCase):
 
         app.on("vault.other", handler, auth=True)
         channel = Scripted({"dest": "vault.other", "data": {"x": 1}})
-        app.handle(channel)
-        settle(channel)
+        run_sync(app.handle(channel))
 
         self.assertEqual(called, [], "a gated event must not reach the app from a visitor")
         self.assertEqual(app.stats["refused"], 1)
@@ -119,8 +118,7 @@ class TestTheGate(unittest.TestCase):
                                      "password": {"data": "pw", "payload": None}}},
             {"dest": "vault.open", "data": {}},
         )
-        app.handle(channel)
-        settle(channel, minimum=2)
+        run_sync(app.handle(channel))
 
         self.assertEqual(len(seen), 1, "after a login the gated event reaches its handler")
         self.assertEqual(seen[0]["user"], "user-ada")
@@ -136,8 +134,7 @@ class TestTheGate(unittest.TestCase):
             {"dest": LOGIN, "data": {"username": "ada", "password": "nope"}},
             {"dest": "vault.open", "data": {}},
         )
-        app.handle(channel)
-        settle(channel)
+        run_sync(app.handle(channel))
 
         self.assertEqual(app.stats["refused"], 1, "the gated event is still refused")
         surface = ops_on(channel, AUTH_SLOT)
@@ -148,8 +145,7 @@ class TestTheGate(unittest.TestCase):
         seen: list[dict] = []
         app.on("vault.open", lambda ctx, frame: seen.append(frame))
         channel = Scripted({"dest": "vault.open", "data": {}})
-        app.handle(channel)
-        settle(channel)
+        run_sync(app.handle(channel))
         self.assertEqual(len(seen), 1, "no gate declared, no gate enforced")
 
     def test_without_auth_the_verbs_do_not_exist(self) -> None:
@@ -158,8 +154,7 @@ class TestTheGate(unittest.TestCase):
         self.assertNotIn(SIGNUP, app.dests.names())
         self.assertNotIn(LOGOUT, app.dests.names())
         channel = Scripted({"dest": LOGIN, "data": {}})
-        app.handle(channel)
-        settle(channel)
+        run_sync(app.handle(channel))
         self.assertEqual(app.dests.refused, 1, "no door: the name is simply not registered")
         self.assertTrue(any("unregistered event" in line for line in app.dests.log))
 
@@ -174,14 +169,12 @@ class TestTheToken(unittest.TestCase):
 
         app.on("connect", on_connect)
         first = Scripted({"dest": LOGIN, "data": {"username": "ada", "password": "pw"}})
-        app.handle(first)
-        settle(first)
+        run_sync(app.handle(first))
         self.assertEqual(len(app.tokens), 1)
         token = next(iter(app.tokens._rows))
 
         second = Scripted({"dest": "reflux:hello", "data": {"path": "/", "token": token}})
-        app.handle(second)
-        settle(second)
+        run_sync(app.handle(second))
         self.assertEqual(who, ["user-ada"], "hello adopts the token before anything is drawn")
 
     def test_a_revoked_token_leaves_the_next_connection_anonymous(self) -> None:
@@ -193,14 +186,12 @@ class TestTheToken(unittest.TestCase):
             {"dest": LOGIN, "data": {"username": "ada", "password": "pw"}},
             {"dest": LOGOUT, "data": {}},
         )
-        app.handle(first)
-        settle(first)
+        run_sync(app.handle(first))
         self.assertEqual(len(app.tokens), 0, "logout drops the row")
 
         stale = "0" * 64
         second = Scripted({"dest": "reflux:hello", "data": {"path": "/", "token": stale}})
-        app.handle(second)
-        settle(second)
+        run_sync(app.handle(second))
         self.assertEqual(who, [None], "an unknown token is simply a visitor")
 
     def test_the_idle_window_expires_a_token_on_its_lookup(self) -> None:
@@ -217,8 +208,7 @@ class TestTheToken(unittest.TestCase):
             {"dest": LOGIN, "data": {"username": "ada", "password": "pw"}},
             {"dest": LOGIN, "data": {"username": "ada", "password": "pw"}},
         )
-        app.handle(channel)
-        settle(channel)
+        run_sync(app.handle(channel))
         self.assertEqual(len(app.tokens), 1, "the second login replaced the first token")
 
 
@@ -228,14 +218,12 @@ class TestTheLog(unittest.TestCase):
         channel = Scripted(
             {"dest": SIGNUP, "data": {"username": "ada", "password": "hunter2"}},
         )
-        app.handle(channel)
-        settle(channel)
+        run_sync(app.handle(channel))
         lines = json.dumps(app.log)
         self.assertNotIn("hunter2", lines)
         token = next(iter(app.tokens._rows))
         second = Scripted({"dest": "reflux:hello", "data": {"path": "/", "token": token}})
-        app.handle(second)
-        settle(second)
+        run_sync(app.handle(second))
         # What comes IN never carries the secret. What goes OUT does carry the token once — that is
         # the delivery itself (the marker the runtime keeps), so the rule is about the inbound half.
         inbound = [entry for direction, entry in app.log if direction == "recv"]
