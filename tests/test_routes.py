@@ -12,7 +12,7 @@ import unittest
 
 from reflux import Context
 from reflux.sdk import h
-from reflux.singleton import app as shared_app
+from reflux.site import app as shared_app
 from reflux.routes import (
     Routes,
     RoutesError,

@@ -1,6 +1,6 @@
-"""The deployment's app — built when this module is imported, and not before.
+"""The site's app — built when this module is imported, and not before.
 
-    from reflux.singleton import app
+    from reflux.site import app
 
     @app.page("/", title="演示")
     def home(ctx, match): ...
@@ -17,6 +17,6 @@ from __future__ import annotations
 
 from .application import create_app
 
-# The one app of this process. Every declaration in the deployment hangs on it; the demos use
-# `create_app()` instead because the zh and en trees have to coexist in a single process.
+# The one app of this site. Every declaration hangs on it; the demos use `create_app()` instead because
+# the zh and en trees have to coexist in a single process.
 app = create_app()

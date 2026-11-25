@@ -49,19 +49,19 @@ def shown(node: dict) -> str:
 
 
 class TestOneAppPerProcess(unittest.TestCase):
-    """The singleton lives in `reflux.singleton`: importing the library costs nothing, importing the
-    module is the deployment saying it has an app."""
+    """The one app of a site lives in `reflux.site`: importing the library costs nothing, importing that
+    module is the deployment saying it has a site to serve."""
 
     def test_the_package_alone_builds_no_app(self) -> None:
         import reflux
 
         self.assertFalse(hasattr(reflux, "app"), "a library import must not pay for an App")
 
-    def test_the_singleton_module_holds_one_app_for_every_importer(self) -> None:
+    def test_the_site_module_holds_one_app_for_every_importer(self) -> None:
         import importlib
 
-        first = importlib.import_module("reflux.singleton")
-        second = importlib.import_module("reflux.singleton")
+        first = importlib.import_module("reflux.site")
+        second = importlib.import_module("reflux.site")
 
         self.assertIsInstance(first.app, App)
         self.assertIs(first.app, second.app)

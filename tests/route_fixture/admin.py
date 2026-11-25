@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reflux.singleton import app
+from reflux.site import app
 
 
 def admin_layout(ctx, match, page):
