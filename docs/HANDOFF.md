@@ -34,7 +34,7 @@
 - 设置页已落地（ADR 0001）：`/settings` 导出 core.css 的整个令牌面（`TOKENS`：十个颜色、三个长度、一个线型）加 `sketch`，
   走页面选项槽 `__CONFIG__`——组的出口 `Sink(dest="__CONFIG__", scope="both", path="/")` 让改本地立刻生效、同时上行；
   `www/static/reflux.js` 的 `TOKENS` 表把渲染器镜像的 `data-*` 落到 `:root` 的 `--*`（名字加 `--` 即变量名，闭集 + 按种类校验，
-  颜色成员存 `L C H`、由这里合成 `oklch()`；空值或非法值就撤掉那条属性）。服务端 `on_config` 做白名单与值域、节流原子落盘
+  颜色成员存 `L C H`、由这里合成 `oklch()`；空值或非法值就撤掉那条属性）。页面上的颜色是点出来的：有彩度的用色相环 `hue`（角度即色相），没有彩度的用中性阶色块，线型五个词（ADR 0001 §9）。服务端 `on_config` 做白名单与值域、节流原子落盘
   （`--settings <path>`，缺省 `./.demo-settings.json`，已入 `.gitignore`），每台设备第一次被画时把已存对象写进槽。
   `tools/gate_settings.py` 十一条真浏览器门。
 - **渲染器的引导契约（2026-11-25 换 rev 撞到的）**：`window.fluxen.send` 是渲染器**第一次渲染时**才发布的（`mount_to` 排队），

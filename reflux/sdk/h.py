@@ -28,6 +28,7 @@ from .builders import (
     entry,
     forcegraph,
     frame,
+    hue,
     image,
     input,
     panel,

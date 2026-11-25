@@ -156,6 +156,14 @@ NODES: dict[str, dict] = {
         "source": {"slot": "opts", "default": "a"},
     },
     "text": text("text"),
+    # A hue ring (fluxen ADR 0048): the attrs pin the two terms a circle cannot show, the angle picks the
+    # hue, and what it packs is the written-out `L C H` triple a colour member takes.
+    "hue": {
+        "type": "hue",
+        "tag": "gate.hue",
+        "attrs": {"light": 0.7, "chroma": 0.12},
+        "source": {"default": "0.7 0.12 200"},
+    },
 }
 
 STATIC = frozenset({"image", "path"})

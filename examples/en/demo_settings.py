@@ -129,30 +129,21 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# The palette: colours are picked from these tiles, never typed. The neutral ramp is for tokens without
-# chroma (foreground, background, surface, …), the hue ring for the ones that need it (accent, primary,
-# warning, error). Each tile is one `select` option, and its id is the triple that gets sent up.
-NEUTRALS = ["1 0 0", "0.965 0 0", "0.93 0 0", "0.84 0 0", "0.6 0 0", "0.4 0 0", "0.25 0 0", "0.15 0 0"]
-HUES = ["0.7 0.12 30", "0.7 0.12 90", "0.7 0.13 150", "0.7 0.12 200", "0.7 0.12 250", "0.7 0.13 320"]
-WORDS_SLOT = "palettes.words"
-
-PALETTE_OF: dict[str, list[str]] = {
-    "fg": NEUTRALS,
-    "bg": NEUTRALS,
-    "surface": NEUTRALS,
-    "secondary": NEUTRALS,
-    "disabled": NEUTRALS,
-    "border-color": NEUTRALS,
-    "accent": HUES,
-    "primary": HUES,
-    "warn": HUES,
-    "error": HUES,
+# The four tokens that carry chroma get a hue ring: the ring gives the hue (the angle *is* the hue) and this
+# page pins the other two terms per token — its own default lightness and chroma. What the ring packs is the
+# `L C H` triple, so the member, the validators and the browser never learn that a ring was involved.
+TONE: dict[str, tuple[float, float]] = {
+    "accent": (0.7, 0.12),
+    "primary": (0.98, 0.06),
+    "warn": (0.84, 0.12),
+    "error": (0.63, 0.19),
 }
 
-# Which tile set a token reads: the ones with chroma read the hue ring, the rest the neutral ramp. The name is
-# the slot name, and a `select` reads its options from there.
-HUED = {"accent", "primary", "warn", "error"}
-PALETTE_SLOT: dict[str, str] = {name: ("palettes.hue" if name in HUED else "palettes.neutral") for name in PALETTE_OF}
+# A token without chroma (foreground, background, surface, …) has no hue to pick: those get a row of tiles on
+# the neutral ramp, and clicking one takes its triple. Each tile is one `select` option whose id is the triple.
+NEUTRALS = ["1 0 0", "0.965 0 0", "0.93 0 0", "0.84 0 0", "0.6 0 0", "0.4 0 0", "0.25 0 0", "0.15 0 0"]
+NEUTRAL_SLOT = "palettes.neutral"
+WORDS_SLOT = "palettes.words"
 
 DEFAULTS: dict[str, Any] = {"sketch": False}  # tokens are not defaults: unset means core's default
 
@@ -355,11 +346,20 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     # A `select` takes its option rows from the slot in `source` (this renderer reads `source`, not `options`
     # — see ADR 0001 §9). The value does not come from here: the `tag` gives it a copy inside the group, and
     # the group packs and sends it.
-    if kind == "color":
-        control: Accrete = h.select(
+    if kind == "color" and name in TONE:
+        light, chroma = TONE[name]
+        control: Accrete = h.hue(
+            tag=name,
+            light=light,
+            chroma=chroma,
+            source=Source(default=value),
+            id=f"cfg-{name}",
+        )
+    elif kind == "color":
+        control = h.select(
             tag=name,
             selector="cfg",
-            source=Source(slot=PALETTE_SLOT[name]),
+            source=Source(slot=NEUTRAL_SLOT),
             id=f"cfg-{name}",
         )
     elif kind == "keyword":
@@ -426,12 +426,11 @@ def page(ctx: Context, match) -> Accrete:
     # A palette is a send, not part of the page tree: a `select` reads its options from a **slot** only
     # (`bind_list` takes a slot), so the three tile sets are written once per connection — a slot outlives a
     # `create`, so the second visit to this page does not write them again.
-    for slot_name, tiles in (("palettes.neutral", NEUTRALS), ("palettes.hue", HUES)):
-        if not ctx.data.get(f"{slot_name}.seeded"):
-            ctx.data[f"{slot_name}.seeded"] = True
-            palette = ctx.slot(slot_name)
-            for triple in tiles:
-                palette.append(swatch(triple))
+    if not ctx.data.get(f"{NEUTRAL_SLOT}.seeded"):
+        ctx.data[f"{NEUTRAL_SLOT}.seeded"] = True
+        palette = ctx.slot(NEUTRAL_SLOT)
+        for triple in NEUTRALS:
+            palette.append(swatch(triple))
     if not ctx.data.get(f"{WORDS_SLOT}.seeded"):
         ctx.data[f"{WORDS_SLOT}.seeded"] = True
         words = ctx.slot(WORDS_SLOT)

@@ -652,6 +652,36 @@ pub fn select(horizontal: Option<bool>, selector: Option<&str>, source: Option<S
     Value::Object(node)
 }
 
+/// Build a `hue` node (the wire type `hue`).
+pub fn hue(chroma: Option<f64>, light: Option<f64>, selector: Option<&str>, source: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
+    let mut attrs = Map::new();
+    if let Some(v) = chroma {
+        put(&mut attrs, "chroma", Value::from(v));
+    }
+    if let Some(v) = light {
+        put(&mut attrs, "light", Value::from(v));
+    }
+    if let Some(v) = selector {
+        put(&mut attrs, "selector", s(v));
+    }
+    let source = emit_read(source);
+    let mut node = Map::new();
+    if !attrs.is_empty() {
+        put(&mut node, "attrs", Value::Object(attrs));
+    }
+    if let Some(v) = id {
+        put(&mut node, "id", s(v));
+    }
+    if let Some(v) = source {
+        put(&mut node, "source", v.clone());
+    }
+    if let Some(v) = tag {
+        put(&mut node, "tag", s(v));
+    }
+    put(&mut node, "type", s("hue"));
+    Value::Object(node)
+}
+
 /// Build a `text` node (the wire type `text`).
 pub fn text(value: Option<&str>, format: Option<&str>, selector: Option<&str>, source: Option<Source>, id: Option<&str>, variant: Option<TextVariant>) -> Value {
     let mut attrs = Map::new();

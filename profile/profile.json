@@ -200,6 +200,17 @@
       "item": false,
       "channels": {},
       "why": "the renderer instantiates it by name (a substitution node), not something a producer draws"
+    },
+    "hue": {
+      "expose": true,
+      "positional": null,
+      "children": false,
+      "item": false,
+      "channels": {
+        "source": true,
+        "sink": false,
+        "default": true
+      }
     }
   }
 }

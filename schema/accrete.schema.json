@@ -600,6 +600,82 @@
       ],
       "type": "object"
     },
+    "Hue": {
+      "additionalProperties": false,
+      "description": "A hue ring: a field whose **angle** is the hue. `attrs.light` and `attrs.chroma` fix the other two\nterms, so what it packs is the whole `L C H` triple a colour token reads — the picker and the value\nstay one thing, and nothing downstream has to know that a ring was involved.",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HueAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Source"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The current value, in the triple spelling above."
+        },
+        "tag": {
+          "description": "The field's name inside an enclosing loom (same rule as `input`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HueAttr": {
+      "description": "What the ring does not pick: the two terms it cannot show, and the usual attribute surface.",
+      "properties": {
+        "chroma": {
+          "description": "Chroma the ring keeps (0–0.4). A neutral token (chroma 0) has no hue to pick: the ring is for\nthe tokens that carry chroma, and the page says so by not using it there.",
+          "format": "double",
+          "type": "number"
+        },
+        "class": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "light": {
+          "description": "Lightness the ring keeps (0–1).",
+          "format": "double",
+          "type": "number"
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "light",
+        "chroma"
+      ],
+      "type": "object"
+    },
     "Image": {
       "properties": {
         "attrs": {
@@ -1778,6 +1854,19 @@
       "properties": {
         "type": {
           "const": "select",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Hue",
+      "properties": {
+        "type": {
+          "const": "hue",
           "type": "string"
         }
       },
