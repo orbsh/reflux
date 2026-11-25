@@ -8,7 +8,7 @@
 
 1. 等渲染器发布 `window.fluxen.send`（它由渲染器的第一次渲染给出，先于它调用会抛错、整页空白）；
 2. `codec` 与 `token` 是**这一层自己的决定**，不是渲染器的：runtime 显式 `mount(el, {codec:"json", token})`，渲染器只负责拼进 WS 地址（fluxen ADR 0046 之后它连页面 URL 都不再读）；
-3. 上行一帧 `reflux:hello`，载荷 `{path, query?, token?}`——`path` 是**应用路径**（`<base>` 前缀已换算），`query` 只在有查询串时出现，`token` 只在浏览器存着凭证时出现；
+3. `hooks.open` 里上行一帧 `reflux:hello`，载荷 `{path, query?, token?}`——**每一次连接**都发（重连是另一次握手，服务端那时是另一个人），不是"页面启动一次"——`path` 是**应用路径**（`<base>` 前缀已换算），`query` 只在有查询串时出现，`token` 只在浏览器存着凭证时出现；
 3. 监听 `popstate`：后退/前进时上行 `reflux:nav`，同一种载荷；
 4. 之后它只做镜像：读 DOM 上的 `reflux:path` / `reflux:title` / `reflux:token` 三个标记，写地址栏、标题、`localStorage`，并把页面选项的 `data-accent` / `data-round` 落成 `:root` 的 `--accent` / `--round`。
 
