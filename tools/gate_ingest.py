@@ -66,8 +66,10 @@ def send_all_events() -> None:
 
     @APP.on("gate.unknown-attr")
     def unknown_attr(ctx, frame):
-        # `selector` is hidden for every type (unlike `class`, which is the token lane now).
-        ctx.device.send(hand({"type": "text", "attrs": {"selector": "leak"}}))
+        # An attribute no type knows. Not `selector`: ADR 0031 §4 keeps it reachable, because an
+        # `entry` names its fields with it — a hand-written frame passes the same door the builders
+        # go through, so refusing it here would refuse a legal frame.
+        ctx.device.send(hand({"type": "text", "attrs": {"nope": 1}}))
 
     @APP.on("gate.duplicate-row")
     def duplicate_row(ctx, frame):
