@@ -8,23 +8,30 @@ have tests here rather than being folded into the login cases.
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from reflux.application import create_app, App
 from reflux.protocol import AUTH_SLOT, LOGIN
 from reflux.sdk import builders as h
 from tests.fakes import run_sync
+from tests.test_devices_and_mounts import Served
 from tests.test_auth import Scripted, ids, ops_on
 
 GOOD = {"username": "ada", "password": "pw"}
 
 
 def app_with(login, **hooks) -> App:
-    """An app whose `login` seam is `login`, plus any other seam named in `hooks`."""
+    """An app whose `login` seam is `login`, plus any other seam named in `hooks`.
+
+    The seats are attributes, so the names a caller may pass are the three below — a typo is a
+    `KeyError` here instead of a seam that silently registers nowhere.
+    """
     app = create_app()
-    app.hooks("login")(login)
+    app.hooks.login()(login)
+    seats = {"login.request": app.hooks.login_request, "shell": app.hooks.shell}
     for name, handler in hooks.items():
-        app.hooks(name)(handler)
+        seats[name]()(handler)
     return app
 
 
@@ -37,7 +44,19 @@ class TestTheSeam(unittest.TestCase):
 
         app = app_with(login)
         app.on("vault.other", lambda ctx, frame: seen.append((ctx.user, ctx.session)), auth=True)
-        run_sync(app.handle(Scripted({"dest": LOGIN, "data": GOOD}, {"dest": "vault.other"})))
+        run_sync(app.handle(Scripted({"dest": LOGIN, "data": GOOD})))
+
+        # The binding is what the next connection carries: a token in the hello binds the device before
+        # the first frame after it is dispatched, so the gated handler sees who it acts as.
+        token = next(iter(app.tokens._rows))
+        run_sync(
+            app.handle(
+                Scripted(
+                    {"dest": "reflux:hello", "data": {"path": "/", "token": token}},
+                    {"dest": "vault.other", "data": {}},
+                )
+            )
+        )
 
         self.assertEqual(seen, [("user-ada", {"nick": "阿青"})], "the gated handler sees who it acts as")
         self.assertEqual(app.sessions, {"user-ada": {"nick": "阿青"}})
@@ -61,13 +80,53 @@ class TestTheSeam(unittest.TestCase):
         self.assertTrue(any("expected (True, user, info)" in line for line in app.dests.log))
 
     def test_the_seam_answers_on_its_renamed_event(self) -> None:
-        app = app_with(lambda ctx, credentials, mode: (True, "user-ada", {}))
-        app.hooks("login", "登录事件")(lambda ctx, credentials, mode: (True, "user-ada", {}))
+        def login(ctx, credentials, mode):
+            return (True, "user-ada", {"nick": "阿青"})
+
+        app = app_with(login)
+        app.hooks.login("登录事件")(login)   # the page says this name, the seam keeps `login`
         channel = Scripted({"dest": "登录事件", "data": GOOD})
         run_sync(app.handle(channel))
 
-        self.assertEqual(app.sessions, {}, "no info, no session row")
-        self.assertTrue(any(op.get("slot") == AUTH_SLOT for f in channel.frames for op in f))
+        self.assertEqual(app.sessions, {"user-ada": {"nick": "阿青"}}, "the seam ran on the renamed dest")
+
+
+class TestInspect(unittest.TestCase):
+    """`@app.hooks.inspect(path)` — the app's own declaration, served as JSON, shaped by the handler."""
+
+    def test_it_serves_what_the_app_declares(self) -> None:
+        app = create_app()
+        app.page("/", title="演示")(lambda ctx, match: h.text("hi"))
+        app.hooks.inspect("/v1/inspect")(lambda data: data)
+
+        with Served(app) as served:
+            status, body = served.get("/v1/inspect")
+
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual([row["path"] for row in payload["routes"]], ["/"])
+        self.assertEqual(payload["routes"][0]["meta"]["title"], "演示")
+        self.assertIn("inspect", payload["seams"])
+        self.assertIn("/v1/inspect", payload["http"])
+
+    def test_the_handler_is_the_gate(self) -> None:
+        # Nothing about the picture is public by default: the deployment decides what the answer is,
+        # including refusing it — the seam is the door, not the room.
+        app = create_app()
+        app.hooks.inspect("/v1/inspect")(lambda data: (403, {"error": "no"}))
+
+        with Served(app) as served:
+            self.assertEqual(served.get("/v1/inspect"), (403, '{"error": "no"}'))
+
+    def test_nothing_is_served_without_the_seam(self) -> None:
+        app = create_app()
+
+        with Served(app) as served:
+            status, body = served.get("/v1/inspect")
+
+        # An unmounted path is the page (a deep link), never this app's data: no seam, no JSON.
+        self.assertEqual(status, 200)
+        self.assertNotIn('"routes"', body)
 
 
 class TestTheSurface(unittest.TestCase):

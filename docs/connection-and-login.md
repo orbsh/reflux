@@ -29,7 +29,7 @@
 from reflux import app
 from reflux.sdk import builders as h
 
-@app.hooks("login")                       # 第二个参数可改线上的事件名：@app.hooks("login", "登录事件")
+@app.hooks.login()                       # 第二个参数可改线上的事件名：@app.hooks.login("登录事件")
 def login(ctx, credentials, mode):        # mode 是 "login" 或 "signup"
     user = accounts.check(credentials)    # 你自己的验证：查库、问别的服务、绑 LDAP 都行
     if user is None:
@@ -50,7 +50,7 @@ def login(ctx, credentials, mode):        # mode 是 "login" 或 "signup"
 ### 登录面
 
 ```python
-@app.hooks("login.request")               # 自定义登录面；不写就用框架自带的两字段屏
+@app.hooks.login_request()               # 自定义登录面；不写就用框架自带的两字段屏
 def login_screen(ctx, state):             # state: "login" | "signup" | "refused"
     return h.frame(
         h.text("登录", variant="title"),
@@ -95,9 +95,9 @@ from reflux import app, Auth
 
 app = create_app(auth=Auth(idle_window=3600))   # 设置（会话多久算闲置）走构造函数
 
-@app.hooks("login")            # 验证：查库、问别的服务、绑 LDAP
-@app.hooks("login.request")    # 登录面：字段与它的页面同一套
-@app.hooks("shell")            # 外框：每个页面都在里面
+@app.hooks.login()            # 验证：查库、问别的服务、绑 LDAP
+@app.hooks.login_request()    # 登录面：字段与它的页面同一套
+@app.hooks.shell()            # 外框：每个页面都在里面
 ```
 
 `Auth(verify=…)` / `Auth(view=…)` 的老写法会被降级到同一个口子和同一个表面，运行时只有一张表；新代码用口子。

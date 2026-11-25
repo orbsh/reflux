@@ -8,11 +8,9 @@ in. Both halves are asserted here; most shapes are tables of cases, so a new cas
 
 from __future__ import annotations
 
-import contextlib
-import io
 import unittest
 
-from reflux import Context, cli
+from reflux import Context
 from reflux.sdk import h
 from reflux import app as shared_app
 from reflux.routes import (
@@ -301,39 +299,3 @@ class TestDiscovery(unittest.TestCase):
         self.assertEqual(discover(), [])
 
 
-class TestCli(unittest.TestCase):
-    def test_routes_prints_path_source_and_metadata(self) -> None:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = cli.main(["routes", "tests.route_fixture"])
-        self.assertEqual(code, 0)
-        text = out.getvalue()
-        for expected in (
-            "path",
-            "source",
-            "metadata",
-            "/blog/{slug}",
-            "/admin",
-            "tests.route_fixture.blog",
-            "title='文章'",
-        ):
-            with self.subTest(expected=expected):
-                self.assertIn(expected, text)
-        printed = [line for line in text.splitlines() if line.startswith("/")]
-        self.assertEqual(len(printed), len(shared_app.routes))
-
-    def test_a_verb_is_required(self) -> None:
-        with self.assertRaises(SystemExit) as caught:
-            cli.main([])
-        self.assertEqual(caught.exception.code, 2)
-
-    def test_an_empty_table_prints_that_it_is_empty(self) -> None:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = cli.print_routes([], table=Routes())
-        self.assertEqual(code, 0)
-        self.assertIn("nothing registered", out.getvalue())
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -37,7 +37,7 @@ def app_with_shell(*paths: str, page=None) -> App:
     built = create_app()
     for path in paths:
         built.routes.add(path, page or page_for)
-    built.hooks("shell")(shell)
+    built.hooks.shell()(shell)
     return built
 
 

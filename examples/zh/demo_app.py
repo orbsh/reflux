@@ -105,7 +105,7 @@ state = State()
 app = create_app()
 
 
-@app.hooks("shell")
+@app.hooks.shell()
 def shell(ctx: Context) -> Accrete:
     """每一页都画在里面的那个 frame：一个页头，和 `routes` 这个读槽。
 
@@ -143,7 +143,7 @@ def shell(ctx: Context) -> Accrete:
     )
 
 
-@app.hooks("login.request")
+@app.hooks.login_request()
 def demo_view(ctx, state):
     """演示自己的登录面 —— `login.request` 这个接缝，字段名与它的页面用的是同一套。
     """
@@ -163,7 +163,13 @@ def demo_view(ctx, state):
     )
 
 
-@app.hooks("login")
+@app.hooks.inspect("/v1/inspect")  # 这张应用自己的声明，走 HTTP：路由、上行落点、槽名、口子
+def inspect(data):
+    """演示不裁剪：`data` 就是答案。真实部署在这里决定给谁看（`return 403, {"error": "..."}`）。"""
+    return data
+
+
+@app.hooks.login()
 def demo_verify(ctx, credentials, mode):
     """演示的验证器：一个账号，在内存里，其余都交给框架。
 

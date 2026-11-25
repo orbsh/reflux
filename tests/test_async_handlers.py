@@ -31,7 +31,7 @@ def with_login(verify: Any) -> App:
         return (True, user, {}) if user else (False, "登录失败")
 
     app = create_app()
-    app.hooks("login")(login)
+    app.hooks.login()(login)
     return app
 
 
@@ -134,7 +134,7 @@ class TestAwaitableHandlers(unittest.TestCase):
             return h.text("shell")
 
         app = create_app()
-        app.hooks("shell")(shell)
+        app.hooks.shell()(shell)
 
         @app.page
         def page(ctx, path: str):

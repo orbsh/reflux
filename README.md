@@ -102,8 +102,9 @@ an empty box.
 Two tools tell you what a running app declared:
 
 ```
-python3 -m reflux.cli routes examples.zh.demo_app                  # path → source module → metadata
-python3 -m reflux.cli dests examples.zh.demo_app:make_app         # dest → kind → handler source
+@app.hooks.inspect("/v1/inspect")                                 # the app's declaration, as JSON
+def inspect(data):
+    return data                                                   # or a subset, or (403, {...})
 ```
 
 ## Your first app

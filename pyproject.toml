@@ -14,9 +14,6 @@ dependencies = [
     "aiohttp>=3.9",
 ]
 
-[project.scripts]
-reflux = "reflux.cli:main"
-
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"

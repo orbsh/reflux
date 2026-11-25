@@ -25,8 +25,10 @@ class TheBuild(unittest.TestCase):
         # Without this, `pip install reflux` is not a thing that exists: no backend, no wheel.
         self.assertEqual(PYPROJECT["build-system"]["build-backend"], "hatchling.build")
 
-    def test_the_command_is_an_entry_point(self) -> None:
-        self.assertEqual(PYPROJECT["project"]["scripts"]["reflux"], "reflux.cli:main")
+    def test_there_is_no_command(self) -> None:
+        # The surface is the library and the `inspect` seam, not a second binary: a command nobody calls
+        # is a table of facts that drifts from the one the running app serves.
+        self.assertNotIn("reflux", PYPROJECT["project"].get("scripts", {}))
 
     def test_the_hook_is_wired(self) -> None:
         # The hook is what puts `www/` into `reflux/www/` and fetches the bundle. Declared in pyproject,

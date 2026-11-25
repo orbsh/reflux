@@ -119,7 +119,7 @@ state = State()
 app = create_app()
 
 
-@app.hooks("shell")
+@app.hooks.shell()
 def shell(ctx: Context) -> Accrete:
     """The frame every page is drawn into: a header, and the `routes` reader.
 
@@ -158,7 +158,7 @@ def shell(ctx: Context) -> Accrete:
     )
 
 
-@app.hooks("login.request")
+@app.hooks.login_request()
 def demo_view(ctx, state):
     """The demo's own login surface — the `login.request` seam, with the field names its page also uses."""
     lines = [h.text("Demo sign-in", variant="heading-1")]
@@ -177,7 +177,13 @@ def demo_view(ctx, state):
     )
 
 
-@app.hooks("login")
+@app.hooks.inspect("/v1/inspect")  # this app's own declaration, over HTTP: routes, dests, slots, seams
+def inspect(data):
+    """The demo does not filter: `data` is the answer. A real deployment decides here who may see it."""
+    return data
+
+
+@app.hooks.login()
 def demo_verify(ctx, credentials, mode):
     """The demo's verifier: one account, in memory, and the framework does the rest.
 

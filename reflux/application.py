@@ -27,7 +27,7 @@ boundary refuses them and `dests.announce` is how they are raised.
 A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
 default the route table answers; an app with a single page sets `app.page` instead of declaring
 routes. Every app has a **shell** — the frame around every page, its navigation and its header — and
-declares its own with `@app.hooks("shell")`: a reader of the `routes` slot where pages belong. The first
+declares its own with `@app.hooks.shell()`: a reader of the `routes` slot where pages belong. The first
 frame then carries `create(shell)` plus the page in that slot, and a later page turn replaces only
 the slot. An app that declares none gets the default one, a single full-screen `routes`: one way for
 a page to reach the client, not a second shape for the app with nothing around its page.
@@ -90,7 +90,7 @@ from .sdk._parse import parse
 from .sdk.markers import PAGE_ID, token_marker
 from .sdk.types import Accrete
 from .slots import Slot, Slots
-from .server import CHANNEL, make_server
+from .server import CHANNEL, Response, make_server
 
 class Landing:
     """A closure as a landing point: `sink=add_row`, or `sink=gated(save)`.
@@ -576,6 +576,45 @@ def create_app(**settings: Any) -> "App":
     return App(**settings)
 
 
+class Seams:
+    """The framework's seams, one attribute per name — autocompletion instead of a string argument.
+
+    `@app.hooks.login()`, `@app.hooks.login("登录事件")`, `@app.hooks.login_request()`,
+    `@app.hooks.shell()`, and `@app.hooks.inspect("/v1/inspect")`. Each returns a decorator, so a seam
+    is registered where its handler is written.
+    """
+
+    __slots__ = ("_app",)
+
+    def __init__(self, app: "App") -> None:
+        self._app = app
+
+    def login(self, event: str | None = None) -> Callable[[Callable], Callable]:
+        """Prove a credential: `(ctx, credentials, mode) -> (True, user_id, info) | (False, reason)`."""
+        return self._app._seam("login", event)
+
+    def login_request(self, event: str | None = None) -> Callable[[Callable], Callable]:
+        """The surface the login seam is drawn in: `(ctx, state) -> node`. Absent, the default one."""
+        return self._app._seam("login.request", event)
+
+    def shell(self, event: str | None = None) -> Callable[[Callable], Callable]:
+        """The frame around every page: `(ctx) -> node`. Absent, `default_shell`."""
+        return self._app._seam("shell", event)
+
+    def inspect(self, path: str) -> Callable[[Callable], Callable]:
+        """Serve what this app declares as JSON at `path`, shaped by the handler it decorates.
+
+        The handler is `(data) -> json-able` and it is the gate: `data` is the whole picture (routes,
+        dests, slot names, seams, http routes), so a deployment that exposes it can refuse, filter or
+        wrap it — `return 403, {"error": "..."}`, or just a subset. Nothing is exposed unless this seam
+        is registered, and nothing is served beyond the path it is registered on.
+        """
+        return self._app._describe_at(path)
+
+    def __repr__(self) -> str:
+        return f"<seams: {', '.join(sorted(self._app._hooks)) or 'none'}>"
+
+
 class App:
     """A reflux producer: the page tree, the channel route, the registry, and the pages."""
 
@@ -608,7 +647,7 @@ class App:
         # shell(ctx) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
         # A page turn replaces that one slot; an app that declares none gets `default_shell`, so
         # there is no second shape for the app with nothing around its page.
-        # The frame around every page. `@app.hooks("shell")` replaces it; absent, `default_shell`.
+        # The frame around every page. `@app.hooks.shell()` replaces it; absent, `default_shell`.
         # There is no constructor spelling: a seam is a seam (ADR-level rule — one table, one way in).
         self.shell: Callable[[Context], Any] = default_shell
         # Live devices, keyed by the channel itself: reclaiming one is a matter of identity, so
@@ -656,6 +695,14 @@ class App:
         # name a seam ("login", "login.request", "shell"); a handler registered for one replaces the
         # framework's default, and a second argument renames the event the seam answers on.
         self._hooks: dict[str, tuple[Callable, str | None]] = {}
+        # The seams, as attributes: `@app.hooks.shell()` completes, a string does not.
+        self.hooks = Seams(self)
+        # What `hooks.inspect` was registered with, if it was; the handler shapes the answer.
+        self._inspect: Callable[[dict], Any] | None = None
+        # `login` turns the three auth verbs on once, however many times the seam is registered.
+        self._auth_enabled = False
+        # Wire names a renamed `login` seam also answers on (the builtins are registered once).
+        self._login_aliases: set[str] = set()
         self.sessions: dict[str, dict] = {}
         if auth is not None and getattr(auth, "verify", None) is not None:
             # The short form lands in the same table the decorator writes to, so there is one seam at
@@ -913,23 +960,12 @@ class App:
             name = name.name
         self.views[name] = render
 
-    def hooks(self, name: str, event: str | None = None) -> Callable[[Callable], Callable]:
-        """Take over one of the framework's seams: `@app.hooks("login")`.
+    def _seam(self, name: str, event: str | None = None) -> Callable[[Callable], Callable]:
+        """Register a handler for one seam — the machinery behind `app.hooks.<name>`.
 
-        The seams are the places where the framework would otherwise decide for the deployment:
-
-        - `"login"` — prove a credential. Called as `(ctx, credentials, mode)` where `mode` is
-          `"login"` or `"signup"` (one seam, and the mode is what lets a deployment create an account
-          on the same call it checks one); it returns
-          `(True, user_id, info)` on success or `(False, reason)` on refusal. `info` is the app's own
-          and the framework only hands it back (`ctx.session`); `reason` is shown to the person.
-        - `"login.request"` — the surface the login seam is drawn in, `(ctx, state) -> node`. Absent,
-          the framework draws its own two-field screen.
-        - `"shell"` — the frame around every page, `(ctx) -> node`. Absent, `default_shell`.
-
-        The second argument is the event's name on the wire: `@app.hooks("login", "登录事件")` makes
-        the page's uplink `{"dest": "登录事件"}`. The seam keeps its own name either way — a
-        deployment renames what the page says, never what the framework asks for.
+        `event` is the seam's name on the wire: `@app.hooks.login("登录事件")` makes the page's uplink
+        `{"dest": "登录事件"}`. The seam keeps its own name either way — a deployment renames what the
+        page says, never what the framework asks for.
         """
 
         def register(handler: Callable) -> Callable:
@@ -938,6 +974,11 @@ class App:
             self._hooks[name] = (handler, event)
             if name == "login":
                 self._enable_auth()
+                # A renamed login answers on the name the page says, so that name has to be a dest too.
+                # The seam keeps calling itself `login`; only the wire name moved.
+                if event and event != LOGIN and event not in self._login_aliases:
+                    self.dests.builtin(event, self._login)
+                    self._login_aliases.add(event)
             elif name == "shell":
                 # Rendering reads `self.shell`, so the seam has to land there too — a name in `_hooks`
                 # that nothing consults is the kind of seam that looks registered and never runs.
@@ -951,6 +992,59 @@ class App:
         found = self._hooks.get(name)
         return found[0] if found else None
 
+    def describe(self) -> dict[str, Any]:
+        """What this app declares, as plain data — the answer `hooks.inspect` serves.
+
+        Fresh on every call: it reads the tables, it does not cache them, so what comes out is what the
+        running app would answer this moment.
+        """
+        return {
+            "routes": [
+                {"path": path, "source": source, "meta": dict(meta)}
+                for path, source, meta in self.routes.table()
+            ],
+            "dests": [
+                {"name": name, "kind": kind, "source": source}
+                for name, kind, source in self.dests.table()
+            ],
+            "slots": sorted(self.declared),
+            "seams": sorted(set(self._hooks) | ({"inspect"} if self._inspect else set())),
+            "http": sorted(self.mounts),
+        }
+
+    def _describe_at(self, path: str) -> Callable[[Callable], Callable]:
+        """Mount `describe()` at `path`, shaped by the handler registered here."""
+
+        def register(handler: Callable) -> Callable:
+            if not callable(handler):
+                raise TypeError("hooks.inspect(path): handler must be callable")
+            self._inspect = handler
+            self.mount(path, self._inspect_response)
+            return handler
+
+        return register
+
+    def _inspect_response(self, request: Any) -> Any:
+        data = self.describe()
+        answered = self._inspect(data) if self._inspect is not None else data
+        if isinstance(answered, Response):
+            return answered
+        if isinstance(answered, tuple) and len(answered) == 2:
+            # `(status, body)` is the framework's pair shape, but a dict body is JSON here: this seam's
+            # whole answer is data, so the encoding follows the answer, not the caller's memory.
+            status, body = answered
+            if isinstance(body, (str, bytes)):
+                return Response(status=int(status), body=body)
+            return Response(
+                status=int(status),
+                body=json.dumps(body, ensure_ascii=False, default=str),
+                content_type="application/json; charset=utf-8",
+            )
+        return Response(
+            body=json.dumps(answered, ensure_ascii=False, default=str),
+            content_type="application/json; charset=utf-8",
+        )
+
     def hook_event(self, name: str) -> str:
         """The wire name a seam answers on: the app's rename, else the seam's own name."""
         found = self._hooks.get(name)
@@ -963,6 +1057,11 @@ class App:
         verbs are registered here rather than in `__init__`: an app with no `login` seam has no door,
         not a locked one — a frame naming `login` is refused as unregistered.
         """
+        # Twice is not an error: a seam can be re-registered (a rename, a later decorator), and the
+        # verbs are already in the table from the first time.
+        if self._auth_enabled:
+            return
+        self._auth_enabled = True
         if self.tokens is None:
             self.tokens = Tokens(
                 idle_window=self.auth.idle_window if self.auth is not None else DEFAULT_IDLE_WINDOW,

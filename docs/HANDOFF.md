@@ -63,8 +63,7 @@ python3 tools/gate_t10.py                        # 8 条：Rust SDK 的七帧与
 python3 tools/gate_chat.py                       # 12 条：示例应用的后端（9 条真 socket + 3 条真浏览器）
 python3 -m examples.chat.app --port 8100  # 手工起示例应用（AI 对话）
 python3 -m examples.chat.walkthrough --auto   # 示例的快速演示（自己起 app，六个行为各一步）
-python3 -m reflux.cli routes examples.zh.demo_app       # 路由表（import 的副作用）
-python3 -m reflux.cli dests examples.zh.demo_app:make_app   # 上行落点注册表（名字 / builtin|app / 来源）
+curl -s localhost:8000/v1/inspect | jq        # 应用自己声明的表（需要先注册 @app.hooks.inspect）
 python3 tools/serve.py --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
 python3 -m examples.zh.demo_app --port 0              # 起参考应用（回声／列表／loom／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
