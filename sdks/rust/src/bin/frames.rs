@@ -168,7 +168,7 @@ fn home() -> Value {
                 &[input(
                     None,
                     None,
-                    None,
+                    None, None,
                     None,
                     None,
                     None,
@@ -242,8 +242,8 @@ fn home() -> Value {
                 &[
                     frame(
                         &[
-                            input(None, None, None, None, None, None, Some("user"), Some("f-user")),
-                            input(None, None, None, field_kind(JsType::Password), None, None,
+                            input(None, None, None, None, None, None, None, Some("user"), Some("f-user")),
+                            input(None, None, None, None, field_kind(JsType::Password), None, None,
                                   Some("pass"), Some("f-pass")),
                         ],
                         None,
@@ -444,7 +444,7 @@ fn login_surface() -> Value {
                     input(
                         None,
                         None,
-                        None,
+                        None, None,
                         None,
                         None,
                         None,
@@ -454,7 +454,7 @@ fn login_surface() -> Value {
                     input(
                         None,
                         None,
-                        None,
+                        None, None,
                         field_kind(JsType::Password),
                         None,
                         None,
