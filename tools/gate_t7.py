@@ -84,7 +84,7 @@ def browser_phase() -> list[tuple[str, bool, str]]:
 def half_open_phase() -> list[tuple[str, bool, str]]:
     # No routes and no page: this phase is about the device table, and an app that draws nothing
     # keeps it that way (an empty table of its own, so the demo's routes cannot leak in).
-    app = App(routes=Routes(), heartbeat=0.1, dead_after=0.3)
+    app = App(heartbeat=0.1, dead_after=0.3)
     srv = app.make_server(0)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()

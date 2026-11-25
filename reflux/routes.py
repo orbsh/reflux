@@ -1,13 +1,13 @@
 """Routing: a table keyed by path, declared where the handler is written.
 
-    from reflux import page
+    from reflux.site import app
 
-    @page("/blog/{slug}", title="文章")
+    @app.page("/blog/{slug}", title="文章")
     def post(ctx, match):
         return h.frame(...)
 
-    @page("/")                 # an alias: the same handler on a second path
-    @page("/posts")
+    @app.page("/")             # an alias: the same handler on a second path
+    @app.page("/posts")
     def post_index(ctx, match):
         return h.frame(...)
 

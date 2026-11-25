@@ -20,11 +20,12 @@ The words that matter here: a **device** is one connection (not a user — one u
 hangs its own facts on (an identity, a name), and the **channel is a route** in `app.mounts` next to
 whatever else the app mounts.
 
-    from reflux import Request, Response, page, wire
+    from reflux import Request, Response, wire
     from reflux.sdk import h
+    from reflux.site import app
 
-    @page("/blog/{slug}", title="文章")
-    def post(device, match):
+    @app.page("/blog/{slug}", title="文章")
+    def post(ctx, match):
         return h.frame(h.text(match.params["slug"]))
 
     @app.mount("/health")
