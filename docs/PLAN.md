@@ -79,3 +79,26 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] 测试与夹具：`tests/test_sdk_generated.py`（带 `tag` 的字段、拒绝无 `tag` 的 remote sink、本地落点仍合法）、`tests/types_fixture.py` 的 `input` 条目补 `tag`、`tests/test_counter.py` 的载荷改成 `{"step": "5"}`。
 - [x] 门与文档：t0/t2/t3/t4/t6/t7/t9/t10/chat/demo 全绿（t4 改成断言"无 `tag` 的字段回车什么都不发、也不清空"，t10 的 Rust 夹具按新签名与新页面同步）；README 的 SDK 段、`docs/DESIGN.md` 的 ADR 0032 段落写了这条规则，`gen_sdk.py --check` 在同步态。
 - [ ] **字段上的 `sink` 要删**（决定已落，实施在 fluxen）：`Input`/`Select` 仍带 `sink`，而 ADR 0032 §2 让它只剩两种借道用途——`type`（`widgets/input.rs` 的 `sink.type`，读侧 `source.type` 亦可）与"不进组字段的本地落点"（开关点击、过滤框击键）。决定与理由写在 fluxen `docs/decisions/0032-a-loom-packs-fields.md` §2 末段（"The field's `sink` itself is going, too"，2026-11-24），工单 scratch **#470**。本仓随之要做的只有删除：`reflux/sdk/_parse.py` 的 `_check_uplinks` 与 `tests/test_sdk_generated.py` 里那条拒绝用例、`tests/test_auth.py::TheLoginSurface`（密码框不再需要 `source=Bind(type=…)` 借道），以及各处 `h.input(tag=…, source=Bind(type=…))` 收敛成字段属性——等 fluxen 的 schema 到位再动。
+
+## 设置页（ADR 0001，2026-11-25，进行中）
+
+决定在 `docs/adr/0001-page-options-and-the-settings-page.md`：值走 `__CONFIG__` 一个槽（fluxen ADR 0038 §2），组的 `sink` 用 `scope: both`——本地立刻改、同时上行；浏览器侧由 `reflux.js` 的 `STYLE` 表把镜像的 `data-*` 落到 `:root` 的自定义属性；服务端是"新连接从哪开始"那份，落盘记住选择。
+
+- [ ] 设置页：`examples/{zh,en}/demo_settings.py` 一页，一个组装 `sketch`（`kind: bool`）、`accent`、`round`，`sink=Sink(dest="__CONFIG__", scope="both", path="/")`、`submit=["change"]`、`reset="keep"`；`demo_app.py` 注册路由与导航项。
+- [ ] 上行与持久化：`@app.on("__CONFIG__")` 合并成员、白名单与值域校验、节流落盘（`--settings <path>`，缺省 `./.demo-settings.json`，入 `.gitignore`）；每页绘制前先 `set` 已存对象，新连接第一帧即生效。
+- [ ] 上色：`www/static/reflux.js` 加 `STYLE` 表（`accent` 格式校验、`round` 0–24 补 `px`），`paint()` 先读一次再挂 `MutationObserver`；`docs/DESIGN.md` 的 I6 与 `HANDOFF` 记这条新契约。
+- [ ] 验证：`gate_t3` 覆盖 `loom`/`bool`/`number` 的字段与出口；新增一条门断言"一帧 `__CONFIG__` 上行 → 槽里有对象 → `data-*` 镜像正确"；`unittest` 补 `STYLE` 表与服务端合并/校验/flatten 的用例；十道门与 349 例复跑。
+
+## 服务端搬到 asyncio（ADR 0002，2026-11-25，进行中）
+
+决定在 `docs/adr/0002-asyncio-transport-and-async-handlers.md`：传输从 `ThreadingHTTPServer` + 每设备读/写线程换成 **aiohttp**（一条 loop、一条连接一个 task），处理器写 `async def` 原生 await，同步处理器由框架 `to_thread` 兜住；`ctx.emit`/`ctx.slot` 保持同步；取消与超时用 `asyncio.timeout`；`@app.startup`/`@app.shutdown` 给 `ClientSession`、连接池与后台 task 一个在 loop 上建、在 loop 上关的地方。净效果是删代码：`channel.py` 的 WS 帧编解码与 `server.py` 的 HTTP 特例都不再是本仓的。
+
+- [ ] `pyproject.toml` 加 `aiohttp>=3.9`，并删掉 "the rest of reflux stays stdlib-only"（它已经不真：`pydantic-core` 是编译的）。
+- [ ] `server.py` → `web.Application`：静态路由 + index 兜底（深链与刷新）、`no-store`；现有门的断言就是这层的能力清单。
+- [ ] `channel.py` → 约 40 行的 `Channel` 适配器（`WebSocketResponse` 的 `receive_str`/`send_str`/`drain`），帧编解码与 `accept_key`/`is_upgrade` 删除。
+- [ ] `app.py`：`handle` → 连接 task；`_pump`/`flush_device`/`await_frames`/`outbox` → `asyncio.Queue(maxsize)` + `drain`（队满丢弃并标 `stale`，空闲时重画一次）；看门狗 → 一个 task；`Device.emit` 改成入队。
+- [ ] 处理器面：`@app.on`（含 `announce`）、闭包落点、`@app.page`／单页、`shell`、`app.view` 渲染器、`Auth.verify` 全部支持 async；同步的走 `to_thread`；`App(handler_timeout=30.0)`；`CancelledError` 不吞。
+- [ ] 生命周期与入口：`@app.startup`/`@app.shutdown`、`App.serve()`（CLI，`AppRunner`+`TCPSite`）、`App.start()`/`stop()`（测试与嵌入，runner + 后台 loop）、`app.loop` 与 `app.http`（`ClientSession`）；`cli.py` 改跑 `serve()`。
+- [ ] 聊天页：`ChatModel.reply` → `AsyncIterator[str]`（脚本模型 `await asyncio.sleep`；SSE 腿用 `app.http`），流式线程 → task。
+- [ ] 文档：`DESIGN.md:70` 的 `channel.py`（stdlib）那句改写，并加「并发模型」一节（一条 loop、同步处理器 `to_thread`、"在 loop 上不许阻塞"的纪律、`ctx` 保持同步）；`HANDOFF` 记 `serve()`/`start()` 分工与 `to_thread` 是唯一跨界点。
+- [ ] 验证：单测覆盖 async/sync 处理器、async 页面、async `verify`、超时、取消、同一设备不交错、慢客户端不拖别人；十道门与全量测试复跑。
