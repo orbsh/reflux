@@ -62,6 +62,13 @@ def rows(cdp: Cdp) -> int:
     return cdp.eval("document.querySelectorAll('#rows .button').length") or 0
 
 
+def row_texts(cdp: Cdp) -> list[str]:
+    """The list's rows in screen order — each cargo frame carries its row's text."""
+    return cdp.eval(
+        "[...document.querySelectorAll('#rows [id$=\"-cargo\"]')].map(el => (el.innerText || '').trim())"
+    ) or []
+
+
 def frames(app, event: str) -> list[dict]:
     return [
         frame
@@ -109,6 +116,21 @@ DRAG_FIRST_ROW = """(() => {
   fire(dock, 'drop');
   fire(grab, 'dragend');
   return 'ok';
+})()"""
+
+
+DRAG_LAST_ROW_ONTO_FIRST = """(() => {
+  const rows = [...document.querySelectorAll('#rows [id$="-cargo"]')];
+  const grab = rows[rows.length - 1], onto = rows[0];
+  if (!grab || !onto || grab === onto) return 'missing';
+  const dt = new DataTransfer();
+  const fire = (el, type) => el.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: dt}));
+  fire(grab, 'dragstart');
+  fire(onto, 'dragenter');
+  fire(onto, 'dragover');
+  fire(onto, 'drop');
+  fire(grab, 'dragend');
+  return grab.id + '>' + onto.id;
 })()"""
 
 
@@ -170,6 +192,22 @@ def main() -> int:
                 bool(archived) and len(frames(app, "row.archive")) == before + 1,
                 f"rows={rows(cdp)} frames+{len(frames(app, 'row.archive')) - before} "
                 f"line={'已归档' in body(cdp)}",
+            )
+        )
+
+        # 4b — the same gesture, a different landing: a row dropped on another row reorders the list,
+        #      and the wire says one `move` (the keyed step reuses that row's node; nothing is rebuilt).
+        click_label(cdp, "加一行")
+        click_label(cdp, "加一行")
+        wait_for(lambda: rows(cdp) == 3)
+        order, before_moves = row_texts(cdp), len(frames(app, "row.move"))
+        cdp.eval(DRAG_LAST_ROW_ONTO_FIRST)
+        reordered = wait_for(lambda: row_texts(cdp) == [order[-1]] + order[:-1])
+        checks.append(
+            (
+                "a row dropped on another row reorders the list with one move",
+                bool(reordered) and len(frames(app, "row.move")) == before_moves + 1,
+                f"order={row_texts(cdp)} moves+{len(frames(app, 'row.move')) - before_moves}",
             )
         )
 

@@ -38,6 +38,7 @@ import argparse
 import json
 from pathlib import Path
 
+from reflux import signals
 from reflux.application import Context, gated
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.server import Request, Response
@@ -63,26 +64,29 @@ def nav_loom(label: str, dest: Slot) -> Accrete:
     return h.loom(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
-def row_node(row: dict) -> Accrete:
-    """一行：一个 loom（删掉它的那个 ✕）套着一个可拖的 frame（货物）。
+def row_node(text: str, row_id: str) -> Accrete:
+    """一行：一个 loom（删掉它的那个 ✕）套着一个可拖的 frame —— 它既是货物，也是落点。
 
     一行有两条出路，用两种机制是故意的：按钮是按 loom 的 id 上行，拖拽则一声不响，直到落点说出
     它去了哪（ADR 0034：货物就是被拖的子树，落点报告被拖节点自己的 id）。所以这一行的 loom 保留
     `<行 id>` —— `remove` 寻址的就是它 —— 而货物 frame 给自己取名 `<行 id>-cargo`，因为"一棵树里
     一个 id"是 wire 的规矩，落点也没有别的字段能携带身份。
 
+    同一个 frame 两头都长：`draggable` 让它当货物，`accept` + `sink` 让它当落点 —— 于是"落在哪一行
+    身上"由落点自己的 id 说，"哪一行被拖"由货物的 id 说，一次 drop 两样都有，换位不必再问页面。
+
     两个 frame 说明这一行怎么分：loom 是一行 flex，条目都长，于是货物拿走宽度（`flex: 1 1 auto`），
     而 ✕ 保持自己的尺寸，并在它没占满的高度里居中。
     """
     # `remove` 在槽上是动词，所以这个名字要用下标写。
     return h.loom(
-        h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
-                id=f"{row['id']}-cargo"),
+        h.frame(h.text(text), draggable={"tag": "row"}, accept={"tag": "row"},
+                sink=slots("row.move"), style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
         h.frame(h.button("删"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots.row["remove"],
         submit=["button"],
-        id=row["id"],
+        id=row_id,
     )
 
 
@@ -95,7 +99,9 @@ class State:
 
     def __init__(self) -> None:
         self.echo = ""
-        self.rows = [{"id": "row-1", "text": "第一行"}, {"id": "row-2", "text": "第二行"}]
+        # 行是一张信号：改它就够，槽由 `signals.keyed` 跟着写（增、删、换位各一种 op）。
+        # 每行是 `(id, 文本)`：身份在数据里，`keyed` 与渲染函数都用这一份，不看位置。
+        self.rows = signals.Signal([("row-1", "第一行"), ("row-2", "第二行")])
         self.next_row = 3
 
 
@@ -213,23 +219,20 @@ def home_page(ctx, match):
         slots.echo.set(h.text(state.echo))
 
     def add_row(value: object) -> None:
-        row = {"id": f"row-{state.next_row}", "text": f"第 {state.next_row} 行"}
+        row = (f"row-{state.next_row}", f"第 {state.next_row} 行")
         state.next_row += 1
-        state.rows.append(row)
-        slots.rows.append(row_node(row))
+        state.rows.value = state.rows.value + [row]  # 槽不在这里写：`keyed` 跟着信号补一条 append
 
     def reveal(value: object) -> None:
         # 只有已登录的点击能到这里：其余的在闭包之前就被门答掉了（`gated`）。
         ctx.data["may_see_secret"] = True
         slots.secret.set(h.text("机密内容"))
 
-    # 槽活得比一次 `create` 长（树被替换，数据面不会），所以这些行每条连接只种一次 ——
-    # 第二次进来再追加一遍就会翻倍。它和别的写入一样是一次发送，所以是
-    # `ctx.slot.rows.append(...)`，而不是树的一部分。
-    if not ctx.data.get("rows_seeded"):
-        ctx.data["rows_seeded"] = True
-        for row in state.rows:
-            slots_of(ctx).rows.append(row_node(row))
+    # 行由 `signals.keyed` 与 `state.rows` 对齐：这条连接第一次画这一页时它把现有的行全部 append 上去，
+    # 之后只跟着信号走增删与换位。槽活得比一次 `create` 长（树被替换，数据面不会），所以这张订阅只建
+    # 一次 —— 第二次进来再建一遍就会把同样的行 append 两次。
+    if ctx.data.get("rows_keyed") is None:
+        ctx.data["rows_keyed"] = signals.keyed(ctx, "rows", state.rows, row_node)
     # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
     # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
@@ -261,7 +264,8 @@ def home_page(ctx, match):
                 h.frame(
                     h.text("列表 · 拖拽", variant="heading-3"),
                     h.text(
-                        "行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。",
+                        "行的身份在 id 上：✕ 按 id 删，拖到归档框按 id 归档，拖到另一行身上则换位 —— "
+                        "手势本身什么都不说，只有落点说话。",
                         variant="muted",
                     ),
                     h.loom(h.button("加一行"), sink=add_row,
@@ -357,8 +361,7 @@ def about_page(ctx, match):
 @app.on(slots.row["remove"])  # `remove` 是动词：这个名字要用下标访问
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # 这一行的表单把它的身份带了上来
-    state.rows = [row for row in state.rows if row["id"] != row_id]
-    slots_of(ctx).rows.remove(row_id)
+    state.rows.value = [row for row in state.rows.value if row[0] != row_id]
 
 
 @app.on(slots("row.archive"))
@@ -367,12 +370,30 @@ def on_archive(ctx, frame) -> None:
     """
     cargo = (frame.get("data") or {}).get("id") or ""
     row_id = cargo.removesuffix("-cargo")
-    row = next((r for r in state.rows if r["id"] == row_id), None)
+    row = next((r for r in state.rows.value if r[0] == row_id), None)
     if row is None:
         return
-    state.rows = [r for r in state.rows if r["id"] != row_id]
-    slots_of(ctx).rows.remove(row_id)
-    slots_of(ctx).archived.set(h.text(f"已归档：{row['text']}"))
+    slots_of(ctx).archived.set(h.text(f"已归档：{row[1]}"))
+    state.rows.value = [r for r in state.rows.value if r[0] != row_id]
+
+
+@app.on(slots("row.move"))
+def on_move(ctx, frame) -> None:
+    """一行落在另一行身上：把它挪到落点那一行的位置。
+
+    两头的身份都在这一帧里（`id` 是落点，`data.id` 是被拖的），所以换位只是一次列表重排 ——
+    线上是一帧 `move`，行节点被渲染器复用，焦点不丢（fluxen ADR 0005）。
+    """
+    target = (frame.get("id") or "").removesuffix("-cargo")
+    dragged = ((frame.get("data") or {}).get("id") or "").removesuffix("-cargo")
+    rows = state.rows.value
+    ids = [row[0] for row in rows]
+    if not dragged or dragged == target or dragged not in ids or target not in ids:
+        return  # 落在自己身上，或有一头已经不在表里：什么都没发生
+    moving = rows[ids.index(dragged)]
+    rest = [row for row in rows if row[0] != dragged]
+    rest.insert([row[0] for row in rest].index(target), moving)  # 落在谁身上，就排到谁前面
+    state.rows.value = rest
 
 
 @app.on(slots(GO_HOME.name))

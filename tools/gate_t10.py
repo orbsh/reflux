@@ -50,7 +50,7 @@ def python_turns() -> list[tuple[str, dict]]:
         ("echo", wire.draw(wire.set("echo", h.text("hello")))),
         (
             "add row",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append("rows", demo.row_node("第 4 行", "row-4"))),
         ),
         ("remove row", wire.draw(wire.remove("rows", "row-1"))),
         # One row to the head of its list: the same id, no new node (ADR 0040).
@@ -66,7 +66,7 @@ def python_turns() -> list[tuple[str, dict]]:
             "page turn",
             wire.draw(
 wire.create(*_page_nodes("/")),  # the app's own page root: markers and all
-                *[wire.append("rows", demo.row_node(row)) for row in demo.state.rows]),
+                *[wire.append("rows", demo.row_node(text, row_id)) for row_id, text in demo.state.rows.value]),
         ),
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.

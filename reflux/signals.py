@@ -265,7 +265,7 @@ def into(ctx: Any, name: str, computed: Computed[Any]) -> Computed[Any]:
 def keyed(
     ctx: Any,
     name: str,
-    rows: Signal[list[tuple[str, Any]]],
+    rows: Any,  # a `Signal[[(id, item), ...]]`, or a `Computed` of one — anything with `.value`
     render: Callable[[Any, str], Any],
 ) -> Effect:
     """Keep the list slot `name` equal to `rows`, by id: append what is new, remove what is gone.

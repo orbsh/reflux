@@ -77,7 +77,7 @@ def seed_frame() -> list[dict]:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
         wire.create(*_page_nodes("/")),
-        *[wire.append("rows", demo.row_node(row)) for row in demo.state.rows],
+        *[wire.append("rows", demo.row_node(text, row_id)) for row_id, text in demo.state.rows.value],
     )
 
 
@@ -86,9 +86,11 @@ def section_bytes() -> None:
         ("echo (`set`)", wire.draw(wire.set("echo", h.text("hello")))),
         (
             "add row (`append`)",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-4", "text": "第 4 行"}))),
+            wire.draw(wire.append("rows", demo.row_node("第 4 行", "row-4"))),
         ),
         ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
+        # A reorder says one row, and carries no node: the renderer reuses the one it has (ADR 0005).
+        ("move row (`move`)", wire.draw(wire.move("rows", "row-3", -1))),
         (
             "loom submit (`set`)",
             wire.draw(wire.set("submitted", h.text('已提交 {"pass": "secret", "user": "ada"}'))),
@@ -144,7 +146,7 @@ def section_mutations() -> None:
         )
         turn(
             "list: `append` one row",
-            wire.draw(wire.append("rows", demo.row_node({"id": "row-m", "text": "measured-row"}))),
+            wire.draw(wire.append("rows", demo.row_node("measured-row", "row-m"))),
             "measured-row",
         )
         turn(

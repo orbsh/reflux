@@ -109,14 +109,14 @@ fn row_node(id: &str, value: &str) -> Value {
     let children = [
         frame(
             &[text(Some(value), None, None, None, None, None)],
-            None,
-            Some(json!({"tag": "row"})),
+            Some(json!({"tag": "row"})),      // accept: the row is a landing too...
+            Some(json!({"tag": "row"})),      // ...and still cargo: one frame, both ends
             None,
             None,
             None,
             Some(json!({"flex": "1 1 auto"})),
             None,
-            None,
+            Some(remote_sink("row.move")),    // a row dropped on a row swaps them
             Some(&cargo),
             None,
         ),
@@ -191,7 +191,7 @@ fn home() -> Value {
         &[
             text(Some("列表 · 拖拽"), None, None, None, None, Some(TextVariant::Heading3)),
             text(
-                Some("行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。"),
+                Some("行的身份在 id 上：✕ 按 id 删，拖到归档框按 id 归档，拖到另一行身上则换位 —— 手势本身什么都不说，只有落点说话。"),
                 None,
                 None,
                 None,

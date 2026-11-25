@@ -169,6 +169,7 @@ class TestTheDemoApp(unittest.TestCase):
                 "reflux:nav",
                 "reflux:signup",
                 "row.archive",
+                "row.move",
                 "row.remove",
             ],
         )
@@ -193,6 +194,44 @@ class TestTheDemoApp(unittest.TestCase):
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         run_sync(app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}}))
         self.assertEqual([op["action"] for op in drawn(device)], ["set"])
+
+    def _drop(self, app: App, device: FakeDevice, dragged: str, target: str) -> bool:
+        """A drop onto a row: the landing frame reports `id` (itself) and `data.id` (the cargo)."""
+        return run_sync(
+            app.dests.dispatch(
+                device,
+                {"dest": "row.move", "id": f"{target}-cargo", "data": {"id": f"{dragged}-cargo", "tag": "row"}},
+            )
+        )
+
+    def test_a_row_dropped_on_another_row_is_one_move(self) -> None:
+        """The reorder path: the drop says both ends, the list changes, and the wire says one `move`."""
+        app = demo.app
+        before = list(demo.state.rows.value)
+        self.addCleanup(setattr, demo.state.rows, "value", before)  # module state: put it back
+        device = FakeDevice(app=app)
+        run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
+        device.frames.clear()
+
+        self._drop(app, device, dragged=before[1][0], target=before[0][0])
+
+        self.assertEqual([row[0] for row in demo.state.rows.value], [before[1][0], before[0][0]])
+        operations = [operation for frame in device.frames for operation in frame]
+        self.assertEqual([operation["action"] for operation in operations], ["move"], "one op, not a rebuild")
+        self.assertEqual(operations[0]["slot"], "rows")
+
+    def test_a_row_dropped_on_itself_changes_nothing(self) -> None:
+        app = demo.app
+        before = list(demo.state.rows.value)
+        self.addCleanup(setattr, demo.state.rows, "value", before)
+        device = FakeDevice(app=app)
+        run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
+        device.frames.clear()
+
+        self._drop(app, device, dragged=before[0][0], target=before[0][0])
+
+        self.assertEqual(demo.state.rows.value, before)
+        self.assertEqual([operation for frame in device.frames for operation in frame], [], "nothing to say")
 
     def test_the_demo_page_carries_the_two_markers(self) -> None:
         app = demo.app

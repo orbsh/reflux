@@ -48,6 +48,7 @@ import argparse
 import json
 from pathlib import Path
 
+from reflux import signals
 from reflux.application import Context, gated
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.server import Request, Response
@@ -73,8 +74,8 @@ def nav_loom(label: str, dest: Slot) -> Accrete:
     return h.loom(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
-def row_node(row: dict) -> Accrete:
-    """One row: a loom (the ✕ that removes it) around a draggable frame (the cargo).
+def row_node(text: str, row_id: str) -> Accrete:
+    """One row: a loom (the ✕ that removes it) around a draggable frame — its cargo and its landing.
 
     The two ways out of a row are different mechanisms on purpose: the button is an uplink on the
     loom's id, a drag is silent until a landing point says where it went (ADR 0034: the cargo is
@@ -82,19 +83,23 @@ def row_node(row: dict) -> Accrete:
     `<row id>` — that is what `remove` addresses — and the cargo frame names itself `<row id>-cargo`,
     because one id per tree is the wire's rule and the drop has no other field to carry identity in.
 
+    The same frame grows both ends: `draggable` makes it cargo, `accept` + `sink` make it a landing —
+    so "which row was landed on" comes from the landing's own id and "which row was dragged" from the
+    cargo's id, both in one drop, and a swap needs no second question to the page.
+
     The two frames say how the row is divided: a loom is a flex row whose items all grow, so the
     cargo takes the width (`flex: 1 1 auto`) and the ✕ keeps its own size and centres itself in the
     height it does not fill.
     """
     # `remove` is a verb on a slot, so this name is written with the subscript.
     return h.loom(
-        h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
-                id=f"{row['id']}-cargo"),
+        h.frame(h.text(text), draggable={"tag": "row"}, accept={"tag": "row"},
+                sink=slots("row.move"), style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
         h.frame(h.button("Remove"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots.row["remove"],
         submit=["button"],
-        id=row["id"],
+        id=row_id,
     )
 
 
@@ -103,12 +108,14 @@ class State:
 
     Module-level, because the handlers are module-level declarations too (`@app.on(...)`), and one
     page per connection means one object is enough: a real multi-user app would hang this on the
-    device (`ctx.data`) instead, which is what `rows_seeded` below does.
+    device (`ctx.data`) instead, which is what the `keyed` subscription below does.
     """
 
     def __init__(self) -> None:
         self.echo = ""
-        self.rows = [{"id": "row-1", "text": "First row"}, {"id": "row-2", "text": "Second row"}]
+        # Each row is `(id, text)`: identity lives in the data, and both `keyed` and the render
+        # function use that one copy — never the position.
+        self.rows = signals.Signal([("row-1", "First row"), ("row-2", "Second row")])
         self.next_row = 3
 
 
@@ -232,23 +239,21 @@ def home_page(ctx, match):
         slots.echo.set(h.text(state.echo))
 
     def add_row(value: object) -> None:
-        row = {"id": f"row-{state.next_row}", "text": f"Row {state.next_row}"}
+        row = (f"row-{state.next_row}", f"Row {state.next_row}")
         state.next_row += 1
-        state.rows.append(row)
-        slots.rows.append(row_node(row))
+        state.rows.value = state.rows.value + [row]  # no slot write here: `keyed` adds the append
 
     def reveal(value: object) -> None:
         # Only a signed-in click gets here: the gate answered the rest before the closure ran.
         ctx.data["may_see_secret"] = True
         slots.secret.set(h.text("Classified content"))
 
-    # A slot outlives a `create` (the tree is replaced, the data planes are not), so the rows are
-    # seeded once per connection — on the second visit appending them again would double them. It is
-    # a send like any other, which is why it is `ctx.slot.rows.append(...)` and not part of the tree.
-    if not ctx.data.get("rows_seeded"):
-        ctx.data["rows_seeded"] = True
-        for row in state.rows:
-            slots_of(ctx).rows.append(row_node(row))
+    # The rows are kept equal to `state.rows` by `signals.keyed`: on this connection's first draw it
+    # appends every row there is, and after that it follows the signal through adds, removes and moves.
+    # A slot outlives a `create` (the tree is replaced, the data planes are not), so this subscription
+    # is made once — making it again on the next visit would append the same rows twice.
+    if ctx.data.get("rows_keyed") is None:
+        ctx.data["rows_keyed"] = signals.keyed(ctx, "rows", state.rows, row_node)
     # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
     # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
@@ -281,7 +286,9 @@ def home_page(ctx, match):
                 h.frame(
                     h.text("List · drag", variant="heading-3"),
                     h.text(
-                        "A row's identity is its id: ✕ removes by id, and a drop archives by id — the gesture itself says nothing; only the landing point speaks.",
+                        "A row's identity is its id: ✕ removes by id, the archive box archives by id, and "
+                        "a drop on another row swaps them — the gesture itself says nothing; only the "
+                        "landing point speaks.",
                         variant="muted",
                     ),
                     h.loom(h.button("Add a row"), sink=add_row,
@@ -377,8 +384,7 @@ def about_page(ctx, match):
 @app.on(slots.row["remove"])  # `remove` is a verb: the name goes by subscript
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # the row's form carried its identity up
-    state.rows = [row for row in state.rows if row["id"] != row_id]
-    slots_of(ctx).rows.remove(row_id)
+    state.rows.value = [row for row in state.rows.value if row[0] != row_id]
 
 
 @app.on(slots("row.archive"))
@@ -386,12 +392,31 @@ def on_archive(ctx, frame) -> None:
     """A drop: the landing point sends `{id, tag}` — the dragged frame's own id, and its tag."""
     cargo = (frame.get("data") or {}).get("id") or ""
     row_id = cargo.removesuffix("-cargo")
-    row = next((r for r in state.rows if r["id"] == row_id), None)
+    row = next((r for r in state.rows.value if r[0] == row_id), None)
     if row is None:
         return
-    state.rows = [r for r in state.rows if r["id"] != row_id]
-    slots_of(ctx).rows.remove(row_id)
-    slots_of(ctx).archived.set(h.text(f"Archived: {row['text']}"))
+    slots_of(ctx).archived.set(h.text(f"Archived: {row[1]}"))
+    state.rows.value = [r for r in state.rows.value if r[0] != row_id]
+
+
+@app.on(slots("row.move"))
+def on_move(ctx, frame) -> None:
+    """One row landed on another: put it where the landing row was.
+
+    Both identities are in this one frame (`id` is the landing, `data.id` the cargo), so a swap is
+    just a list reordering — on the wire it is one `move`, the row's node is reused and focus stays
+    (fluxen ADR 0005).
+    """
+    target = (frame.get("id") or "").removesuffix("-cargo")
+    dragged = ((frame.get("data") or {}).get("id") or "").removesuffix("-cargo")
+    rows = state.rows.value
+    ids = [row[0] for row in rows]
+    if not dragged or dragged == target or dragged not in ids or target not in ids:
+        return  # landed on itself, or one end is already gone: nothing happened
+    moving = rows[ids.index(dragged)]
+    rest = [row for row in rows if row[0] != dragged]
+    rest.insert([row[0] for row in rest].index(target), moving)  # land on a row, sit before it
+    state.rows.value = rest
 
 
 @app.on(slots(GO_HOME.name))
