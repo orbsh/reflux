@@ -38,15 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     app = App(args.root)
-    srv = app.make_server(args.port, args.host)
-    host, port = srv.server_address[0], srv.server_address[1]
-    print(f"[reflux] serving {args.root} on http://{host}:{port}/  (ws {host}:{port}/ws)", flush=True)
-    try:
-        srv.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        srv.server_close()
+    # One entry shape (ADR 0002 §7): the app serves itself, prints where, and stops on Ctrl-C.
+    app.serve_forever(args.port, args.host)
     return 0
 
 

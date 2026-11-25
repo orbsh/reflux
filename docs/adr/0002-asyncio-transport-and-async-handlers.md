@@ -43,9 +43,12 @@ Status: **Accepted**（2026-11-25）。
 
 ## 7. 生命周期与入口
 
-- `@app.startup` / `@app.shutdown`，可为 async，在 loop 上跑；`ClientSession`、连接池、后台 task 在这里建与关。
-- `App.serve()` 给 CLI（内部 `asyncio.run` + `AppRunner`/`TCPSite`）；`App.start()`/`stop()` 给测试与嵌入（同一套 runner，loop 跑在后台线程，停时 `call_soon_threadsafe(loop.stop)` 再 join）。`app.loop` 公开。
+- `@app.startup` / `@app.shutdown`：可 async，跑在**服务的那个 loop** 上。`_boot` 在建 site 之前执行（先建 `app.http` 这个共享 `ClientSession`，再跑 startup），所以处理器可以假定它一定在场；`_halt` 在 `app.stop()` 之前执行，**后注册的先跑**，一节钩子抛异常只记一行、其余照跑，最后才关 session。
+- `app.http`：服务期的共享出站客户端；不在服务中的 app 上是 `None`。
+- `App.start(port, host)` 绑定并开始服务，返回 server；`App.stop()` 结束它拥有的东西（看门狗 + 这个 server），可重复调用；`App.serve()` 是 `start()` + 一个后台线程；`App.serve_forever()` 是 `start()` + 阻塞 + Ctrl-C + 收尾（`tools/serve.py` 现在就是这一行）。`app.loop` 公开，是服务所在的 loop。
+- `Server.shutdown()` 的顺序：`_halt`（钩子 + session）→ `app.stop()`（看门狗）→ `runner.cleanup()` → 停 loop、join 线程、**关掉自己的 loop**（不关就漏一个 fd）。
 - aiohttp 的 `web.run_app` 不用：它要独占 `asyncio.run`，而 `start()`/`stop()` 的测试形状需要一个可停的 runner。
+- `web.Application` 的两个键用 `web.AppKey`（`APP_KEY` / `MOUNTS_KEY`）：字符串键每次运行都发一条 `NotAppKeyWarning`，而且拼错只会在请求时才炸。
 
 ## 8. 超时、取消、异常面
 

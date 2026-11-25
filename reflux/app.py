@@ -543,6 +543,15 @@ class App:
         self.shell: Callable[[Context], Any] = shell if shell is not None else default_shell
         # Live devices, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a device that is not its own.
+        # What the deployment wants to build and close around serving: a `ClientSession`, a pool, a
+        # background task. They run on the loop, after the site is set up (ADR 0002 §7).
+        self._startup: list[Callable] = []
+        self._shutdown: list[Callable] = []
+        # The outbound client every handler may share (`await app.http.get(...)`); built by the
+        # server at startup, so an app that is only being inspected has none.
+        self.http: Any = None
+        # The server this app started, if any — `start()` owns it, `stop()` shuts it.
+        self._server: Any = None
         # A handler that awaits forever must not hold a connection forever: one delivery, one budget.
         # The coroutine is cancelled, the device survives, the log says why (ADR 0002 §7).
         self.handler_timeout = handler_timeout
@@ -1030,7 +1039,11 @@ class App:
         self._watchdog = asyncio.run_coroutine_threadsafe(tick(), self._loop)
 
     def stop(self) -> None:
-        """End the watchdog (the gates and tests call this on the way out)."""
+        """End what this app owns: the watchdog, then a server it started.
+
+        `Server.shutdown` calls back here, so the server is taken off the app first: a second
+        `stop()` is a no-op rather than a loop (the gates and tests call it on the way out).
+        """
         self._stop.set()
         task, self._watchdog = self._watchdog, None
         loop = self._loop
@@ -1039,8 +1052,29 @@ class App:
                 loop.call_soon_threadsafe(task.cancel)
             except RuntimeError:  # the loop is already being torn down
                 pass
+        server, self._server = self._server, None
+        if server is not None:
+            server.shutdown()
 
     # --- serving --------------------------------------------------------------------------
+
+    def startup(self, fn: Callable) -> Callable:
+        """Register what to do when the app starts serving (async allowed, built on the loop).
+
+            @app.startup
+            async def open_pool(app_ctx):        # no argument is passed; close over the app
+                ...
+
+        The hook runs after the site is bound and before anything is accepted, so a handler may
+        rely on `app.http` being there.
+        """
+        self._startup.append(fn)
+        return fn
+
+    def shutdown(self, fn: Callable) -> Callable:
+        """Register what to do when the app stops (async allowed). The last one registered runs first."""
+        self._shutdown.append(fn)
+        return fn
 
     def mount(self, path: str, handler: Any = _UNSET) -> Any:
         """Put a route in the HTTP table — as a decorator, or with its handler in hand.
@@ -1093,14 +1127,31 @@ class App:
         self.start_watchdog(server.loop)
         return server
 
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop | None:
+        """The loop this app is serving on, while it is serving — what a task must live on."""
+        return self._loop
+
+    def start(self, port: int = 0, host: str = "127.0.0.1") -> Any:
+        """Bind and serve on a loop of the framework's own; return the server. `stop()` ends it.
+
+        The embedding shape: tests and any host that wants the loop off its own thread. `serve()`
+        is the same thing plus a thread so the caller can go on, and `serve_forever()` is the same
+        thing minus the going on.
+        """
+        if self._server is not None:
+            raise RuntimeError("App.start: this app is already serving; stop() it first")
+        self._server = self.make_server(port, host)
+        return self._server
+
     def serve(self, port: int = 8000, host: str = "127.0.0.1") -> Any:
         """Start serving and return the bound server (call ``serve_forever`` to block)."""
-        server = self.make_server(port, host)
+        server = self.start(port, host)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return server
 
     def serve_forever(self, port: int = 8000, host: str = "127.0.0.1") -> None:
-        server = self.make_server(port, host)
+        server = self.start(port, host)
         address, bound = server.server_address[0], server.server_address[1]
         print(
             f"[reflux] serving {self.root} on http://{address}:{bound}/  (ws {address}:{bound}/ws)",

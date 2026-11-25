@@ -18,6 +18,9 @@ callers — the gates, `tools/serve.py`, `tools/cdp.py` — already speak.
 from __future__ import annotations
 
 import asyncio
+import traceback
+
+import aiohttp
 import mimetypes
 import threading
 from dataclasses import dataclass, field
@@ -27,9 +30,16 @@ from urllib.parse import parse_qs
 
 from aiohttp import web
 
+from .settle import maybe
+
 # A mount entry that is the websocket channel rather than a callable: the socket is one route in the
 # same table as the app's own paths, and nothing in the table knows it is special until it is served.
 CHANNEL = object()
+
+# aiohttp's typed keys for what a request needs to reach: strings would warn on every run, and a
+# typo in one would be a KeyError at request time rather than at import.
+APP_KEY: web.AppKey = web.AppKey("reflux", object)
+MOUNTS_KEY: web.AppKey = web.AppKey("mounts", dict)
 
 
 @dataclass(frozen=True)
@@ -147,8 +157,8 @@ def build_application(
     """One aiohttp application for a mount table, with the app's own routes in front of it."""
 
     application = web.Application()
-    application["mounts"] = mounts
-    application["reflux"] = app
+    application[MOUNTS_KEY] = mounts
+    application[APP_KEY] = app
 
     async def prepare(request: web.Request, response: web.StreamResponse) -> None:
         # A rebuilt page must never need a hard refresh: every response revalidates.
@@ -227,6 +237,7 @@ async def _upgrade(app: Any, request: web.Request) -> web.StreamResponse:
     """The connection stops being HTTP here: the app reads frames until it closes."""
     from .channel import WsChannel
 
+
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     await app.handle(WsChannel(ws))
@@ -251,8 +262,8 @@ class Server:
 
     def __init__(self, application: web.Application, host: str, port: int) -> None:
         self._web = application
-        self.app = application["reflux"]
-        self.mounts = application["mounts"]
+        self.app = application[APP_KEY]
+        self.mounts = application[MOUNTS_KEY]
         self._stopped = threading.Event()
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, name="reflux-loop", daemon=True)
@@ -277,8 +288,13 @@ class Server:
             return
         try:
             if self.app is not None:
-                # The watchdog is a task on this loop; ending the app first is what keeps the
-                # loop from being closed under a sleeping task.
+                # Hooks and the shared client first (the loop is still running), then the app's own
+                # work — the watchdog is a task on this loop, and ending it keeps the loop from
+                # being closed under a sleeping task.
+                try:
+                    self._call(self._halt(), timeout=30.0)
+                except Exception:
+                    pass
                 self.app.stop()
             if self._runner is not None:
                 self._call(self._runner.cleanup())
@@ -286,6 +302,11 @@ class Server:
             self._stopped.set()
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._thread.join(timeout=5)
+            if not self._thread.is_alive():
+                try:
+                    self._loop.close()  # the loop was ours; leaving it open leaks a file descriptor
+                except RuntimeError:  # already closed, or closed from under us
+                    pass
 
     def server_close(self) -> None:
         self.shutdown()
@@ -298,7 +319,31 @@ class Server:
     def _call(self, coro: Any, timeout: float = 10.0) -> Any:
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout)
 
+    async def _boot(self) -> None:
+        """What a deployment builds once, on the loop, before the first connection (ADR 0002 §7)."""
+        app = self.app
+        if app is None:
+            return
+        app.http = aiohttp.ClientSession()
+        for hook in list(app._startup):
+            await maybe(hook)
+
+    async def _halt(self) -> None:
+        """...and what it closes, in reverse: hooks first (they may still use the session)."""
+        app = self.app
+        if app is None:
+            return
+        for hook in reversed(list(app._shutdown)):
+            try:
+                await maybe(hook)
+            except Exception:  # a deployment's defect stays a log line; the shutdown goes on
+                app.dests.log.append(f"a shutdown hook raised:\n{traceback.format_exc()}")
+        session, app.http = app.http, None
+        if session is not None:
+            await session.close()
+
     async def _start(self, host: str, port: int) -> tuple[str, int]:
+        await self._boot()
         self._runner = web.AppRunner(self._web, access_log=None)
         await self._runner.setup()
         site = web.TCPSite(self._runner, host, port)
