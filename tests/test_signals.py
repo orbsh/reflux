@@ -12,21 +12,51 @@ import unittest
 from reflux import signals
 
 
+def _append_index(length: int, position: int) -> int | None:
+    """Where `append` lands a row (fluxen `content::append_index`, the same table `move` borrows)."""
+    if position == 0:
+        return length
+    if position > 0:
+        spot = length - position
+        return spot if 0 <= spot <= length else None
+    spot = -position - 1
+    return spot if 0 <= spot < length else None
+
+
 class FakeSlot:
-    """A slot that records what it was told, in order."""
+    """A slot that records what it was told, in order — and keeps the rows so the result can be read.
+
+    The position arithmetic is the renderer's, not the tester's: `move` is counted on the list with the
+    row lifted out, and out of range is refused rather than clamped (fluxen ADR 0005), so a wrong
+    position in `keyed` shows up as a refused move and a list in the wrong order.
+    """
 
     def __init__(self, name: str) -> None:
         self.name = name
         self.ops: list[tuple] = []
+        self.rows: list[str] = []
+        self.refused: list[tuple] = []
 
     def set(self, value: object) -> None:
         self.ops.append(("set", value))
 
     def append(self, node: object) -> None:
-        self.ops.append(("append", getattr(node, "id", node)))
+        row_id = getattr(node, "id", node)
+        self.ops.append(("append", row_id))
+        self.rows.append(row_id)
 
     def remove(self, row_id: str) -> None:
         self.ops.append(("remove", row_id))
+        self.rows.remove(row_id)
+
+    def move(self, row_id: str, position: int) -> None:
+        self.ops.append(("move", row_id, position))
+        spot = _append_index(len(self.rows) - 1, position)
+        if row_id not in self.rows or spot is None:
+            self.refused.append((row_id, position))
+            return
+        self.rows.remove(row_id)
+        self.rows.insert(spot, row_id)
 
 
 class FakeCtx:
@@ -172,6 +202,67 @@ class TestTheAdapters(unittest.TestCase):
         self.assertEqual(
             ctx.slots["counter.hint"].ops, [("set", "step 1"), ("set", "step 2")], "once now, once per change"
         )
+
+    def test_keyed_moves_a_row_that_moved_to_the_head(self) -> None:
+        ctx, rows = FakeCtx(), signals.Signal([])
+        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.value = [("a", "1"), ("b", "2"), ("c", "3")]
+        ctx.slots["log"].ops.clear()
+
+        rows.value = [("c", "3"), ("a", "1"), ("b", "2")]
+
+        slot = ctx.slots["log"]
+        self.assertEqual(slot.ops, [("move", "c", -1)], "one move, and it is the row that left its place")
+        self.assertEqual(slot.rows, ["c", "a", "b"])
+        self.assertEqual(slot.refused, [])
+
+    def test_keyed_leaves_the_rows_that_stayed_in_order(self) -> None:
+        ctx, rows = FakeCtx(), signals.Signal([])
+        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.value = [("a", ""), ("b", ""), ("c", ""), ("d", "")]
+        ctx.slots["log"].ops.clear()
+
+        rows.value = [("a", ""), ("c", ""), ("b", ""), ("d", "")]
+
+        slot = ctx.slots["log"]
+        self.assertEqual(len(slot.ops), 1, "one of the two rows moved, not both")
+        self.assertEqual(slot.ops[0][0], "move")
+        self.assertIn(slot.ops[0][1], {"b", "c"}, "either swap is one move; the other three stayed")
+        self.assertEqual(slot.rows, ["a", "c", "b", "d"])
+
+    def test_keyed_rotates_with_one_move(self) -> None:
+        ctx, rows = FakeCtx(), signals.Signal([])
+        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.value = [("a", ""), ("b", ""), ("c", ""), ("d", "")]
+        ctx.slots["log"].ops.clear()
+
+        rows.value = [("b", ""), ("c", ""), ("d", ""), ("a", "")]
+
+        slot = ctx.slots["log"]
+        self.assertEqual(slot.ops, [("move", "a", 0)], "a rotation is one row going to the end")
+        self.assertEqual(slot.rows, ["b", "c", "d", "a"])
+
+    def test_keyed_adds_removes_and_reorders_in_one_pass(self) -> None:
+        ctx, rows = FakeCtx(), signals.Signal([])
+        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.value = [("a", ""), ("b", ""), ("c", "")]
+        ctx.slots["log"].ops.clear()
+
+        rows.value = [("c", ""), ("x", ""), ("a", "")]
+
+        slot = ctx.slots["log"]
+        self.assertEqual(slot.ops, [("remove", "b"), ("append", "x"), ("move", "a", 0)])
+        self.assertEqual(slot.rows, ["c", "x", "a"])
+
+    def test_keyed_writes_nothing_when_the_order_did_not_change(self) -> None:
+        ctx, rows = FakeCtx(), signals.Signal([])
+        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.value = [("a", ""), ("b", "")]
+        ctx.slots["log"].ops.clear()
+
+        rows.value = [("a", ""), ("b", "")]
+
+        self.assertEqual(ctx.slots["log"].ops, [], "the same table in the same order is not a change")
 
     def test_keyed_appends_what_is_new_and_removes_what_is_gone(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])

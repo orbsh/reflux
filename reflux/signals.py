@@ -275,25 +275,71 @@ def keyed(
     tracked here, so a page does not have to remember them (that bookkeeping was the counter's
     `State.ids`).
 
-    Reordering is not handled: a `move` needs the row to exist and the position counted with it lifted
-    (fluxen ADR 0005), and nothing in the reference app reorders yet. When something does, the branch
-    goes here — one `move` per row that is out of place.
+    Reordering moves the fewest rows that can express it: the rows already in relative order (a longest
+    increasing run, by where they sit on screen) are left alone, and each of the rest is moved to its
+    own place — one `move` per row, and none at all when the order did not change. A `move`'s position
+    is counted with the row lifted out (fluxen ADR 0005), so placing row `i` is `-(i + 1)`: `-1` is the
+    head, and by then everything wanted before it is already there in order.
     """
     slot = ctx.slot(name)
     shown: list[str] = []
 
     def sync() -> None:
-        want = [(row_id, item) for row_id, item in rows.value]
-        wanted = {row_id for row_id, _ in want}
+        want = [row_id for row_id, _ in rows.value]
+        wanted = set(want)
         for old in list(shown):
             if old not in wanted:
                 slot.remove(old)
                 shown.remove(old)
-        for row_id, item in want:
+        for row_id, item in rows.value:
             if row_id not in shown:
                 slot.append(render(item, row_id))
                 shown.append(row_id)
-        # Order: appended rows land at the tail, so a list that is only appended to keeps its order; a
-        # fresh draw rebuilds nothing because `shown` is empty on the first pass.
+        # Appended rows land at the tail, and a list that is only appended to keeps its order; a fresh
+        # draw rebuilds nothing because `shown` is empty on the first pass.
+        _reorder(slot, shown, want)
 
     return effect(sync)
+
+
+def _reorder(slot: Any, shown: list[str], want: list[str]) -> None:
+    """Bring `shown` into `want`'s order with as few moves as the order allows, and keep `shown` true."""
+    if shown == want:
+        return
+    places = {row_id: index for index, row_id in enumerate(shown)}
+    order = [places[row_id] for row_id in want]
+    stay = {want[index] for index in _longest_run(order)}
+    for index, row_id in enumerate(want):
+        if row_id in stay:
+            continue
+        # `-(index + 1)` is "before the (index+1)-th row from the head" counted with this row lifted,
+        # so the last place is the end, which only `0` names (`-n` stops one short of it).
+        slot.move(row_id, 0 if index == len(want) - 1 else -(index + 1))
+        shown.remove(row_id)
+        shown.insert(index, row_id)
+
+
+def _longest_run(order: list[int]) -> list[int]:
+    """Indices of one longest strictly increasing run: the rows that are already in relative order."""
+    tails: list[int] = []  # tails[k] = index in `order` ending the best run of length k + 1
+    previous = [-1] * len(order)
+    for index, spot in enumerate(order):
+        low, high = 0, len(tails)
+        while low < high:
+            middle = (low + high) // 2
+            if order[tails[middle]] < spot:
+                low = middle + 1
+            else:
+                high = middle
+        previous[index] = tails[low - 1] if low else -1
+        if low == len(tails):
+            tails.append(index)
+        else:
+            tails[low] = index
+    run: list[int] = []
+    at = tails[-1] if tails else -1
+    while at != -1:
+        run.append(at)
+        at = previous[at]
+    run.reverse()
+    return run
