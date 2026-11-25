@@ -387,3 +387,18 @@ def list_tiles(self, items: Signal[list[T]], render_item: Callable[[T, str], Any
 - **id 必须来自数据**，不能来自下标或适配器的计数器——行身份本来就不该由渲染位置决定（这与 `list_tiles` 原文那个"适配器造 id 却让渲染函数自己再起一个"的 bug 是同一件事的两面）。
 - **首次绘制用整表重建，之后只走增删**：第一帧没有"旧行"可比，逐行 `append` 与一次写完整列表效果相同，前者还多几个 op。
 - **别对列表用 `!=` 判等**（`Signal.value` 的写法）：列表每次赋值都是新对象，判等必然成立、通知必然发出；判断该落在"id 序列"上，那正是 `key` 已经给出的东西。
+## 八、原型（已落地 2026-11-25）：`reflux/signals.py`，计数器是第一个使用者
+
+上面六、七两节是设计；落地的东西在 `reflux/signals.py`（`Signal` / `Computed` / `Effect` / `batch` / `effect`）加三个适配器（`bound` / `into` / `keyed`），`examples/{zh,en}/demo_counter.py` 是第一个使用者。与设计稿不同的四处，都是写的时候才看清的：
+
+**1. 截断需要版本号，不只是"脏"标记。** 惰性 `Computed` 的读者如果是副作用本身，脏标记会**先**把它叫醒，等它去读的时候才知道值没变——那时效果已经跑过了。所以每个节点带一个 `_version`（真变才 +1），副作用记下它读到的版本；被"某个派生信号变脏"叫醒的效果排成**存疑**（maybe），到刷新时先拉一遍那些脏派生信号，版本没动就不跑。少了这一层，第七节那张表第三行的收益（"答案没变就不重画"）在直接读者身上完全不成立。
+
+**2. 不要 `ReactiveUI`，也不要 `_rx_N` 私有槽。** 设计稿的 `ui.text(fn)` 每次绘制新建一个 `_rx_1`、`_rx_2`……槽，节点身份每次绘制都换，`app.view` 与页面里的 `source=` 也用不上。原型改成写**页面原有的具名槽**：`bound(ctx, "counter.count", 0)` 让一个信号拥有一个槽（写仍是 `ctx.slot(name).set`，视图照旧由 `app.view` 决定），`into(ctx, name, computed)` 把派生值镜像到槽上。页面一行没改，处理器不再写槽。
+
+**3. `list_tiles` 换成 `keyed(ctx, name, rows, render)`**：`rows` 是 `Signal[[(id, item), ...]]`，行身份**由构造函数给**（不是"渲染函数要记得用回传的 id"），`keyed` 自己在闭包里记着屏幕上的 id —— 计数器原来那本 `State.ids` 因此消失。重排仍不做：`move` 要求行已在列表里、位置按拎出后算（fluxen ADR 0005），参考应用里没有会重排的列表，等有了再加那一个分支。
+
+**4. 连接清理不需要登记表。** 设计稿用 `ctx.data["_reactive_cleanups"]` 记退订；实际上页面里建的信号持有的是**那条连接**的 `Slot`，信号与连接同生共死，没人会来读一个死连接的信号。模块级信号（多连接共享）反过来是对的：它没有槽，只有读者。
+
+顺带记一个踩到的坑：`bound` 在**构造时**就写第一个值，所以 `ctx.data.setdefault("counter", State(ctx))` 这种写法每次绘制都造一个 State 再扔掉——被扔掉的那个会把读者刚改好的数推回 0。已有测试 `test_the_value_is_seeded_once_not_per_draw` 当场抓到；`state()` 因此写成先 `get` 再建。
+
+计数器前后的差别（这就是"能简化多少"的答案）：`slots.hint.set(...)` 从三处收成一处 `Computed`；`counter_seeded` 那个"只种一次"的守卫不需要了（`bound` 只在构造时写）；`State.ids` 那本账交给 `keyed`；处理器从"改值 + 写槽"变成"改值"。层数没有变多：页面仍然读 `h.text(source=slots.count)`，`app.view` 仍然决定值长什么样——`signals` 只决定**谁**去写。

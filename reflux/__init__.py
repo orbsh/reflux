@@ -35,7 +35,7 @@ whatever else the app mounts.
     device.emit(wire.set("greeting", h.text("你好")))
 """
 
-from . import sdk, wire
+from . import sdk, signals, wire
 from .application import App, Context, Device, Landing, create_app, gated
 from .auth import Auth, Tokens
 from .slots import Slot, Slots
