@@ -19,7 +19,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .types import Accrete, Bind
+from .types import Accrete, Sink, Source
 from . import profile
 
 __all__ = ["parse", "dump", "drop_none", "token_attrs", "as_source", "as_sink", "as_set"]
@@ -134,26 +134,30 @@ def token_attrs(attrs: dict[str, Any] | None, variant: str | None, tag: str) -> 
     return {"class": classes, **out}
 
 
-def _bind(value: Any, name: str, *, constant: bool = False) -> dict[str, Any]:
-    """One channel's entry: a `Bind` as it is, a `Slot` as its name, anything else as a constant.
+def _address(
+    value: Any, name: str, model: type, key: str, *, constant: bool = False
+) -> dict[str, Any]:
+    """One channel's entry: the direction's address as it is, a `Slot` as its name, else a constant.
 
-    A `Bind` is the whole address — slot, scope, default, path, type — so a caller that needs a
-    scope writes `Bind(slot="draft", scope="local")` rather than a second keyword beside the slot.
+    The address is the whole thing for its direction — a `Source` carries slot, scope, path and
+    default; a `Sink` carries dest, scope and path (ADR 0039) — so a caller that needs a scope writes
+    `Source(slot="draft", scope="local")` rather than a second keyword beside the slot.
     """
     if value is None:
         return {}
-    if isinstance(value, Bind):
+    if isinstance(value, model):
         return value.model_dump(exclude_none=True)
     from ..slots import Slot  # local: reflux.slots -> reflux.wire -> reflux.sdk is a cycle here
 
     if isinstance(value, Slot):
         value.declare()  # the name is used here; `/status` lists names in use
-        return {"slot": value.name}
+        return {key: value.name}
     if constant:
         return {"default": value}
     raise TypeError(
-        f"{name}= takes a Bind, a Slot or a constant, got {value!r} — pass Bind(slot={value!r}) "
-        f"or take the name from the table first (ctx.slot({value!r}))"
+        f"{name}= takes a {model.__name__}, a Slot or a constant, got {value!r} — pass "
+        f"{model.__name__}({key}={value!r}) or take the name from the table first "
+        f"(ctx.slot({value!r}))"
     )
 
 
@@ -164,7 +168,7 @@ def as_source(value: Any = None, *, default: Any = None, constants: bool = True)
     wire means by `{slot, default}`, so giving both is one value, not a contradiction. An explicit
     `default` on a `Bind` wins over the positional one.
     """
-    entry = _bind(value, "source", constant=constants)
+    entry = _address(value, "source", Source, "slot", constant=constants)
     if default is not None and "default" not in entry:
         entry["default"] = default
     return entry or None
@@ -179,13 +183,13 @@ def as_sink(value: Any = None) -> dict[str, Any] | None:
     which device the frame is for, because a name for a closure can only be a per-connection name.
     """
     if isinstance(value, str):
-        return {"slot": value} if value else None
+        return {"dest": value} if value else None
     landing = getattr(value, "__landing__", None)
     if landing is True:  # `gated(fn)`
         return {"__landing__": value.fn, "__auth__": bool(value.auth)}
     if callable(value) and not isinstance(value, type):
         return {"__landing__": value, "__auth__": False}
-    return _bind(value, "sink") or None
+    return _address(value, "sink", Sink, "dest") or None
 
 
 def as_set(value: Any = None) -> list[Any] | None:

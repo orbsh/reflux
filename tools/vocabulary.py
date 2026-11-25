@@ -203,9 +203,16 @@ class TypeModel:
         raise ModelError(f"{self.wire}: no keyword {kwarg!r}")
 
 
-def is_bind(fragment: dict) -> bool:
-    """Is this schema fragment `Bind` (a value's address), rather than a plain payload?"""
-    return any((sub.get("$ref") or "").rsplit("/", 1)[-1] == "Bind" for sub in walk(fragment))
+# The two address models (ADR 0039). `Bind` was one shape for both directions; a field that carries
+# either is a value of the node, not a plain payload, and gets the Bind-or-bare-value treatment.
+ADDRESSES = ("Source", "Sink")
+
+
+def is_address(fragment: dict) -> bool:
+    """Is this schema fragment a value's address (`Source` / `Sink`), rather than a plain payload?"""
+    return any(
+        (sub.get("$ref") or "").rsplit("/", 1)[-1] in ADDRESSES for sub in walk(fragment)
+    )
 
 
 def _enum_of(fragment: dict, defs: dict) -> list[str] | None:
@@ -381,9 +388,10 @@ def vocabulary(schema: dict, profile: dict, types_src: str) -> list[TypeModel]:
             if name in SHARED_FIELDS or name in offered:
                 continue
             kw = renames.get(name, name)
-            # A Bind-valued field of its own (`options`, `select`, `placeholder`, …) is a named
-            # second value: same Bind-or-value rule as a channel, its own keyword.
-            lane = "value" if is_bind(sub) else "extra"
+            # An address-valued field of its own (`options`, `select`, `placeholder`, …) is a named
+            # second value: same address-or-value rule as a channel, its own keyword. A read, since
+            # only `sink` is a write and it is the channel above (ADR 0039).
+            lane = "value" if is_address(sub) else "extra"
             ann, kind = ("Any", "json") if lane == "value" else keyword_type(sub, defs)
             param = Param(kw, ann, None if lane == "value" else literal(sub), kind, lane, name)
             (model.values if lane == "value" else model.extras).append(param)

@@ -53,7 +53,7 @@ from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
 from reflux.server import Request, Response
 from reflux.sdk import h
-from reflux.sdk.types import Accrete, Bind, JsType
+from reflux.sdk.types import Accrete, JsType, Source
 from reflux.slots import Slot
 
 from . import demo_slots
@@ -158,7 +158,7 @@ def demo_view(ctx, state):
         *lines,
         h.bundle(
             h.input(tag="user", id="auth-user"),
-            h.input(tag="pass", source=Bind(type=JsType.password), id="auth-pass"),
+            h.input(tag="pass", kind=JsType.password, id="auth-pass"),
             h.button("Sign in", sink=slots(LOGIN)),
             sink=slots(LOGIN),
             submit=["enter", "button"],
@@ -190,7 +190,7 @@ app = App(routes=Routes(), auth=Auth(verify=demo_verify, view=demo_view), shell=
 slots: DemoSlots = demo_slots.table(app)
 
 
-@app.route("/", title="Demo")
+@app.page("/", title="Demo")
 def home_page(ctx, match):
     """The vocabulary, as cards: what a value does on its way up, and the gate in front of one.
 
@@ -200,8 +200,8 @@ def home_page(ctx, match):
     `card` variant, and its own gap — a bundle is a flex row and would line its fields up edge to
     edge, which is a form, not a page.
 
-    A page turn is `ctx.page(...)` and nothing else: the two markers the runtime reads
-    (`reflux:path`, `reflux:title`) are written for you, in front of the node it draws.
+    A page turn is that `return` and nothing else: the two markers the runtime reads
+    (`reflux:path`, `reflux:title`) are written for you, in front of the node.
 
     This page is also the contrast between the two kinds of landing point. **Echo**, **add a row** and
     **secret** are closures: one request, one answer, the handler written beside the button that sends
@@ -231,7 +231,18 @@ def home_page(ctx, match):
         ctx.data["may_see_secret"] = True
         slots.secret.set(h.text("Classified content"))
 
-    ctx.page(
+    # A slot outlives a `create` (the tree is replaced, the data planes are not), so the rows are
+    # seeded once per connection — on the second visit appending them again would double them. It is
+    # a send like any other, which is why it is `ctx.slot.rows.append(...)` and not part of the tree.
+    if not ctx.data.get("rows_seeded"):
+        ctx.data["rows_seeded"] = True
+        for row in state.rows:
+            slots_of(ctx).rows.append(row_node(row))
+    # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
+    # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
+    if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
+        slots_of(ctx).secret.set(h.text(""))
+    return (
         h.frame(
             h.frame(
                 h.text("Demo", variant="heading-1"),
@@ -297,7 +308,7 @@ def home_page(ctx, match):
                 h.bundle(
                     h.frame(
                         h.input(tag="user", id="f-user"),
-                        h.input(tag="pass", source=Bind(type=JsType.password), id="f-pass"),
+                        h.input(tag="pass", kind=JsType.password, id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),
@@ -338,23 +349,12 @@ def home_page(ctx, match):
         ),
     )
 
-    # A slot outlives a `create` (the tree is replaced, the data planes are not), so the rows are
-    # seeded once per connection — on the second visit appending them again would double them. It is
-    # a send like any other, which is why it is `ctx.slot.rows.append(...)` and not part of the tree.
-    if not ctx.data.get("rows_seeded"):
-        ctx.data["rows_seeded"] = True
-        for row in state.rows:
-            slots_of(ctx).rows.append(row_node(row))
-    # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
-    # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
-    if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        slots_of(ctx).secret.set(h.text(""))
 
 
-@app.route("/about", title="About")
+@app.page("/about", title="About")
 def about_page(ctx, match):
     """The second route: the same shape, reached by the address bar, a deep link, or the nav."""
-    ctx.page(
+    return (
         h.text("About", variant="heading-1"),
         h.text("This example app is written with the SDK alone: an echo, a list, a form, and four routes — /, /about, /chat and the walkthrough."),
         nav_bundle("Back to the demo", GO_HOME),
@@ -425,7 +425,7 @@ from . import demo_chat, demo_counter  # noqa: E402
 from .demo import page as walkthrough  # noqa: E402
 
 # Each page declares its own route and uplinks in its own `register`: the module is the page, and the
-# app only says where on it to hang them. (`app.route(...)(page)` rather than a decorator, because a
+# app only says where on it to hang them. (`app.page(...)(page)` rather than a decorator, because a
 # page module must not import the app — under `python3 -m examples.en.demo_app` the app module runs as
 # `__main__`, and `from .demo_app import app` would build a second copy of it.)
 demo_chat.register(app, slots)

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SizeAttr", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "Bind", "BundleAttr", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Bundle", "Entry", "Frame", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "BundleAttr", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Bundle", "Entry", "Frame", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -151,11 +151,36 @@ class ResetMode(Enum):
     default = 'default'
 
 
+class Sink(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    dest: str | None = None
+    path: str | None = Field(
+        None,
+        description='JSON Pointer into the target value. Only a `scope: local` write uses it: it names the member this node\nowns, and the rest of the object is left alone.',
+    )
+    scope: Scope = 'remote'
+
+
 class SizeAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
     height: str | None = None
     selector: str | None = None
     width: str | None = None
+
+
+class Source(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    default: Any | None = None
+    path: str | None = Field(
+        None,
+        description="JSON Pointer into the slot's value (ADR 0008): the shape belongs to the\nproducer, the read picks one field out of it. ADR 0031 is silent on\nextraction — it is orthogonal to the address, so it stays.",
+    )
+    scope: Scope = 'remote'
+    slot: str | None = None
 
 
 class Stamp(BaseModel):
@@ -228,20 +253,6 @@ class Wrap(RootModel[Wrap1 | Literal['nowrap']]):
     )
 
 
-class Bind(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    default: Any | None = None
-    path: str | None = Field(
-        None,
-        description="JSON Pointer into the slot's value (ADR 0008): the shape belongs to the\nproducer, the read picks one field out of it. ADR 0031 is silent on\nextraction — it is orthogonal to the address, so it stays.",
-    )
-    scope: Scope = 'remote'
-    slot: str | None = None
-    type: JsType | None = None
-
-
 class BundleAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
     reset: ResetMode | None = Field(
@@ -260,8 +271,8 @@ class BundleAttr(BaseModel):
 class Button(BaseModel):
     attrs: ButtonAttr | None = None
     id: str | None = None
-    sink: Bind | None = None
-    source: Bind | None = None
+    sink: Sink | None = None
+    source: Source | None = None
     type: Literal['button'] = 'button'
 
 
@@ -272,7 +283,7 @@ class Canvas(BaseModel):
         None,
         description='The **dynamic bag** of module-private options (ADR 0017): renderer configuration the core\ndoes not know (3d-force-graph\'s node/link sizes, force parameters, colours…) packed up here,\nwhich the host hands to the module\'s `mount(el, data, host, options)` as it is, interpreting not one key.\nThis is where "variants do not enter accrete" lands: swapping renderers only swaps url + options, the DSL is unchanged.\nAbsent/Null = `{}` (the module applies its own defaults); same semantics as `url` — mount-time config,\nnot on the update hot-reload leg (changing it takes a remount).',
     )
-    source: Bind | None = Field(
+    source: Source | None = Field(
         None,
         description='`bind["value"]`: the payload convention is kin to Chart/diagram — `kind: source` points at\na named data slot (the raw JSON of `bind.value.default` on the node in the slot is the module\'s data area),\nstreaming data in = `set`/`patch` on that slot (pointer `/bind/value/default/...`).',
     )
@@ -347,22 +358,28 @@ class ForceGraphStyle(BaseModel):
 class Image(BaseModel):
     attrs: ImageAttr | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['image'] = 'image'
 
 
 class Input(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
     attrs: ClassAttr | None = None
     id: str | None = None
+    kind: JsType | None = Field(
+        None,
+        description="What kind of field this is — the element type and the parse, one declaration (ADR 0032 §2: a field\nhas one type, and it is not the read's or the write's). Named `kind` because `type` is the node's own\ndiscriminator on the wire. Absent = text.",
+    )
     multiline: bool | None = Field(
         None, description='Multi-line is a layout of the field, not a different node.'
     )
-    placeholder: Bind | None = Field(
+    placeholder: Source | None = Field(
         None,
         description='Second value: the placeholder text (literal or slot) — the channel\n`textarea` used to carry on its own type.',
     )
-    sink: Bind | None = None
-    source: Bind | None = None
+    source: Source | None = None
     tag: str | None = Field(
         None,
         description="The field's name inside an enclosing bundle: the bundle packs this tag\nas the key, so the sink's address no longer names the field.",
@@ -404,14 +421,14 @@ class PanelAttr(BaseModel):
 class Path(BaseModel):
     attrs: ClassAttr | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['path'] = 'path'
 
 
 class Text(BaseModel):
     attrs: TextAttr | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['text'] = 'text'
 
 
@@ -447,12 +464,12 @@ class TilesAttr(BaseModel):
 class ForceGraph(BaseModel):
     attrs: SizeAttr | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     style: ForceGraphStyle | None = Field(
         None,
         description='Renderer knobs, all with defaults; when default they stay off the wire.',
     )
-    theme: Bind | None = Field(
+    theme: Source | None = Field(
         None, description='Second value: the theme channel (`true`/`"dark"`).'
     )
     type: Literal['forcegraph'] = 'forcegraph'
@@ -462,10 +479,10 @@ class Bundle(BaseModel):
     attrs: BundleAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    sink: Bind | None = None
+    sink: Sink | None = None
     tag: str | None = Field(
         None,
-        description="The key this bundle contributes to its parent's packed object. Only read\nwhen the bundle sits inside another bundle; falls back to `id`.",
+        description="The key this bundle contributes to its parent's packed object — the same `tag` rule a field follows,\nbecause a nested bundle is an input of the enclosing one. Only read when the bundle sits inside another\nbundle; with no `tag` it packs nothing into its parent (`id` is identity, `dest` is where it sends, and\nneither is a name — ADR 0032 §4).",
     )
     type: Literal['bundle'] = 'bundle'
 
@@ -487,11 +504,11 @@ class Frame(BaseModel):
     attrs: FrameAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    sink: Bind | None = Field(
+    sink: Sink | None = Field(
         None,
-        description='The landing uplink (ADR 0034): where a drop on this box goes — an event name or\na local slot, the same `Bind` `dock` had.',
+        description='The landing uplink (ADR 0034): where a drop on this box goes — an event name or\na local slot, the same channel `dock` had.',
     )
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['frame'] = 'frame'
 
 
@@ -499,19 +516,21 @@ class Panel(BaseModel):
     attrs: PanelAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['panel'] = 'panel'
 
 
 class Select(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
     attrs: ClassAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    options: Bind | None = Field(
+    options: Source | None = Field(
         None, description='Second value: the option rows (list plane).'
     )
-    sink: Bind | None = None
-    source: Bind | None = None
+    source: Source | None = None
     tag: str | None = Field(
         None,
         description="The field's name inside an enclosing bundle (same rule as `input`).",
@@ -523,7 +542,7 @@ class Svg(BaseModel):
     attrs: SizeAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['svg'] = 'svg'
 
 
@@ -531,7 +550,7 @@ class Tiles(BaseModel):
     attrs: TilesAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
-    source: Bind | None = None
+    source: Source | None = None
     type: Literal['tiles'] = 'tiles'
 
 
@@ -549,13 +568,14 @@ FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
 Header.model_rebuild()
 ImageAttr.model_rebuild()
+Sink.model_rebuild()
 SizeAttr.model_rebuild()
+Source.model_rebuild()
 Stamp.model_rebuild()
 Step1.model_rebuild()
 Step2.model_rebuild()
 TextAttr.model_rebuild()
 Window.model_rebuild()
-Bind.model_rebuild()
 BundleAttr.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()

@@ -58,7 +58,7 @@ def page_app(**kwargs) -> App:
     def single(ctx, path):
         ctx.page(h.text(f"page{path}"))
 
-    app.page = single
+    app.page(single)
     return app
 
 
@@ -178,7 +178,7 @@ class TestTheTable(unittest.TestCase):
         def single(ctx, path):
             ctx.page(h.text("page"))
 
-        app.page = single
+        app.page(single)
         with Served(app) as served:
             with Socket(served.port, path="/socket") as ws:
                 hello(app, ws)

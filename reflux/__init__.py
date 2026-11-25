@@ -13,17 +13,17 @@ Layering, so imports never cycle:
   sdk.closed          the closure walk — the one vocabulary list the boundary reads
   wire                accrete's eight actions, and the `draw` frame that carries them
   channel / dests / app / server  the producer: the page tree, the channel route, the registry
-  routes / cli        the route table (a path declared where its handler is) and the printing of it
+  routes / cli        the page table (a path declared where its handler is) and the printing of it
 
 The words that matter here: a **device** is one connection (not a user — one user may hold several),
 `device.emit(...)` sends accrete's operations as one frame, `device.data` is the bag the business
 hangs its own facts on (an identity, a name), and the **channel is a route** in `app.mounts` next to
 whatever else the app mounts.
 
-    from reflux import Request, Response, route, wire
+    from reflux import Request, Response, page, wire
     from reflux.sdk import h
 
-    @route("/blog/{slug}", title="文章")
+    @page("/blog/{slug}", title="文章")
     def post(device, match):
         return h.frame(h.text(match.params["slug"]))
 
@@ -50,7 +50,7 @@ from .protocol import (
     ROUTES_SLOT,
     SIGNUP,
 )
-from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, route
+from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, page
 from .sdk import builders
 from .sdk._parse import dump, parse
 from .sdk.builders import *  # noqa: F401,F403  (one constructor per type, generated)
@@ -73,7 +73,7 @@ __all__ = [
     "Response",
     "Registry",
     "RegistryError",
-    "route",
+    "page",
     "Routes",
     "Route",
     "Match",

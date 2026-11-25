@@ -1,212 +1,8 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Accrete",
-  "oneOf": [
-    {
-      "description": "A box (ADR 0027/0034). It reads a slot and it is the only place cargo lives:\n`attrs.draggable` makes it a drag source, `attrs.accept` + `sink` a landing.\nIt takes a fallback id because a landing emits, and the frame's id is the id\nof what was dropped on.",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "frame"
-        }
-      },
-      "$ref": "#/$defs/Frame",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "canvas"
-        }
-      },
-      "$ref": "#/$defs/Canvas",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "forcegraph"
-        }
-      },
-      "$ref": "#/$defs/ForceGraph",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "description": "A content area: the four cells of the two axes `place` × `state` (ADR 0030). `fold`/`popup`/`layer` as node types\nare gone, along with their shells in the model: all four cells are implemented in ui_core's `components/panel.rs`,\nand this arm is the single name they share.",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "panel"
-        }
-      },
-      "$ref": "#/$defs/Panel",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "bundle"
-        }
-      },
-      "$ref": "#/$defs/Bundle",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "svg"
-        }
-      },
-      "$ref": "#/$defs/Svg",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "path"
-        }
-      },
-      "$ref": "#/$defs/Path",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "description": "One container for a slot's items (ADR 0031 §4): `window` says how many are on it, `step`\nwhat advances it. `rack` and `pages` were the same node with different steppers.",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "tiles"
-        }
-      },
-      "$ref": "#/$defs/Tiles",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "description": "An entry — the item a `tiles` with `fields` projects (ADR 0031 §4). Rendered on its own it\nis a block of its fields; the grid is what turns it into a row.",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "entry"
-        }
-      },
-      "$ref": "#/$defs/Entry",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "button"
-        }
-      },
-      "$ref": "#/$defs/Button",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "image"
-        }
-      },
-      "$ref": "#/$defs/Image",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "input"
-        }
-      },
-      "$ref": "#/$defs/Input",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "select"
-        }
-      },
-      "$ref": "#/$defs/Select",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "text"
-        }
-      },
-      "$ref": "#/$defs/Text",
-      "required": [
-        "type"
-      ]
-    },
-    {
-      "description": "A registered template by name (ADR 0006), spelled `stamp` since ADR 0034.",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "stamp"
-        }
-      },
-      "$ref": "#/$defs/Stamp",
-      "required": [
-        "type"
-      ]
-    }
-  ],
   "$defs": {
     "Accept": {
+      "additionalProperties": false,
       "description": "Which cargo a box takes (ADR 0034): absent `tag` = any, a tag = that one.",
-      "type": "object",
       "properties": {
         "tag": {
           "type": [
@@ -215,54 +11,19 @@
           ]
         }
       },
-      "additionalProperties": false
+      "type": "object"
     },
     "Align": {
       "description": "Where a cell's content sits inside its field. `start` is what a text cell already does, so it is\nthe default and stays off the wire.",
-      "type": "string",
       "enum": [
         "start",
         "center",
         "end"
-      ]
-    },
-    "Bind": {
-      "description": "One value, one address, one scope (ADR 0031 §1-2). `source` is where a value\nflows in, `sink` where it flows out; both are this same struct.\n\nNo `slot` means the value is a literal: `default` *is* the value (that is\nwhat the retired `kind: default` said). With a slot, `default` is what to\nuse while the slot is still empty.",
-      "type": "object",
-      "properties": {
-        "default": true,
-        "path": {
-          "description": "JSON Pointer into the slot's value (ADR 0008): the shape belongs to the\nproducer, the read picks one field out of it. ADR 0031 is silent on\nextraction — it is orthogonal to the address, so it stays.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "scope": {
-          "$ref": "#/$defs/Scope"
-        },
-        "slot": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/JsType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
+      ],
+      "type": "string"
     },
     "Bundle": {
       "description": "A bundle packs a group of fields into one object and sends it (ADR 0032).\nIt owns the exit for its fields (`sink`), when they leave (`attrs.submit`), what they become\nafterwards (`attrs.reset`) and how many times they may (`attrs.sends`) — the field itself owns\nnothing but its value. `id` marks this submission (the instance), not the fields: fields are\nnamed by their own `tag`.",
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -275,13 +36,13 @@
           ]
         },
         "children": {
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "type": [
@@ -292,7 +53,7 @@
         "sink": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Sink"
             },
             {
               "type": "null"
@@ -300,29 +61,29 @@
           ]
         },
         "tag": {
-          "description": "The key this bundle contributes to its parent's packed object. Only read\nwhen the bundle sits inside another bundle; falls back to `id`.",
+          "description": "The key this bundle contributes to its parent's packed object — the same `tag` rule a field follows,\nbecause a nested bundle is an input of the enclosing one. Only read when the bundle sits inside another\nbundle; with no `tag` it packs nothing into its parent (`id` is identity, `dest` is where it sends, and\nneither is a name — ADR 0032 §4).",
           "type": [
             "string",
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "BundleAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "reset": {
-          "description": "What the fields become after a send. Absent = `keep`.",
-          "$ref": "#/$defs/ResetMode"
+          "$ref": "#/$defs/ResetMode",
+          "description": "What the fields become after a send. Absent = `keep`."
         },
         "selector": {
           "type": [
@@ -332,20 +93,20 @@
         },
         "sends": {
           "description": "How many sends this bundle has: absent or `-1` = unlimited, `0` = locked from the start. Each send\ntakes one; at zero the bundle's fields are disabled and it refuses to send (ADR 0032 §5).",
+          "format": "int64",
           "type": [
             "integer",
             "null"
-          ],
-          "format": "int64"
+          ]
         },
         "submit": {
-          "description": "When to send. Absent = `[enter]`.",
-          "$ref": "#/$defs/SubmitSet"
+          "$ref": "#/$defs/SubmitSet",
+          "description": "When to send. Absent = `[enter]`."
         }
-      }
+      },
+      "type": "object"
     },
     "Button": {
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -366,7 +127,7 @@
         "sink": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Sink"
             },
             {
               "type": "null"
@@ -376,30 +137,30 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "ButtonAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "oneshot": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "selector": {
           "type": [
@@ -407,11 +168,11 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "Canvas": {
       "description": "An in-place mount container for an external render module (ADR 0007).\nThe core does not interpret `data` — payload semantics belong entirely to the module; size/style go through `attrs`,\nand coupling to the data flow goes through the existing bind slot protocol (`set`/`patch` addressed by `data_event`).",
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -433,15 +194,15 @@
           "description": "The **dynamic bag** of module-private options (ADR 0017): renderer configuration the core\ndoes not know (3d-force-graph's node/link sizes, force parameters, colours…) packed up here,\nwhich the host hands to the module's `mount(el, data, host, options)` as it is, interpreting not one key.\nThis is where \"variants do not enter accrete\" lands: swapping renderers only swaps url + options, the DSL is unchanged.\nAbsent/Null = `{}` (the module applies its own defaults); same semantics as `url` — mount-time config,\nnot on the update hot-reload leg (changing it takes a remount)."
         },
         "source": {
-          "description": "`bind[\"value\"]`: the payload convention is kin to Chart/diagram — `kind: source` points at\na named data slot (the raw JSON of `bind.value.default` on the node in the slot is the module's data area),\nstreaming data in = `set`/`patch` on that slot (pointer `/bind/value/default/...`).",
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "`bind[\"value\"]`: the payload convention is kin to Chart/diagram — `kind: source` points at\na named data slot (the raw JSON of `bind.value.default` on the node in the slot is the module's data area),\nstreaming data in = `set`/`patch` on that slot (pointer `/bind/value/default/...`)."
         },
         "url": {
           "description": "The address of the ES module on the CDN (exports the mount/update/resize/unmount contract).",
@@ -450,19 +211,19 @@
       },
       "required": [
         "url"
-      ]
+      ],
+      "type": "object"
     },
     "ClassAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "horizontal": {
           "description": "The container's own layout direction (same field as FrameAttr; ADR 0010 defect fix:\npreviously only Case knew about horizontal, so the col class of select/rack could not be\noverridden by its own attrs — the parent case's horizontal only governed the parent div).",
@@ -477,30 +238,31 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "Dir": {
       "description": "The direction a `tiles`' ITEMS flow in (ADR 0035) — flex's meaning, not \"the shape of an entry\":\n`row` lays the items out left to right, `row-reverse` right to left, `col` top to bottom,\n`col-reverse` bottom to top.\n\nThe words are flex's because a frame author already knows them, down to the `-reverse` spellings\nthat reverse the ORDER without changing the axis. The default is `col`, the one place this\nvocabulary deliberately differs from flex: flex lays out inline content and starts on a line,\nwhile `tiles` lays out a list of items — and an unlabelled list is vertical.",
-      "type": "string",
       "enum": [
         "row",
         "row-reverse",
         "col",
         "col-reverse"
-      ]
+      ],
+      "type": "string"
     },
     "Direction": {
-      "type": "string",
       "enum": [
         "U",
         "D",
         "L",
         "R"
-      ]
+      ],
+      "type": "string"
     },
     "Draggable": {
+      "additionalProperties": false,
       "description": "The tag of a draggable box's cargo (ADR 0034). Absent = untagged: a target that\nnames no tag takes it, a target that names one does not.",
-      "type": "object",
       "properties": {
         "tag": {
           "type": [
@@ -509,11 +271,10 @@
           ]
         }
       },
-      "additionalProperties": false
+      "type": "object"
     },
     "Entry": {
       "description": "An entry: a group of named data fields, as one item of a list — each field a child node whose\n`attrs.selector` is the field's name (ADR 0031 §4 — an entry is the item of a `tiles` that has\n`fields`).\n\nA field whose direct children are themselves entries holds a LIST of entries, which a grid draws\nas child rows under the row it belongs to. That is the whole of \"hierarchy instead of spans\": the\ndata already says which row a row belongs to, so the markup does not merge cells to say it again.\n\nAn ENTRY, not a record: `record` implies a row, and a row is a direction word. `tiles` runs its\nitems along whichever axis `dir` names (`row | row-reverse | col | col-reverse`), and on the\nhorizontal one the items flow across a row — where \"record\" (a row's worth) would name the\ncontainer, not the thing. `entry` names the thing itself: what a list holds.",
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -527,13 +288,13 @@
         },
         "children": {
           "description": "The fields. A child's `attrs.selector` is the field's name, so a field projects by that\nkey rather than by position — reordering fields cannot move a value to another field.",
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "description": "The item's key (ADR 0031 §4, \"Every item has a key\"): an entry that names itself keeps that\nname across removals and re-sorts; one that does not is addressed by where it arrived.",
@@ -542,11 +303,11 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "Field": {
       "description": "One field of a grid (ADR 0031 §4). `key` names the entry field this field projects — the\n`attrs.selector` of one of the entry's children — and it is also what a two-row header derives\nits group from: split on `/`, everything before the last one is the group and the rest is the leaf\n(`price/retail` sits under `price`). Formatting has no spelling yet, so it is not implemented.\n\nA FIELD, not a column: `column` names where a thing sits, and where it sits is `dir`'s business.\n`tiles` has a direction of its own (`row | row-reverse | col | col-reverse`, ADR 0035), and the\nfields run across it with `dir: col` and down it with `dir: row` — so a word that names one of\nthe two would be a lie half the time. `field` names the thing itself.",
-      "type": "object",
       "properties": {
         "align": {
           "anyOf": [
@@ -563,13 +324,13 @@
         },
         "selectors": {
           "description": "Extra class tokens for this field's cells: a field is not an element, so it is addressed\nthe way the rest of the renderer addresses things (ADR 0031 §4).",
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "title": {
           "description": "The header text; absent falls back to the key's leaf.",
@@ -588,11 +349,11 @@
       },
       "required": [
         "key"
-      ]
+      ],
+      "type": "object"
     },
     "ForceGraph": {
       "description": "A 3D force-directed relationship graph (ADR 0018). A native component, not a canvas module: the renderer and the layout\nboth live in wasm (the `forcegraph` crate), so there is no `url`, no JS asset, no\nmount/update/resize/unmount contract — all that can be written is `attrs`, the renderer knobs `style`\nand the data area `bind[\"value\"]`.\n\nData area payload = `forcegraph::Snapshot`: `{nodes, links, focus?}`, diffed by id\n(re-sending the whole snapshot is idempotent). `focus` is a view instruction\n`{ids, seq?, padding_px?, duration_ms?}` — changing `seq` lets the same target fly again,\nwhile a repeat write that leaves `seq` alone does not touch the camera.\n\n**This is a standalone component, not a kind of canvas** (ADR 0029): rendering, layout, camera and picking are all in\nthe same wasm, so it has its own node type and its own `style` vocabulary (typed, so it can be checked by schema\nand by patch), and does not take that url + options dynamic bag. The graph data is this interface's main reading surface,\nand customisation grows by \"adding one more dimension\": the payload is a snapshot, adding fields does not swap the node type — grouping displays like\n`node_cluster` / `edge_cluster` will appear as new fields of `Snapshot` and new knobs of `style`,\nrather than becoming another component or swapping the renderer.",
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -613,7 +374,7 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
@@ -621,29 +382,29 @@
           ]
         },
         "style": {
-          "description": "Renderer knobs, all with defaults; when default they stay off the wire.",
-          "$ref": "#/$defs/ForceGraphStyle"
+          "$ref": "#/$defs/ForceGraphStyle",
+          "description": "Renderer knobs, all with defaults; when default they stay off the wire."
         },
         "theme": {
-          "description": "Second value: the theme channel (`true`/`\"dark\"`).",
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Second value: the theme channel (`true`/`\"dark\"`)."
         }
-      }
+      },
+      "type": "object"
     },
     "ForceGraphStyle": {
-      "type": "object",
       "properties": {
         "auto_fit": {
+          "default": true,
           "description": "After the first batch of data, fit the view to the whole graph; later appends neither re-layout nor fly the camera.",
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "background": {
           "type": [
@@ -652,126 +413,126 @@
           ]
         },
         "charge": {
+          "default": -30.0,
           "description": "Repulsion; a negative value = pushing each other apart.",
-          "type": "number",
           "format": "float",
-          "default": -30.0
+          "type": "number"
         },
         "fit_padding_px": {
-          "type": "number",
+          "default": 40.0,
           "format": "float",
-          "default": 40.0
+          "type": "number"
         },
         "glow_alpha": {
+          "default": 0.44999998807907104,
           "description": "Marker strength for highlighted nodes: peak opacity of the halo core and of each ripple ring.",
-          "type": "number",
           "format": "float",
-          "default": 0.44999998807907104
+          "type": "number"
         },
         "highlight_reach": {
+          "default": true,
           "description": "Highlight the reachable path (`reach_hops` edges out from the selected/focused node) instead of dimming the rest.",
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "label_max_nodes": {
-          "description": "Above this node count draw only, no labels (the label layer is DOM projected per frame, so at volume it is noise).",
-          "type": "integer",
-          "format": "uint32",
           "default": 150,
-          "minimum": 0
+          "description": "Above this node count draw only, no labels (the label layer is DOM projected per frame, so at volume it is noise).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "label_px": {
-          "type": "number",
+          "default": 12.0,
           "format": "float",
-          "default": 12.0
+          "type": "number"
         },
         "labels": {
+          "default": true,
           "description": "An always-on name label layer.",
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "link_distance": {
-          "type": "number",
+          "default": 30.0,
           "format": "float",
-          "default": 30.0
+          "type": "number"
         },
         "link_opacity": {
-          "type": "number",
+          "default": 0.800000011920929,
           "format": "float",
-          "default": 0.800000011920929
+          "type": "number"
         },
         "link_shape": {
-          "description": "Edge direction: `straight` connects directly; `axes` takes the nearest of the six coordinate orientations;\n`tetra` takes the nearest of the regular tetrahedron's four vertex directions.",
           "$ref": "#/$defs/LinkShape",
-          "default": "straight"
+          "default": "straight",
+          "description": "Edge direction: `straight` connects directly; `axes` takes the nearest of the six coordinate orientations;\n`tetra` takes the nearest of the regular tetrahedron's four vertex directions."
         },
         "link_strength": {
+          "default": null,
+          "format": "float",
           "type": [
             "number",
             "null"
-          ],
-          "format": "float",
-          "default": null
+          ]
         },
         "link_width_px": {
-          "type": "number",
+          "default": 2.5,
           "format": "float",
-          "default": 2.5
+          "type": "number"
         },
         "node_size_px": {
+          "default": 0.0,
           "description": "Node base radius (screen pixels).\nNode radius (screen pixels); 0 = derived from `node_size_ratio`.",
-          "type": "number",
           "format": "float",
-          "default": 0.0
+          "type": "number"
         },
         "node_size_ratio": {
+          "default": 2.0,
           "description": "Multiple of the link width for the node sphere diameter (default 2).",
-          "type": "number",
           "format": "float",
-          "default": 2.0
+          "type": "number"
         },
         "node_size_step_px": {
+          "default": 0.6000000238418579,
           "description": "Radius added per weight tier (screen pixels); the tier count is `node_tiers`.",
-          "type": "number",
           "format": "float",
-          "default": 0.6000000238418579
+          "type": "number"
         },
         "node_tiers": {
-          "type": "integer",
-          "format": "uint8",
           "default": 3,
+          "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "palette": {
-          "description": "Node colours, taken in rotation by `kind`; empty = the built-in Morandi scheme for `theme`.",
-          "type": "array",
           "default": [],
+          "description": "Node colours, taken in rotation by `kind`; empty = the built-in Morandi scheme for `theme`.",
           "items": {
             "type": "string"
-          }
+          },
+          "type": "array"
         },
         "reach_hops": {
-          "description": "The number of reachable hops.",
-          "type": "integer",
-          "format": "uint32",
           "default": 1,
-          "minimum": 0
+          "description": "The number of reachable hops.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "theme": {
-          "description": "Ground: light / dark. Swaps only palette and panel background, not the layout.",
           "$ref": "#/$defs/Theme",
-          "default": "dark"
+          "default": "dark",
+          "description": "Ground: light / dark. Swaps only palette and panel background, not the layout."
         },
         "velocity_decay": {
-          "type": "number",
+          "default": 0.4000000059604645,
           "format": "float",
-          "default": 0.4000000059604645
+          "type": "number"
         }
-      }
+      },
+      "type": "object"
     },
     "Frame": {
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -784,13 +545,13 @@
           ]
         },
         "children": {
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "type": [
@@ -799,34 +560,33 @@
           ]
         },
         "sink": {
-          "description": "The landing uplink (ADR 0034): where a drop on this box goes — an event name or\na local slot, the same `Bind` `dock` had.",
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Sink"
             },
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "The landing uplink (ADR 0034): where a drop on this box goes — an event name or\na local slot, the same channel `dock` had."
         },
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "FrameAttr": {
       "description": "A frame is a box: it wraps children, it can read a slot, and (ADR 0034) it is the\nonly thing that can carry cargo — as a source (`draggable`), as a landing\n(`accept` + `sink`), or as both.",
-      "type": "object",
       "properties": {
         "accept": {
-          "description": "What cargo this box takes (ADR 0034). Absent `tag` = takes any. Needs `sink`:\na drop that cannot emit is a frame error at load.",
           "anyOf": [
             {
               "$ref": "#/$defs/Accept"
@@ -834,19 +594,19 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "What cargo this box takes (ADR 0034). Absent `tag` = takes any. Needs `sink`:\na drop that cannot emit is a frame error at load."
         },
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "draggable": {
-          "description": "This box may be dragged away (ADR 0034). Its cargo is its own subtree — there\nis no second payload to keep in step with it.",
           "anyOf": [
             {
               "$ref": "#/$defs/Draggable"
@@ -854,14 +614,15 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "This box may be dragged away (ADR 0034). Its cargo is its own subtree — there\nis no second payload to keep in step with it."
         },
         "grid": {
+          "additionalProperties": true,
           "type": [
             "object",
             "null"
-          ],
-          "additionalProperties": true
+          ]
         },
         "horizontal": {
           "type": [
@@ -876,27 +637,27 @@
           ]
         },
         "style": {
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Inline style, written as it is. This is the surface `group` had: a frame can\nsay everything a `group` could.",
           "type": [
             "object",
             "null"
-          ],
-          "additionalProperties": {
-            "type": "string"
-          }
+          ]
         }
-      }
+      },
+      "type": "object"
     },
     "Header": {
       "description": "The header of a grid (ADR 0031 §4, ADR 0035): the cells carry `selector` — one hook for the whole\nheader, since no header cell is a special element. `layers: 2` puts a group layer over a leaf\nlayer, both read off the fields' keys; there is no second shape to say the same thing.",
-      "type": "object",
       "properties": {
         "layers": {
           "description": "`1` (default) or `2`: how many LINES of header cells there are along the field axis. A\ndirection word (`rows`) named where the header sat, which stopped being true the moment\n`dir: row` made the header a column; a layer is one line whatever axis it runs on.",
-          "type": "integer",
           "format": "uint8",
           "maximum": 2,
-          "minimum": 1
+          "minimum": 1,
+          "type": "integer"
         },
         "selector": {
           "type": "string"
@@ -904,10 +665,10 @@
       },
       "required": [
         "selector"
-      ]
+      ],
+      "type": "object"
     },
     "Image": {
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -928,26 +689,26 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "ImageAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "desc": {
           "type": [
@@ -968,8 +729,8 @@
           ]
         },
         "thumb": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "width": {
           "type": [
@@ -977,11 +738,12 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "Input": {
-      "description": "A field: one value, one line (or many, with `multiline`) (ADR 0032).",
-      "type": "object",
+      "additionalProperties": false,
+      "description": "A field: one value, one line (or many, with `multiline`) (ADR 0032).\n\nUnknown keys are refused: a field has no `sink` any more, and an old page that still carries one should\nhear about it rather than quietly lose the write.",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -999,35 +761,36 @@
             "null"
           ]
         },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What kind of field this is — the element type and the parse, one declaration (ADR 0032 §2: a field\nhas one type, and it is not the read's or the write's). Named `kind` because `type` is the node's own\ndiscriminator on the wire. Absent = text."
+        },
         "multiline": {
           "description": "Multi-line is a layout of the field, not a different node.",
           "type": "boolean"
         },
         "placeholder": {
-          "description": "Second value: the placeholder text (literal or slot) — the channel\n`textarea` used to carry on its own type.",
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
-          ]
-        },
-        "sink": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          ],
+          "description": "Second value: the placeholder text (literal or slot) — the channel\n`textarea` used to carry on its own type."
         },
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
@@ -1041,10 +804,10 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "JsType": {
-      "type": "string",
       "enum": [
         "bool",
         "number",
@@ -1052,32 +815,32 @@
         "password",
         "button",
         "submit"
-      ]
+      ],
+      "type": "string"
     },
     "LinkShape": {
       "description": "The graph renderer's knobs. Same semantics as canvas's `options`: mount-time config, changing it takes\na remount (not on the update leg). The only difference is that this is our own renderer's vocabulary, so it can be\ntyped and checked by schema and by patch.\nThe direction of an edge. Both orientations are \"interfaces on a node\": a link leaves from one orientation and enters\nthe other end's orientation, joined in between by a cubic curve.",
       "oneOf": [
         {
-          "type": "string",
           "enum": [
             "straight"
-          ]
+          ],
+          "type": "string"
         },
         {
+          "const": "axes",
           "description": "Cartesian coordinates: the six directions ±x ±y ±z.",
-          "type": "string",
-          "const": "axes"
+          "type": "string"
         },
         {
+          "const": "tetra",
           "description": "Regular tetrahedron: the directions from the four vertices to the centre.",
-          "type": "string",
-          "const": "tetra"
+          "type": "string"
         }
       ]
     },
     "Panel": {
       "description": "A panel: one \"appear/disappear content area\". `attrs.place` says where it goes (inline / hugging the trigger / hugging the viewport),\n`attrs.state` says who decides it appears (local toggle / following the bound slot). The four cells on these two axes are the old\n`fold`, `popup`, `layer`, plus the one cell they did not cover — hugging the viewport + local toggle (the drawer).\n\n`children[0]` is the trigger, `children[1]` is the floating content (with `state: bound` the trigger may be omitted: the panel's\nappearance is decided by the slot, nobody has to click). With no content nothing is drawn at all — omitting a child is a frame error.",
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -1090,13 +853,13 @@
           ]
         },
         "children": {
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "type": [
@@ -1107,29 +870,92 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "PanelAttr": {
-      "type": "object",
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "properties": {
+                    "left": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "left"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "right": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "right"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            {}
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "properties": {
+                    "top": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "top"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "bottom": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "bottom"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            {}
+          ]
+        }
+      ],
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "direction": {
-          "description": "`viewport` only: which edge the body hugs. Absent = `L` — the left edge of the viewport\n(`Direction` is the same enum `popup` positions with).",
           "anyOf": [
             {
               "$ref": "#/$defs/Direction"
@@ -1137,7 +963,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "`viewport` only: which edge the body hugs. Absent = `L` — the left edge of the viewport\n(`Direction` is the same enum `popup` positions with)."
         },
         "dismiss": {
           "description": "Closes on a click outside the body — the mask for `viewport`, \"anywhere else\" for the rest.\nA panel without it can only be closed by its trigger (a bundle that must not lose its work).",
@@ -1147,8 +974,8 @@
           ]
         },
         "place": {
-          "description": "Where it sits. Absent = `inline`.",
-          "$ref": "#/$defs/PanelPlace"
+          "$ref": "#/$defs/PanelPlace",
+          "description": "Where it sits. Absent = `inline`."
         },
         "replace_header": {
           "description": "`inline` only: the first child is the header and toggles the body (the old `fold` shape).",
@@ -1164,8 +991,8 @@
           ]
         },
         "state": {
-          "description": "Who decides. Absent = `toggle`.",
-          "$ref": "#/$defs/PanelState"
+          "$ref": "#/$defs/PanelState",
+          "description": "Who decides. Absent = `toggle`."
         },
         "width": {
           "description": "`viewport` only: the body's width. Absent = whatever the class says.",
@@ -1175,88 +1002,25 @@
           ]
         }
       },
-      "allOf": [
-        {
-          "anyOf": [
-            {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "left": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "left"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "right": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "right"
-                  ]
-                }
-              ]
-            },
-            {}
-          ]
-        },
-        {
-          "anyOf": [
-            {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "top": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "top"
-                  ]
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "bottom": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "bottom"
-                  ]
-                }
-              ]
-            },
-            {}
-          ]
-        }
-      ]
+      "type": "object"
     },
     "PanelPlace": {
       "description": "How a panel sits on the page — the first of the two axes that used to be three components.",
       "oneOf": [
         {
+          "const": "inline",
           "description": "In the flow: opening it pushes the rest of the page down. (Was `fold`, `float_body: false`.)",
-          "type": "string",
-          "const": "inline"
+          "type": "string"
         },
         {
+          "const": "anchor",
           "description": "Over the trigger it belongs to: the page around it does not move. (Was `popup`.)",
-          "type": "string",
-          "const": "anchor"
+          "type": "string"
         },
         {
+          "const": "viewport",
           "description": "Over the whole viewport, at the named edge, with a mask behind it. (Was `layer`; a panel at\nthe right edge is the drawer that had no spelling before.)",
-          "type": "string",
-          "const": "viewport"
+          "type": "string"
         }
       ]
     },
@@ -1264,19 +1028,18 @@
       "description": "Who decides whether a panel is on screen — the second axis.",
       "oneOf": [
         {
+          "const": "toggle",
           "description": "A local toggle: the trigger opens it, a click on the mask / Esc / outside closes it. Nothing\nabout it reaches the sender.",
-          "type": "string",
-          "const": "toggle"
+          "type": "string"
         },
         {
+          "const": "bound",
           "description": "The panel follows its binding: non-empty means on screen (ADR 0012's \"empty is absent\"),\nand dismissing clears that slot — one state, not two. Named `bound`, not `source`: the\nchannel `source` says where a VALUE comes from, this says who decides the panel is there.",
-          "type": "string",
-          "const": "bound"
+          "type": "string"
         }
       ]
     },
     "Path": {
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -1297,35 +1060,36 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "ResetMode": {
       "description": "What a bundle's fields become after it sends (ADR 0032 §4). One word, three exclusive values:\n`keep` (absent — what a field always did), `clear` (the empty value of its own shape) and\n`default` (the value `source.default` gave it at build time).",
-      "type": "string",
       "enum": [
         "keep",
         "clear",
         "default"
-      ]
+      ],
+      "type": "string"
     },
     "Scope": {
       "description": "Where a value is authoritative (ADR 0031 §1). The store is chosen by this\nfield, not by a separate variant: `local` lives in the page's own value\nplane, `remote` on the side that owns the session, `both` assigns locally\nand mirrors the change up.",
-      "type": "string",
       "enum": [
         "remote",
         "local",
         "both"
-      ]
+      ],
+      "type": "string"
     },
     "Select": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "attrs": {
           "anyOf": [
@@ -1338,13 +1102,13 @@
           ]
         },
         "children": {
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "type": [
@@ -1353,30 +1117,20 @@
           ]
         },
         "options": {
-          "description": "Second value: the option rows (list plane).",
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
-          ]
-        },
-        "sink": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Bind"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          ],
+          "description": "Second value: the option rows (list plane)."
         },
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
@@ -1390,19 +1144,42 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
+    },
+    "Sink": {
+      "additionalProperties": false,
+      "description": "The write direction of one value: where it goes, and who is authoritative about it. No `default` — a write\nhas no use for a value it does not have.\n\n`dest` is the word ADR 0023 chose for an uplink target, and it is what an outflow calls the same address\n(`Outflow { dest, id?, data }`), so the emit no longer translates between two names for one thing.",
+      "properties": {
+        "dest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "JSON Pointer into the target value. Only a `scope: local` write uses it: it names the member this node\nowns, and the rest of the object is left alone.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        }
+      },
+      "type": "object"
     },
     "SizeAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "height": {
           "type": [
@@ -1422,15 +1199,39 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "The read direction of one value (ADR 0031 §1-2, ADR 0039): where it comes from, who is authoritative,\nwhich member of it, and what to show when there is none.\n\nNo `slot` means the value is a literal: `default` *is* the value (that is what the retired\n`kind: default` said). With a slot, `default` is what to use while the slot is still empty.",
+      "properties": {
+        "default": true,
+        "path": {
+          "description": "JSON Pointer into the slot's value (ADR 0008): the shape belongs to the\nproducer, the read picks one field out of it. ADR 0031 is silent on\nextraction — it is orthogonal to the address, so it stays.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "slot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "Stamp": {
       "description": "A registered template, instantiated by name (ADR 0006). Renamed from `Template`\n(ADR 0034); the definition side is unchanged.",
-      "type": "object",
       "properties": {
         "data": {
-          "type": "object",
-          "additionalProperties": true
+          "additionalProperties": true,
+          "type": "object"
         },
         "name": {
           "type": "string"
@@ -1439,28 +1240,27 @@
       "required": [
         "name",
         "data"
-      ]
+      ],
+      "type": "object"
     },
     "Step": {
-      "description": "What advances the stage (ADR 0031 §4). Exactly two answers, because there are exactly two ways\nan item gets there: a clock this node owns, or a slot the world writes. Omitted = no stepping.",
       "anyOf": [
         {
           "description": "`{timer: 4000}` — ms between turns. One clock per node, stopped when the node goes away:\nrotation, dwell and \"newest on top\" are all this.",
-          "type": "object",
           "properties": {
             "timer": {
-              "type": "integer",
               "format": "uint64",
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": [
             "timer"
-          ]
+          ],
+          "type": "object"
         },
         {
           "description": "`{slot: \"page\"}` — the value of that slot says which item is on stage. What a `pages` node\nwas: a selection driven from outside (a nav click, a route, another component).",
-          "type": "object",
           "properties": {
             "slot": {
               "type": "string"
@@ -1468,35 +1268,36 @@
           },
           "required": [
             "slot"
-          ]
+          ],
+          "type": "object"
         }
-      ]
+      ],
+      "description": "What advances the stage (ADR 0031 §4). Exactly two answers, because there are exactly two ways\nan item gets there: a clock this node owns, or a slot the world writes. Omitted = no stepping."
     },
     "SubmitMode": {
       "description": "When a bundle sends (ADR 0032). The modes combine, so the attribute is a\nset: `[enter, button]` is a chat box, `[change]` packs as the user types.\nThis is timing — a different axis from `scope`, which says where a value\nlands.",
-      "type": "string",
       "enum": [
         "enter",
         "button",
         "change"
-      ]
+      ],
+      "type": "string"
     },
     "SubmitSet": {
-      "description": "A bare string or a list on the wire: `submit: enter` and `submit: [enter]`\nsay the same thing, so the one-mode case (nearly every frame) does not have\nto remember the list syntax.",
       "anyOf": [
         {
           "$ref": "#/$defs/SubmitMode"
         },
         {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/SubmitMode"
-          }
+          },
+          "type": "array"
         }
-      ]
+      ],
+      "description": "A bare string or a list on the wire: `submit: enter` and `submit: [enter]`\nsay the same thing, so the one-mode case (nearly every frame) does not have\nto remember the list syntax."
     },
     "Svg": {
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -1509,13 +1310,13 @@
           ]
         },
         "children": {
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "type": [
@@ -1526,17 +1327,17 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "Text": {
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -1557,26 +1358,26 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "TextAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "format": {
           "type": [
@@ -1590,27 +1391,27 @@
             "null"
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "Theme": {
       "description": "The ground colour the graph sits on. The two palettes differ only in lightness: Morandi colours are low-chroma, so a palette with\nenough contrast on a light ground will smear into a blur on a dark one, and vice versa.",
       "oneOf": [
         {
-          "type": "string",
           "enum": [
             "light"
-          ]
+          ],
+          "type": "string"
         },
         {
+          "const": "dark",
           "description": "Default: nodes are orbs of light and edges are rays — light only works on a dark ground.",
-          "type": "string",
-          "const": "dark"
+          "type": "string"
         }
       ]
     },
     "Tiles": {
       "description": "One container for a slot's items, cut into blocks (ADR 0031 §4): `rack` and `pages` were this\nnode with different steppers. `children` is the layout a tile is drawn with — a selector picks\none template, the rest of the list is the default (the mechanism `rack.item` used to carry).",
-      "type": "object",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -1623,13 +1424,13 @@
           ]
         },
         "children": {
+          "items": {
+            "$ref": "#"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#"
-          }
+          ]
         },
         "id": {
           "type": [
@@ -1640,29 +1441,28 @@
         "source": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Bind"
+              "$ref": "#/$defs/Source"
             },
             {
               "type": "null"
             }
           ]
         }
-      }
+      },
+      "type": "object"
     },
     "TilesAttr": {
-      "type": "object",
       "properties": {
         "class": {
+          "items": {
+            "type": "string"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "type": "string"
-          }
+          ]
         },
         "dir": {
-          "description": "Which way the ITEMS flow (ADR 0035), in flex's sense. `row` is a strip: items left to right,\nand each entry's fields run down it, in the grid's ROW axis. `col` (default) is a list: items\ntop to bottom, each entry's fields across it, in the grid's COLUMN axis — the table every\nframe already draws. `row-reverse` / `col-reverse` keep the shape and reverse the order the\nitems arrive in.",
           "anyOf": [
             {
               "$ref": "#/$defs/Dir"
@@ -1670,20 +1470,20 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Which way the ITEMS flow (ADR 0035), in flex's sense. `row` is a strip: items left to right,\nand each entry's fields run down it, in the grid's ROW axis. `col` (default) is a list: items\ntop to bottom, each entry's fields across it, in the grid's COLUMN axis — the table every\nframe already draws. `row-reverse` / `col-reverse` keep the shape and reverse the order the\nitems arrive in."
         },
         "fields": {
           "description": "Absent = each item is a node drawn as it is, one block per item. Present = each item is an\nENTRY and each field projects one of its children into a cell (ADR 0031 §4).",
+          "items": {
+            "$ref": "#/$defs/Field"
+          },
           "type": [
             "array",
             "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/Field"
-          }
+          ]
         },
         "header": {
-          "description": "Absent = no header row. The cells carry `selector`, so the frame styles its own header.",
           "anyOf": [
             {
               "$ref": "#/$defs/Header"
@@ -1691,7 +1491,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Absent = no header row. The cells carry `selector`, so the frame styles its own header."
         },
         "selector": {
           "type": [
@@ -1700,7 +1501,6 @@
           ]
         },
         "step": {
-          "description": "What advances the window. Only meaningful with a `window`: a stepper with nothing to step is\na frame error at load, not a clock that ticks for nobody.",
           "anyOf": [
             {
               "$ref": "#/$defs/Step"
@@ -1708,10 +1508,10 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "What advances the window. Only meaningful with a `window`: a stepper with nothing to step is\na frame error at load, not a clock that ticks for nobody."
         },
         "window": {
-          "description": "Absent = every item is laid out and nothing steers; present = that many consecutive items\nare on stage at once, starting at the cursor (ADR 0031 §4).",
           "anyOf": [
             {
               "$ref": "#/$defs/Window"
@@ -1719,10 +1519,10 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Absent = every item is laid out and nothing steers; present = that many consecutive items\nare on stage at once, starting at the cursor (ADR 0031 §4)."
         },
         "wrap": {
-          "description": "What happens when the items no longer fit on one line (ADR 0035). Default `wrap`, because\na card wall is the shape that has no other spelling. `wrap-reverse` also puts the FIELDS on\nthe other side of the item axis: the header row below the entries, or the header column on\nthe right — the fields axis is the line axis, so reversing the lines reverses where they land.",
           "anyOf": [
             {
               "$ref": "#/$defs/Wrap"
@@ -1730,41 +1530,247 @@
             {
               "type": "null"
             }
-          ]
-        }
-      }
-    },
-    "Window": {
-      "description": "How much of the slot a `tiles` node puts on stage at once (ADR 0031 §4). Absent = every item is\nlaid out, the way the frame's CSS says; `{size: 1}` = one at a time, occupying the whole area —\nthe marquee, and also the page; `{size: N}` = a moving window of N consecutive items, which is\nwhat a paged table needs (and what `rack.view.count` used to be). Nothing about the container\nchanges between the three: a window is a count, not a mode.\n\nThere is no default: a frame that says nothing has no window at all, and a window of zero would\nbe a box that can never show anything, so it is refused at decode.",
-      "type": "object",
-      "properties": {
-        "size": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 1
+          ],
+          "description": "What happens when the items no longer fit on one line (ADR 0035). Default `wrap`, because\na card wall is the shape that has no other spelling. `wrap-reverse` also puts the FIELDS on\nthe other side of the item axis: the header row below the entries, or the header column on\nthe right — the fields axis is the line axis, so reversing the lines reverses where they land."
         }
       },
+      "type": "object"
+    },
+    "Window": {
       "additionalProperties": false,
+      "description": "How much of the slot a `tiles` node puts on stage at once (ADR 0031 §4). Absent = every item is\nlaid out, the way the frame's CSS says; `{size: 1}` = one at a time, occupying the whole area —\nthe marquee, and also the page; `{size: N}` = a moving window of N consecutive items, which is\nwhat a paged table needs (and what `rack.view.count` used to be). Nothing about the container\nchanges between the three: a window is a count, not a mode.\n\nThere is no default: a frame that says nothing has no window at all, and a window of zero would\nbe a box that can never show anything, so it is refused at decode.",
+      "properties": {
+        "size": {
+          "format": "uint",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
       "required": [
         "size"
-      ]
+      ],
+      "type": "object"
     },
     "Wrap": {
       "description": "What the items do when they no longer fit on one line (ADR 0035). `wrap` is absent: a wall of\ncards is the common shape, and `nowrap` is a strip that must stay one strip.",
       "oneOf": [
         {
-          "type": "string",
           "enum": [
             "wrap",
             "wrap-reverse"
-          ]
+          ],
+          "type": "string"
         },
         {
+          "const": "nowrap",
           "description": "`nowrap` is a word, not two: the CSS spelling, and one serde cannot derive from `NoWrap`.",
-          "type": "string",
-          "const": "nowrap"
+          "type": "string"
         }
       ]
     }
-  }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Frame",
+      "description": "A box (ADR 0027/0034). It reads a slot and it is the only place cargo lives:\n`attrs.draggable` makes it a drag source, `attrs.accept` + `sink` a landing.\nIt takes a fallback id because a landing emits, and the frame's id is the id\nof what was dropped on.",
+      "properties": {
+        "type": {
+          "const": "frame",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Canvas",
+      "properties": {
+        "type": {
+          "const": "canvas",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/ForceGraph",
+      "properties": {
+        "type": {
+          "const": "forcegraph",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Panel",
+      "description": "A content area: the four cells of the two axes `place` × `state` (ADR 0030). `fold`/`popup`/`layer` as node types\nare gone, along with their shells in the model: all four cells are implemented in ui_core's `components/panel.rs`,\nand this arm is the single name they share.",
+      "properties": {
+        "type": {
+          "const": "panel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Bundle",
+      "properties": {
+        "type": {
+          "const": "bundle",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Svg",
+      "properties": {
+        "type": {
+          "const": "svg",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Path",
+      "properties": {
+        "type": {
+          "const": "path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Tiles",
+      "description": "One container for a slot's items (ADR 0031 §4): `window` says how many are on it, `step`\nwhat advances it. `rack` and `pages` were the same node with different steppers.",
+      "properties": {
+        "type": {
+          "const": "tiles",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Entry",
+      "description": "An entry — the item a `tiles` with `fields` projects (ADR 0031 §4). Rendered on its own it\nis a block of its fields; the grid is what turns it into a row.",
+      "properties": {
+        "type": {
+          "const": "entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Button",
+      "properties": {
+        "type": {
+          "const": "button",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Image",
+      "properties": {
+        "type": {
+          "const": "image",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Input",
+      "properties": {
+        "type": {
+          "const": "input",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Select",
+      "properties": {
+        "type": {
+          "const": "select",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Text",
+      "properties": {
+        "type": {
+          "const": "text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    {
+      "$ref": "#/$defs/Stamp",
+      "description": "A registered template by name (ADR 0006), spelled `stamp` since ADR 0034.",
+      "properties": {
+        "type": {
+          "const": "stamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "Accrete"
 }

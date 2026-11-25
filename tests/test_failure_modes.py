@@ -108,8 +108,7 @@ class TestSlowClient(unittest.TestCase):
         def single(ctx, path):
             ctx.page(h.text("resync"))
 
-        self.app.page = single
-
+        self.app.page(single)
     def tearDown(self) -> None:
         self.app.stop()
 

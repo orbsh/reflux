@@ -8,9 +8,9 @@
     "             or `value` (a static value: the display/data payload the renderer reads). null = none.",
     "children:    the builder takes *children.  item: the builder takes item= (the wire's `item` template).",
     "channels:    the two directions of a value (ADR 0031 \u00a72), what the builder offers beside attrs/id:",
-    "             `source` is where the value comes from, `sink` is where it goes. Each accepts a Bind",
-    "             (slot/scope/default/path/type, the whole address) or a bare value: a bare value on a",
-    "             read (source) is a constant \u2014 {\"default\": <value>} \u2014 and on a write (sink) a slot name.",
+    "             `source` is where the value comes from, `sink` is where it goes. Each accepts a Source (read) or a Sink (write)",
+    "             (ADR 0039: a read carries slot/scope/path/default, a write dest/scope/path) or a bare value: a bare value on a",
+    "             read (source) is a constant \u2014 {\"default\": <value>} \u2014 and on a write (sink) a `dest` name.",
     "             `default` says a bare constant is a legal source for this type (a frame has none: a",
     "             frame's source is always an address, never a literal), and it is what makes the",
     "             positional `value` a constant source rather than a shape error.",
@@ -168,7 +168,7 @@
       "item": false,
       "channels": {
         "source": true,
-        "sink": true,
+        "sink": false,
         "default": false
       }
     },
@@ -179,7 +179,7 @@
       "item": false,
       "channels": {
         "source": true,
-        "sink": true,
+        "sink": false,
         "default": true
       }
     },

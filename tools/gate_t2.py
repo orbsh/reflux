@@ -26,7 +26,7 @@ from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
 from reflux.app import App  # noqa: E402
 from reflux.sdk import h  # noqa: E402
-from reflux.sdk.types import Bind  # noqa: E402
+from reflux.sdk.types import Source  # noqa: E402
 from reflux.slots import Slot  # noqa: E402
 
 PAGE = "/"
@@ -40,9 +40,9 @@ def local_text(slot: str, *, id: str):
 
     The scope is `local` (ADR 0031 §1) and the reader takes `path: "/data"` because the vals slot
     holds the Outflow-shaped wrapper an in-page `local` emit writes, so the payload itself is one
-    level in. A `Bind` is the whole address, so the scope rides beside the slot.
+    level in. A `Source` is the read's whole address, so the scope rides inside it.
     """
-    return h.text(source=Bind(slot=slot, scope="local", path="/data"), id=id)
+    return h.text(source=Source(slot=slot, scope="local", path="/data"), id=id)
 
 
 def tree():

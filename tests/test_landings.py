@@ -51,7 +51,7 @@ class AClosureIsALandingPoint(unittest.TestCase):
         self.calls: list = []
         self.app = App(routes=Routes())
 
-        @self.app.route("/", title="test")
+        @self.app.page("/", title="test")
         def home(ctx, match):
             slots = ctx.slot
 
@@ -66,7 +66,7 @@ class AClosureIsALandingPoint(unittest.TestCase):
 
     def test_the_frame_carries_a_name_not_a_function(self) -> None:
         addresses = sinks(drawn_page(self.device), [])
-        self.assertEqual([a["slot"] for a in addresses], ["/.add"])
+        self.assertEqual([a["dest"] for a in addresses], ["/.add"])
 
     def test_the_name_resolves_to_the_closure(self) -> None:
         self.assertTrue(self.app.dests.dispatch(self.device, {"dest": "/.add", "data": 7}))
@@ -90,20 +90,20 @@ class TheTableIsOneDraws(unittest.TestCase):
         def pick(value):
             pass
 
-        @app.route("/", title="t")
+        @app.page("/", title="t")
         def home(ctx, match):
             ctx.page(h.frame(h.button("a", sink=pick, id="a"), h.button("b", sink=pick, id="b"), id="r"))
 
         device = FakeDevice(app=app)
         app._draw(device)
-        self.assertEqual([a["slot"] for a in sinks(drawn_page(device), [])], ["/.pick", "/.pick"])
+        self.assertEqual([a["dest"] for a in sinks(drawn_page(device), [])], ["/.pick", "/.pick"])
 
     def test_two_different_closures_are_two_names(self) -> None:
         # A per-row handler is a different closure per row: that is what a name per instance buys.
         app = App(routes=Routes())
         ids = ["a", "b"]
 
-        @app.route("/", title="t")
+        @app.page("/", title="t")
         def home(ctx, match):
             def pick(value):
                 pass
@@ -118,12 +118,12 @@ class TheTableIsOneDraws(unittest.TestCase):
 
         device = FakeDevice(app=app)
         app._draw(device)
-        self.assertEqual([a["slot"] for a in sinks(drawn_page(device), [])], ["/.hit", "/.hit#2"])
+        self.assertEqual([a["dest"] for a in sinks(drawn_page(device), [])], ["/.hit", "/.hit#2"])
 
     def test_a_page_turn_replaces_the_table(self) -> None:
         app = App(routes=Routes())
 
-        @app.route("/", title="t")
+        @app.page("/", title="t")
         def home(ctx, match):
             ctx.page(h.frame(h.button("x", sink=lambda value: None, id="x"), id="r"))
 
@@ -139,7 +139,7 @@ class TheTableIsOneDraws(unittest.TestCase):
         app = App(routes=Routes())
         seen: list = []
 
-        @app.route("/", title="t")
+        @app.page("/", title="t")
         def home(ctx, match):
             who = ctx.device.id
 
@@ -165,7 +165,7 @@ class GatedLandings(unittest.TestCase):
             auth=Auth(verify=lambda ctx, credentials, mode: "user-ada"),
         )
 
-        @self.app.route("/", title="t")
+        @self.app.page("/", title="t")
         def home(ctx, match):
             def secret(value):
                 self.calls.append(value)
@@ -201,7 +201,7 @@ class BothKindsLiveTogether(unittest.TestCase):
         def from_a_module(ctx, frame):
             seen.append(("remote", frame.get("data")))
 
-        @app.route("/", title="t")
+        @app.page("/", title="t")
         def home(ctx, match):
             def local(value):
                 seen.append(("local", value))

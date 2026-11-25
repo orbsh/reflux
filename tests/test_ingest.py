@@ -134,18 +134,30 @@ class TestTheNode(unittest.TestCase):
         refused(self, frame(hand("create", {"type": "text", "attrs": {"class_": ["x"]}})), "'class_' is not an attribute")
 
     def test_the_value_map_is_closed(self) -> None:
-        # One value, one address, one closed scope (ADR 0031): `source`, `sink` and a node's named
-        # second values are all one `Bind`, so a key that is not the `Bind`'s is refused on any of
-        # them — and the reason names the key and the set it missed.
+        # A value's shape follows its direction (ADR 0039): a read is a `Source` (slot, scope, path,
+        # default), a write a `Sink` (dest, scope, path), so the keys of the other direction are
+        # refused — and the reason names the key and the set it missed.
         refused(
             self,
             frame(hand("create", {"type": "text", "source": {"kind": "elsewhere"}})),
-            "'kind' is not a field of a value (slot/scope/default/path/type)",
+            "'kind' is not a field of a source (default/path/scope/slot)",
         )
         refused(
             self,
-            frame(hand("create", {"type": "input", "sink": {"slot": "s", "payload": ["a"]}})),
-            "'payload' is not a field of a value (slot/scope/default/path/type)",
+            frame(hand("create", {"type": "bundle", "sink": {"dest": "s", "payload": ["a"]}})),
+            "'payload' is not a field of a sink",
+        )
+        # The two directions do not borrow each other's words: a write has no `slot` and a read has
+        # no `dest`, which is the whole point of splitting the one `Bind` (ADR 0039).
+        refused(
+            self,
+            frame(hand("create", {"type": "bundle", "sink": {"slot": "s"}})),
+            "'slot' is not a field of a sink (dest/path/scope)",
+        )
+        refused(
+            self,
+            frame(hand("create", {"type": "text", "source": {"dest": "s"}})),
+            "'dest' is not a field of a source (default/path/scope/slot)",
         )
         # The retired `bind` map is not a field of any node either: a producer speaking the old
         # dialect is refused where it starts, not silently dropped by the renderer's serde.

@@ -31,7 +31,7 @@ from typing import Any, Callable, Protocol
 
 from .protocol import LOGIN, SIGNUP
 from .sdk import builders as h
-from .sdk.types import Accrete, Bind, JsType
+from .sdk.types import Accrete, JsType
 
 __all__ = ["Auth", "TokenStore", "Tokens", "credentials_of", "default_view", "DEFAULT_IDLE_WINDOW"]
 
@@ -141,13 +141,13 @@ def default_view(ctx: Any, state: str) -> Accrete:
     if state == "refused":
         lines.append(h.text("用户名或密码不对", variant="muted"))
     # A bundle owns the exit (`sink`) and the timing (`submit`, ADR 0032); each field is named by
-    # its own `tag`. The js-kind rides the write side's `Bind` — a tagged field has no address of
-    # its own, so that entry names a type and no slot.
+    # its own `tag`, and each field says what it is with `kind` (ADR 0039: a field's type is the
+    # field's, not a channel's — a tagged field has no address of its own to hang it on).
     return h.frame(
         *lines,
         h.bundle(
             h.input(tag="username", id="auth-user"),
-            h.input(tag="password", source=Bind(type=JsType.password), id="auth-pass"),
+            h.input(tag="password", kind=JsType.password, id="auth-pass"),
             h.button("继续", sink=ctx.slot(verb)),
             sink=ctx.slot(verb),
             submit=["enter", "button"],

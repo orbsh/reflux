@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reflux import route
+from reflux import page
 
 
 def admin_layout(ctx, match, page):
@@ -10,6 +10,6 @@ def admin_layout(ctx, match, page):
     return {"layout": match.route.meta.get("title"), "page": page}
 
 
-@route("/admin", layout=admin_layout, title="后台")
+@page("/admin", layout=admin_layout, title="后台")
 def admin(ctx, match):
     ctx.page("admin")

@@ -1,13 +1,15 @@
 """Routing: a table keyed by path, declared where the handler is written.
 
-    from reflux import route
+    from reflux import page
 
-    @route("/blog/{slug}", title="文章")
-    def post(device, match): ...
+    @page("/blog/{slug}", title="文章")
+    def post(ctx, match):
+        return h.frame(...)
 
-    @route("/")                # an alias: the same handler on a second path
-    @route("/posts")
-    def post_index(device, match): ...
+    @page("/")                 # an alias: the same handler on a second path
+    @page("/posts")
+    def post_index(ctx, match):
+        return h.frame(...)
 
 Two conventions, no more: `{name}` takes one segment (never an empty one) and `{name:path}` is the
 closing catch-all, taking the rest — empty included. The matcher knows only this table, so there is
@@ -26,7 +28,7 @@ import re
 from typing import Any, Callable, Iterator, overload
 from urllib.parse import unquote
 
-__all__ = ["Match", "Route", "Routes", "RoutesError", "DEFAULT", "route", "discover"]
+__all__ = ["Match", "Route", "Routes", "RoutesError", "DEFAULT", "page", "discover"]
 
 NAME = re.compile(r"^\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 CONVERTED = re.compile(r"^\{([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\}$")
@@ -38,6 +40,29 @@ Spec = tuple[str, str]
 
 class RoutesError(Exception):
     """A registration that can never be right — raised while the app is still starting."""
+
+
+def page_of(ctx: Any, drawn: Any, where: str) -> Any:
+    """The structure a page gave, one way or the other.
+
+    A page either returns its node or draws it with `ctx.page(node)`; both land wrapped the same way
+    (the page marker around it, the title and address the declaration already names), so the two
+    styles differ only in how the value leaves the handler. Doing both in one handler is a defect
+    with no right answer — the structure would be either duplicated or silently chosen — so it is
+    refused rather than guessed at.
+    """
+    taken = ctx.take_page()
+    if drawn is None:
+        return taken
+    if taken is not None:
+        raise RoutesError(f"{where}: a page returns its structure or draws it, not both")
+    if isinstance(drawn, (list, tuple)):
+        # Several siblings: the reading `ctx.page(a, b)` had, so a page that returns a block of them
+        # and one that returns a single node both land in the same frame.
+        ctx.page(*drawn)
+    else:
+        ctx.page(drawn)  # the same wrapping, so the marker and the declared title are not lost
+    return ctx.take_page()
 
 
 def segments_of(path: str) -> list[str]:
@@ -181,16 +206,15 @@ class Match:
         return self.route.meta
 
     def resolve(self, ctx) -> Any:
-        """The structure of this page: what the handler drew, wrapped by its layout when it has one.
+        """The structure of this page: what the handler gave, wrapped by its layout when it has one.
 
-        The handler gets `(ctx, match)` and calls `ctx.page(node)` — a page handler draws, it does not
-        return, because this side of the socket is event-driven: what comes back from a handler is
-        never sent anywhere. `None` here means the handler drew nothing, and the app answers with its
-        own 404 rather than a blank frame.
+        The handler gets `(ctx, match)` and either returns its structure or draws it with
+        `ctx.page(node)` — the two say the same thing, and `page_of` holds them to one answer. `None`
+        here means the handler gave nothing, and the app answers with its own 404 rather than a blank
+        frame.
         """
         ctx.match = self  # the delivery now knows which declaration it is answering
-        self.route.handler(ctx, self)
-        page = ctx.take_page()
+        page = page_of(ctx, self.route.handler(ctx, self), repr(self.route.path))
         if page is None or self.route.layout is None:
             return page
         return self.route.layout(ctx, self, page)
@@ -320,4 +344,4 @@ def discover(*packages: str) -> list[str]:
 
 
 DEFAULT = Routes()
-route = DEFAULT.add
+page = DEFAULT.add  # `@page(...)` at module level: the default table's decorator

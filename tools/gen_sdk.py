@@ -20,9 +20,10 @@ Repairs applied to the codegen's output — each one is a measured defect of tha
      union over them.
   2. `Scope` is a closed set, not an enum type: the wire's `remote | local | both` becomes the
      `Literal` alias `Scope` (ADR 0031 §1 — an open value domain is the mistake that ADR retires),
-     and `Bind.scope` defaults to `'remote'`, so a value with no scope named is the authoritative
-     one rather than an absent field. `Bind` itself comes out of the codegen whole (one plain model,
-     `default / path / scope / slot / type`) — nothing to rebuild there.
+     and `Source.scope` / `Sink.scope` default to `'remote'`, so a value with no scope named is the
+     authoritative one rather than an absent field. Both models come out of the codegen whole
+     (`Source`: `default / path / scope / slot`, `Sink`: `dest / path / scope` — ADR 0039) —
+     nothing to rebuild there.
   3. `PanelAttr` gains the flattened `left`/`right`/`top`/`bottom` keys. serde's `#[flatten]` hides
      them from `properties` (they arrive in `allOf`), so the codegen emitted only class/selector plus
      two unreferenced fragments (`PanelAttr1`, `PanelAttr2`) — a panel's positioning deserialized as
@@ -60,7 +61,8 @@ REGEN = "Regenerate: python3 tools/gen_sdk.py      Verify: python3 tools/gen_sdk
 TYPES_HEADER = f'''"""GENERATED from schema/accrete.schema.json by tools/gen_sdk.py — do not edit.
 
 The wire's types: one class per accrete type, plus the `Accrete` union discriminated on `type` and
-the one `Bind` model every channel carries (ADR 0031: a value has a slot and a closed `Scope`).
+the two address models the channels carry (ADR 0031/0039: a read is a `Source` with a slot, a
+write a `Sink` with a `dest`, and both carry a closed `Scope`).
 Field names are the wire's names (`class_` carries the alias `class`); a value that is `None` is
 absent on this wire.
 
@@ -76,8 +78,9 @@ what is hidden is decided by the profile; annotations and defaults come from the
 builder validates through the type layer before returning, so a node that contradicts the wire is
 refused at construction.
 
-A channel takes a `Bind` (slot / scope / default / path / type — the whole address), a `Slot`, or a
-bare value: on a read a bare value is the constant `{{"default": …}}`, on a write it is a slot name.
+A channel takes its address model whole — a `Source` on a read (slot / scope / path / default), a
+`Sink` on a write (dest / scope / path) — a `Slot`, or a bare value: on a read a bare value is the
+constant `{{"default": …}}`, on a write it is a `dest` name.
 `scope` is never a builder keyword — it belongs to the address, and a node with two channels would
 otherwise have one `scope=` meaning two different things.
 
@@ -214,10 +217,11 @@ def repair(src: str, schema: dict, profile: dict) -> str:
         if block.name == "PanelAttr":
             for name in flattened_properties(defs["PanelAttr"]):
                 body.append(f"    {name}: str | None = None")
-        if block.name == "Bind":
+        if block.name in ("Source", "Sink"):
             # ADR 0031 §1: absent scope means the side that owns the session. The wire leaves the
             # field optional; the model says what absence *means*, so a dump is the same frame
-            # whoever built it.
+            # whoever built it. Both directions carry a scope, so both get the default (ADR 0039
+            # split the one `Bind` in two; the scope rule did not change with it).
             body = [
                 re.sub(r"^(\s+)scope: Scope \| None = None$", r"\1scope: Scope = 'remote'", ln)
                 for ln in body
@@ -316,7 +320,7 @@ def builders_text(models: list) -> str:
         else:
             attrs = "    attrs = None"
 
-        # One line per channel (ADR 0031 §2): a Bind, a Slot, or a bare value. A read's bare value
+        # One line per channel (ADR 0031 §2): a Source, a Sink, a Slot, or a bare value. A read's bare value
         # is the constant `{default: …}` when the profile says this type has one; the positional
         # `value` *is* that constant, so it is folded in here rather than emitted twice.
         channels: list[str] = []

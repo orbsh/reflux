@@ -41,7 +41,7 @@ from typing import Any, Callable, Protocol
 
 from reflux import Context, Match
 from reflux.sdk import h
-from reflux.sdk.types import Accrete, Bind
+from reflux.sdk.types import Accrete, Source
 from reflux.slots import Slot
 
 from . import scene
@@ -283,7 +283,7 @@ def page(ctx: Context, match: Match) -> None:
         s.control.set(control("▶ 播放"))
         s.beat.set(h.text("未开始 · 右下角开始"))
         s.echo.set(h.text(""))
-    ctx.page(
+    return (
         h.frame(
             h.frame(  # 左列：一个区，一个槽
                 h.forcegraph(
@@ -444,7 +444,7 @@ def review_form(s: Demo) -> Accrete:
                     h.input(
                         tag=key,
                         selector="score",
-                        source=Bind(default=initial, type=kind),
+                        kind=kind, source=Source(default=initial),
                         placeholder=f"{name} · {KINDS.get(kind, kind)}",
                         id=f"field-{key}",
                     )
@@ -471,7 +471,7 @@ def payload(value: Any) -> Accrete:
     `frame` 是唯一持有值的节点（ADR 0027），模块宿主从它槽里那个节点的 `source.default` 读载荷 ——
     图表 spec、图快照或一个场景就是这样到达宿主的。
     """
-    return h.frame(source=Bind(default=value))
+    return h.frame(source=Source(default=value))
 
 
 def hold(run: Run, seconds: float) -> None:
@@ -735,7 +735,7 @@ def register(app: Any) -> None:
     路由是调用式而不是装饰器，因为这个模块不能 import 应用：`python3 -m examples.zh.demo_app` 时
     应用模块是以 `__main__` 跑的。
     """
-    app.route(PAGE, title="走查")(page)
+    app.page(PAGE, title="走查")(page)
     app.on(TOGGLE, on_toggle)
     app.on(PIN, on_pin)
     app.on(SAVE, on_save)

@@ -1,22 +1,28 @@
-"""`@app.route` — a page declared on the app it belongs to, right above its handler.
+"""`@app.page` — a page declared on the app it belongs to, right above its handler.
 
 The point of the decorator is where the declaration hangs, so the tests check that: the app's own
 table, the module-level one left alone, and the two ways of declaring a path staying in step.
+
+Two more things belong here because they are the same word: a page **returns** its structure (the
+reactive path), and the manual path may still draw it with `ctx.page` — one answer per handler.
 """
 
 from __future__ import annotations
 
+import json
 import unittest
 
-from reflux import DEFAULT, App, Routes, RoutesError, route
+from reflux import DEFAULT, App, Routes, RoutesError, page
 from reflux.sdk import h
+
+from .fakes import page_nodes
 
 
 class TestDeclaringOnTheApp(unittest.TestCase):
     def test_the_page_lands_in_that_apps_table(self):
         app = App(routes=Routes())
 
-        @app.route("/hello", title="问候")
+        @app.page("/hello", title="问候")
         def hello(ctx, match):
             return h.text("hi")
 
@@ -30,7 +36,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         before = len(DEFAULT)
         app = App(routes=Routes())
 
-        @app.route("/only-here")
+        @app.page("/only-here")
         def only_here(ctx, match):
             return h.text("x")
 
@@ -40,8 +46,8 @@ class TestDeclaringOnTheApp(unittest.TestCase):
     def test_a_second_decorator_is_an_alias(self):
         app = App(routes=Routes())
 
-        @app.route("/")
-        @app.route("/home")
+        @app.page("/")
+        @app.page("/home")
         def home(ctx, match):
             return h.text("home")
 
@@ -52,12 +58,12 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
     def test_the_same_path_twice_is_loud(self):
         app = App(routes=Routes())
-        app.route("/taken")(lambda ctx, match: h.text("a"))
+        app.page("/taken")(lambda ctx, match: h.text("a"))
         with self.assertRaises(RoutesError):
-            app.route("/taken")(lambda ctx, match: h.text("b"))
+            app.page("/taken")(lambda ctx, match: h.text("b"))
 
     def test_a_bare_app_reads_the_module_table_and_app_route_does_not(self):
-        @route("/module-level")
+        @page("/module-level")
         def module_level(ctx, match):
             return h.text("m")
 
@@ -70,7 +76,7 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         def frame(ctx, match, page):
             return h.frame(page)
 
-        @app.route("/framed", layout=frame)
+        @app.page("/framed", layout=frame)
         def framed(ctx, match):
             return h.text("in")
 
@@ -81,3 +87,52 @@ class TestDeclaringOnTheApp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestWhatAPageGives(unittest.TestCase):
+    """The structure leaves a page one way: returned, or drawn. Never both, never neither by accident."""
+
+    def test_a_returned_node_is_the_page(self):
+        app = App(routes=Routes())
+
+        @app.page("/", title="回声")
+        def home(ctx, match):
+            return h.text("hi", id="greeting")
+
+        root = page_nodes(app, "/")[0]
+        self.assertEqual(root["id"], "page-root")
+        dumped = json.dumps(root, ensure_ascii=False)
+        self.assertIn('"greeting"', dumped)  # the returned node is in the frame
+        self.assertIn("回声", dumped)  # and the title the declaration named, not one the handler repeated
+
+    def test_drawing_and_returning_is_loud(self):
+        """Both is a defect with no right answer: refuse it instead of picking one."""
+        app = App(routes=Routes())
+
+        @app.page("/")
+        def confused(ctx, match):
+            ctx.page(h.text("drawn"))
+            return h.text("returned")
+
+        with self.assertRaises(RoutesError) as raised:
+            page_nodes(app, "/")
+        self.assertIn("returns its structure or draws it", str(raised.exception))
+
+    def test_the_single_page_may_return_too(self):
+        """`@app.page` with no path is the one page; it returns like any other."""
+        app = App(routes=Routes())
+
+        @app.page
+        def only(ctx, path):
+            return h.text(path, id="where")
+
+        root = page_nodes(app, "/walk")[0]
+        self.assertIn('"where"', json.dumps(root, ensure_ascii=False))
+
+    def test_a_single_page_with_parentheses_is_the_same_thing(self):
+        app = App(routes=Routes())
+
+        @app.page()
+        def only(ctx, path):
+            return h.text("hi")
+
+        self.assertTrue(page_nodes(app, "/"))

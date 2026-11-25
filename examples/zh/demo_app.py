@@ -43,7 +43,7 @@ from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
 from reflux.server import Request, Response
 from reflux.sdk import h
-from reflux.sdk.types import Accrete, Bind, JsType
+from reflux.sdk.types import Accrete, JsType, Source
 from reflux.slots import Slot
 
 from . import demo_slots
@@ -145,7 +145,7 @@ def demo_view(ctx, state):
         *lines,
         h.bundle(
             h.input(tag="user", id="auth-user"),
-            h.input(tag="pass", source=Bind(type=JsType.password), id="auth-pass"),
+            h.input(tag="pass", kind=JsType.password, id="auth-pass"),
             h.button("确认登录", sink=slots(LOGIN)),
             sink=slots(LOGIN),
             submit=["enter", "button"],
@@ -176,7 +176,7 @@ app = App(routes=Routes(), auth=Auth(verify=demo_verify, view=demo_view), shell=
 slots: DemoSlots = demo_slots.table(app)
 
 
-@app.route("/", title="演示")
+@app.page("/", title="演示")
 def home_page(ctx, match):
     """词表，摆成卡片：一个值在上行的路上做了什么，以及挡在它前面的一道门。
 
@@ -184,8 +184,8 @@ def home_page(ctx, match):
     拖拽），右边一列（框架的凭据动词），再加一条同样横跨的脚注。每张卡片是带 `card` 变体的 `frame`，
     间隙写在它自己身上 —— bundle 是一行 flex，会把字段贴边排开，那是表单的样子，不是页面的样子。
 
-    翻页就是 `ctx.page(...)`，别的什么都不做：运行时读的两个标记（`reflux:path`、`reflux:title`）
-    由它替你写好，放在它画的那个节点前面。
+    翻页就是 `return` 那个节点，别的什么都不做：运行时读的两个标记（`reflux:path`、`reflux:title`）
+    由框架按声明写好，放在它前面。
 
     这页也是两种落点的对照。**回声**、**加一行**、**私密**是闭包：一次请求一次回应，处理器写在发出
     它的那个按钮旁边，闭包拿到的就是事件的值，槽是它闭住的。**✕**、**落点**、**导航**仍是
@@ -212,7 +212,18 @@ def home_page(ctx, match):
         ctx.data["may_see_secret"] = True
         slots.secret.set(h.text("机密内容"))
 
-    ctx.page(
+    # 槽活得比一次 `create` 长（树被替换，数据面不会），所以这些行每条连接只种一次 ——
+    # 第二次进来再追加一遍就会翻倍。它和别的写入一样是一次发送，所以是
+    # `ctx.slot.rows.append(...)`，而不是树的一部分。
+    if not ctx.data.get("rows_seeded"):
+        ctx.data["rows_seeded"] = True
+        for row in state.rows:
+            slots_of(ctx).rows.append(row_node(row))
+    # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
+    # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
+    if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
+        slots_of(ctx).secret.set(h.text(""))
+    return (
         h.frame(
             h.frame(
                 h.text("演示", variant="heading-1"),
@@ -276,7 +287,7 @@ def home_page(ctx, match):
                 h.bundle(
                     h.frame(
                         h.input(tag="user", id="f-user"),
-                        h.input(tag="pass", source=Bind(type=JsType.password), id="f-pass"),
+                        h.input(tag="pass", kind=JsType.password, id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),
@@ -317,24 +328,13 @@ def home_page(ctx, match):
         ),
     )
 
-    # 槽活得比一次 `create` 长（树被替换，数据面不会），所以这些行每条连接只种一次 ——
-    # 第二次进来再追加一遍就会翻倍。它和别的写入一样是一次发送，所以是
-    # `ctx.slot.rows.append(...)`，而不是树的一部分。
-    if not ctx.data.get("rows_seeded"):
-        ctx.data["rows_seeded"] = True
-        for row in state.rows:
-            slots_of(ctx).rows.append(row_node(row))
-    # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
-    # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
-    if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        slots_of(ctx).secret.set(h.text(""))
 
 
-@app.route("/about", title="关于")
+@app.page("/about", title="关于")
 def about_page(ctx, match):
     """第二条路由：同一个形状，地址栏、深链或导航都能到。
     """
-    ctx.page(
+    return (
         h.text("关于", variant="heading-1"),
         h.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加三条路由 —— /、/about 和走查。"),
         nav_bundle("回到演示", GO_HOME),

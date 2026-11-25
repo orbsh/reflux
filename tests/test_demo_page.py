@@ -43,8 +43,13 @@ def walk(node):
 
 
 def slots(page: dict, key: str) -> set[str]:
-    """Every slot name a tree binds on one channel (`source` = reads, `sink` = writes)."""
-    return {node[key]["slot"] for node in walk(page) if isinstance(node.get(key), dict) and node[key].get("slot")}
+    """Every name a tree binds on one channel: a read's `slot`, a write's `dest` (ADR 0039)."""
+    field = "dest" if key == "sink" else "slot"
+    return {
+        node[key][field]
+        for node in walk(page)
+        if isinstance(node.get(key), dict) and node[key].get(field)
+    }
 
 
 def ops(frames, action: str, slot: str) -> list[dict]:
@@ -65,9 +70,9 @@ class DemoCase(unittest.TestCase):
         demo.settings.pace, demo.settings.hold, demo.settings.day, demo.spawn = self.saved
 
     def page(self):
+        """The page the app draws for this address — through the lookup, not around it."""
         ctx = delivery(self.device, {"dest": "reflux:hello", "data": {"path": PAGE}})
-        demo.page(ctx, app.routes.match(PAGE))
-        return dump(ctx.take_page())
+        return dump(app.routes.match(PAGE).resolve(ctx))
 
     def toggle(self) -> None:
         demo.on_toggle(delivery(self.device, {"dest": "demo.toggle", "data": {}}), {})
@@ -121,7 +126,7 @@ class PageShape(DemoCase):
         rail = [node for node in walk(page) if node.get("id") == "rail"]
         self.assertEqual(len(rail), 1)
         self.assertEqual(rail[0]["attrs"]["accept"], {"tag": "snippet"})
-        self.assertEqual(rail[0]["sink"]["slot"], "demo.pin")
+        self.assertEqual(rail[0]["sink"]["dest"], "demo.pin")
 
     def test_the_control_region_is_seeded_once_per_device(self):
         self.device.frames.clear()
@@ -224,7 +229,7 @@ class Script(DemoCase):
         nodes = ops(frames, "set", "demo.review_form")
         self.assertEqual(len(nodes), 1)
         form = nodes[0]["data"]
-        self.assertEqual((form["type"], form["sink"]["slot"], form["attrs"]["submit"]), ("bundle", "demo.review", ["enter", "button"]))
+        self.assertEqual((form["type"], form["sink"]["dest"], form["attrs"]["submit"]), ("bundle", "demo.review", ["enter", "button"]))
         table = [node for node in walk(form) if node.get("type") == "tiles"][0]
         self.assertEqual([field["key"] for field in table["attrs"]["fields"]], ["score", "name", "dept", "avg", "note"])
         self.assertEqual(table["attrs"]["header"]["selector"], "review-head")

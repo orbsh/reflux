@@ -92,7 +92,7 @@ class TheAddressesInNodes(unittest.TestCase):
 
     A read has a constant to fall back on (for the types the profile gives one), so a bare value
     there is that constant, never a name. A write has nothing to default to, so a bare string there
-    is the slot's name — the same string, read as the one thing it could mean.
+    is its `dest` — the same string, read as the one thing it could mean.
     """
 
     def setUp(self) -> None:
@@ -104,11 +104,11 @@ class TheAddressesInNodes(unittest.TestCase):
 
     def test_a_sink_handle_reaches_the_wire_as_its_name(self) -> None:
         node = h.bundle(h.button("send", sink=self.ctx.slot("chat.send")), sink=self.ctx.slot("chat.send"))
-        self.assertEqual(node.sink.slot, "chat.send")
+        self.assertEqual(node.sink.dest, "chat.send")
 
     def test_a_bare_value_is_a_constant_on_a_read_and_a_name_on_a_write(self) -> None:
         self.assertEqual(dump(h.text(source="status"))["source"], {"default": "status", "scope": "remote"})
-        self.assertEqual(dump(h.bundle(sink="chat.send"))["sink"], {"scope": "remote", "slot": "chat.send"})
+        self.assertEqual(dump(h.bundle(sink="chat.send"))["sink"], {"dest": "chat.send", "scope": "remote"})
 
     def test_a_read_with_no_constant_refuses_a_bare_string(self) -> None:
         # A `tiles` has no `default` in the profile: a bare value there is neither a constant nor a

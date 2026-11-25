@@ -7,15 +7,16 @@
 //! and compares bytes; nothing here talks to a server, because producing the frame is the SDK's
 //! whole job.
 //!
-//! The vocabulary is ADR 0031/0032's: a form is a `bundle` (fields tagged, timing in `attrs.submit`,
-//! the exit on `sink`), a list/grid is `tiles`, and every value rides one `Bind` — `source` in,
-//! `sink` out, `scope` naming where it is authoritative (`remote` unless a node reads the page's
-//! own vals plane).
+//! The vocabulary is ADR 0031/0032/0039's: a form is a `bundle` (fields tagged, timing in
+//! `attrs.submit`, the exit on `sink`), a list/grid is `tiles`, and each direction has its own
+//! address — a `Source` in, a `Sink` out — with `scope` naming where it is authoritative
+//! (`remote` unless a node reads the page's own vals plane). A field's parse and element type are
+//! its own `kind`, not a channel's.
 
 use reflux_sdk::landings::Landings;
 use reflux_sdk::markers;
 use reflux_sdk::types::{
-    bundle, button, frame, input, text, tiles, Bind, FrameVariant, JsType, TextVariant,
+    bundle, button, frame, input, text, tiles, FrameVariant, JsType, Sink, Source, TextVariant,
 };
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::{json, Value};
@@ -29,24 +30,29 @@ const LOGOUT: &str = "reflux:logout";
 const AUTH_SLOT: &str = "auth";
 
 /// A remote address: the scope every ordinary slot and uplink lives in.
-fn remote_slot(slot: &str) -> Bind {
-    Bind {
+fn remote_slot(slot: &str) -> Source {
+    Source {
         slot: Some(slot.to_string()),
         ..Default::default()
     }
 }
 
-/// An uplink whose boundary value is typed (`type: password`), with no slot: a bundle field.
-fn remote_type(kind: JsType) -> Bind {
-    Bind {
-        js_type: Some(kind),
+/// A remote exit: where a value goes, with no slot to read — the write direction's address.
+fn remote_sink(dest: &str) -> Sink {
+    Sink {
+        dest: Some(dest.to_string()),
         ..Default::default()
     }
 }
 
+/// A field's own type — the element and the parse, one declaration (`kind`), not a channel.
+fn field_kind(kind: JsType) -> Option<Value> {
+    Some(Value::String(kind.token().to_string()))
+}
+
 /// The page's own vals plane, one level in (`path: "/data"` out of the emitted wrapper).
-fn local_slot(slot: &str, path: &str) -> Bind {
-    Bind {
+fn local_slot(slot: &str, path: &str) -> Source {
+    Source {
         slot: Some(slot.to_string()),
         path: Some(path.to_string()),
         scope: Some("local".to_string()),
@@ -56,7 +62,7 @@ fn local_slot(slot: &str, path: &str) -> Bind {
 
 /// The button of a one-button bundle: its label is a `source`, its exit the bundle's own `sink`.
 fn press(label: &str, sink: &str) -> Value {
-    button(Some(label), None, None, None, Some(remote_slot(sink)), None)
+    button(Some(label), None, None, None, Some(remote_sink(sink)), None)
 }
 
 /// A one-button bundle — the vocabulary's only clickable, and the demo's way between pages.
@@ -67,7 +73,7 @@ fn nav_bundle(label: &str, event: &str) -> Value {
         None,  // selector,
         None,  // sends,
         Some(&["button"]),
-        Some(remote_slot(event)),
+        Some(remote_sink(event)),
         None,
         Some(&format!("nav-{event}")))
 }
@@ -97,7 +103,7 @@ fn card(children: &[Value], id: &str) -> Value {
 /// Both children say how the row is divided: a bundle is a flex row whose items all grow, so the
 /// cargo takes the width and the ✕ keeps its own size, centred in the height it does not fill.
 fn row_node(id: &str, value: &str) -> Value {
-    let remove = remote_slot("row.remove");
+    let remove = remote_sink("row.remove");
     let cargo = format!("{id}-cargo");
     let children = [
         frame(
@@ -172,7 +178,7 @@ fn home() -> Value {
                 None,  // selector
                 None,  // sends
                 Some(&["enter"]),
-                Some(remote_slot(&echo_sink)),
+                Some(remote_sink(&echo_sink)),
                 None,  // tag
                 Some("echo-form"),
             ),
@@ -197,7 +203,7 @@ fn home() -> Value {
                 None,  // selector,
                 None,  // sends,
                 Some(&["button"]),
-                Some(remote_slot(&add_row_sink)),
+                Some(remote_sink(&add_row_sink)),
                 None,
                 Some("add-row")),
             tiles(&[], None, None, None, None, None, None, None, Some(remote_slot(ROWS)), Some("rows")),
@@ -211,7 +217,7 @@ fn home() -> Value {
                 None,
                 Some(json!({"border": "var(--border)", "border-style": "dashed", "min-height": "72px"})),
                 None,
-                Some(remote_slot("row.archive")),
+                Some(remote_sink("row.archive")),
                 Some("archive"),
                 None,
             ),
@@ -236,7 +242,7 @@ fn home() -> Value {
                     frame(
                         &[
                             input(None, None, None, None, None, None, Some("user"), Some("f-user")),
-                            input(None, None, Some(remote_type(JsType::Password)), None, None, None,
+                            input(None, None, None, field_kind(JsType::Password), None, None,
                                   Some("pass"), Some("f-pass")),
                         ],
                         None,
@@ -268,7 +274,7 @@ fn home() -> Value {
                 None,  // selector,
                 None,  // sends,
                 Some(&["enter", "button"]),
-                Some(remote_slot(LOGIN)),
+                Some(remote_sink(LOGIN)),
                 None,
                 Some("login")),
             // The reserved region the framework draws the login surface into.
@@ -291,7 +297,7 @@ fn home() -> Value {
                 None,  // selector,
                 None,  // sends,
                 Some(&["button"]),
-                Some(remote_slot(&reveal_sink)),
+                Some(remote_sink(&reveal_sink)),
                 None,
                 Some("vault")),
             text(None, None, None, Some(remote_slot(SECRET)), Some("secret"), None),
@@ -301,7 +307,7 @@ fn home() -> Value {
                 None,  // selector,
                 None,  // sends,
                 Some(&["button"]),
-                Some(remote_slot(LOGOUT)),
+                Some(remote_sink(LOGOUT)),
                 None,
                 Some("logout")),
         ],
@@ -447,8 +453,8 @@ fn login_surface() -> Value {
                     input(
                         None,
                         None,
-                        Some(remote_type(JsType::Password)),
                         None,
+                        field_kind(JsType::Password),
                         None,
                         None,
                         Some("pass"),
@@ -460,7 +466,7 @@ fn login_surface() -> Value {
                 None,  // selector,
                 None,  // sends,
                 Some(&["enter", "button"]),
-                Some(remote_slot(LOGIN)),
+                Some(remote_sink(LOGIN)),
                 None,
                 Some("auth-form")),
         ],

@@ -4,10 +4,10 @@
 asserts this table is exactly that set, so adding a type to the profile without giving it a node
 fails there rather than quietly shrinking what the gate draws.
 
-The spelling is ADR 0031/0032/0034/0035's, not the retired one: every value rides a channel
-(`source` in, `sink` out) as one `Bind`, a `bundle` packs its fields (each field named by its own
-`tag`, the exit on the bundle's `sink`, the timing in `attrs.submit`), and a multi-line field is
-`input` with `multiline`. The types that used to be separate are folded: `fold`/`popup`/`layer`/
+The spelling is ADR 0031/0032/0034/0035/0039's, not the retired one: a read is a `Source` (slot,
+scope, path, default), a write a `Sink` (dest, scope, path), a `bundle` packs its fields (each field
+named by its own `tag`, the exit on the bundle's `sink`, the timing in `attrs.submit`), and a
+multi-line field is `input` with `multiline`. The types that used to be separate are folded: `fold`/`popup`/`layer`/
 `float`/`portal` are one `panel` (`place` + `state`), `form` is `bundle`, `textarea` is
 `input.multiline`, `group`/`grab`/`dock` are one `frame` (`style` / `draggable` / `accept` + `sink`),
 and a row of a grid is `entry`.
@@ -35,12 +35,12 @@ def text(value: str, **rest: Any) -> dict:
 
 
 def field(tag: str, **rest: Any) -> dict:
-    """A bundled field: `tag` is the key the enclosing bundle packs it under, `sink` its exit."""
-    return {"type": "input", "tag": tag, "sink": {"slot": tag}, **rest}
+    """A bundled field: `tag` is the key the enclosing bundle packs it under; the exit is the bundle's."""
+    return {"type": "input", "tag": tag, **rest}
 
 # A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind). It
 # lives inside a `bundle` — that is the only place the renderer mounts one.
-BUTTON: dict = {"type": "button", "source": {"default": "提交"}, "sink": {"slot": "gate.button"}}
+BUTTON: dict = {"type": "button", "source": {"default": "提交"}, "sink": {"dest": "gate.button"}}
 
 
 NODES: dict[str, dict] = {
@@ -59,7 +59,7 @@ NODES: dict[str, dict] = {
             "accept": {"tag": "note"},
             "style": {"padding": "2px"},
         },
-        "sink": {"slot": "gate.dock"},
+        "sink": {"dest": "gate.dock"},
         "children": [text("frame")],
     },
     "canvas": {"type": "canvas", "url": "/module.js"},
@@ -92,7 +92,7 @@ NODES: dict[str, dict] = {
     "bundle": {
         "type": "bundle",
         "attrs": {"submit": ["enter", "button"]},
-        "sink": {"slot": "gate.bundle"},
+        "sink": {"dest": "gate.bundle"},
         "children": [
             field("name"),
             field("body", multiline=True, placeholder={"default": "写点什么"}),
@@ -144,7 +144,7 @@ NODES: dict[str, dict] = {
     # no longer offers a constant source for `input`.
     # A field's uplink is its bundle's, and `tag` is what makes it a member (ADR 0032 §2, revised):
     # a remote sink with no tag is a value nobody receives, and the SDK refuses it.
-    "input": {"type": "input", "tag": "gate.input", "sink": {"slot": "gate.input"}},
+    "input": {"type": "input", "tag": "gate.input", "kind": "text"},
     # The option rows are a list plane: `options` is the wire's own field, and the renderer
     # currently reads the list off the primary `source` — so the fixture names the slot on both,
     # which is legal either way and lets the live gate see the rows.

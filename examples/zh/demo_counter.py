@@ -3,7 +3,7 @@
 前面几页各讲一件事（词表、走查、对话）；这一页没有内容上的野心 —— 一个数、三个按钮、一个输入框、
 一小段历史 —— 所以它写出来的每一行都只是 API 的用法。要读的只有四样：
 
-- `@app.route(...)`：装饰器写在这个文件里。它写在 `register(app)` 内部，因为页面模块不能 import
+- `@app.page(...)`：装饰器写在这个文件里。它写在 `register(app)` 内部，因为页面模块不能 import
   应用（`python3 -m examples.zh.demo_app` 时应用模块以 `__main__` 跑），所以拿到的 `app` 从参数来，
   装饰器照用。
 - `h.*`：页面的词表。节点名就是 wire 的 `type`，关键字就是那个节点的字段。
@@ -88,7 +88,7 @@ def register(app: Any) -> None:
     for name in ("count", "hint", "history"):
         app.declare(f"counter.{name}")
 
-    @app.route(PAGE, title="计数器")
+    @app.page(PAGE, title="计数器")
     def counter_page(ctx: Context, match) -> None:
         """一次计数页的绘制：值从连接的 State 来，按钮的处理器写在按钮下面。"""
         slots = counter_of(ctx)
@@ -127,7 +127,7 @@ def register(app: Any) -> None:
             current.step = min(max(step, 1), 10)
             slots.hint.set(step_line(current.step))
 
-        ctx.page(
+        return (
             h.frame(
                 h.text("计数器", variant="heading-1", id="counter-title"),
                 h.text(

@@ -33,8 +33,8 @@ def sent_dests(node) -> set[str]:
     """Every uplink destination the nodes of one page can send.
 
     A node's `sink` is where its value flows out (ADR 0031 §2); when the value is an event, the
-    address is the handler's name, carried as `sink.slot`. `source` is the read side — a slot the
-    page reads from, never one it speaks to — so it is not collected.
+    address is the handler's name, carried as `sink.dest` (ADR 0039). `source` is the read side — a
+    slot the page reads from, never one it speaks to — so it is not collected.
     """
     names: set[str] = set()
 
@@ -47,7 +47,7 @@ def sent_dests(node) -> set[str]:
             return
         sink = node.get("sink")
         if isinstance(sink, dict):
-            name = sink.get("slot")
+            name = sink.get("dest")
             if isinstance(name, str):
                 names.add(name)
         for key in ("children", "item"):

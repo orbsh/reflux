@@ -4,7 +4,7 @@ The pages before this one each argue something (the vocabulary, the walkthrough,
 this one has no ambition about content — a number, three buttons, an input, a short history — so every
 line it is made of is only a use of the API. Four things to read:
 
-- `@app.route(...)`: the decorator is used in this file. It sits inside `register(app)` because a page
+- `@app.page(...)`: the decorator is used in this file. It sits inside `register(app)` because a page
   module must not import the app (`python3 -m examples.en.demo_app` runs the app module as `__main__`),
   so the app arrives as an argument — and the decorator is still the decorator.
 - `h.*`: the page's vocabulary. A node's name is the wire's `type`; its keywords are that node's fields.
@@ -91,7 +91,7 @@ def register(app: Any) -> None:
     for name in ("count", "hint", "history"):
         app.declare(f"counter.{name}")
 
-    @app.route(PAGE, title="Counter")
+    @app.page(PAGE, title="Counter")
     def counter_page(ctx: Context, match) -> None:
         """One draw of the counter: the value comes from the connection's State, the handlers from below."""
         slots = counter_of(ctx)
@@ -132,7 +132,7 @@ def register(app: Any) -> None:
             current.step = min(max(step, 1), 10)
             slots.hint.set(step_line(current.step))
 
-        ctx.page(
+        return (
             h.frame(
                 h.text("Counter", variant="heading-1", id="counter-title"),
                 h.text(

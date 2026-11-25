@@ -27,7 +27,7 @@ from functools import lru_cache
 from typing import Any, get_args
 
 from .profile import hidden_attrs, tokens
-from .types import Accrete, Bind
+from .types import Accrete, Sink, Source
 
 __all__ = ["problem", "node_keys", "attrs_keys", "bind_keys", "value_fields", "token_values", "arms"]
 
@@ -96,25 +96,31 @@ def token_values(tag: str) -> frozenset[str]:
 
 
 @lru_cache(maxsize=1)
-def bind_keys() -> frozenset[str]:
-    """The keys a `Bind` may carry — one value, one address, one closed scope (ADR 0031)."""
-    return _wire_keys(Bind)
+def address_keys() -> dict[type, frozenset[str]]:
+    """The keys each direction may carry (ADR 0039): a read has `slot`/`default`, a write has `dest`.
+
+    Two models, not one: `slot` on a write and `default` on a write are what the wire refuses, and
+    this table is how the refusal shows up before the server sees the frame.
+    """
+    return {Source: _wire_keys(Source), Sink: _wire_keys(Sink)}
 
 
 @lru_cache(maxsize=1)
-def value_fields() -> dict[str, frozenset[str]]:
-    """Per node type: the fields that carry a `Bind` (`source`, `sink`, and named second values).
+def value_fields() -> dict[str, dict[str, type]]:
+    """Per node type: each value-carrying field and the direction it carries (`source`, `sink`, and
+    named second values, which are reads).
 
     Read off the generated models, not listed by hand: a node that grows a fourth value makes this
     table grow with it, and `problem` then closes that field for free.
     """
-    out: dict[str, frozenset[str]] = {}
+    out: dict[str, dict[str, type]] = {}
     for tag, cls in arms().items():
-        out[tag] = frozenset(
-            field.alias or name
+        out[tag] = {
+            field.alias or name: kind
             for name, field in cls.model_fields.items()
-            if any(part is Bind for part in get_args(field.annotation))
-        )
+            for kind in (Source, Sink)
+            if any(part is kind for part in get_args(field.annotation))
+        }
     return out
 
 
@@ -147,17 +153,19 @@ def problem(node: Any, where: str = "node") -> str | None:
             if stray:
                 return f"{where}: {_names(stray)} is not a token of {tag!r}"
 
-    # Every value a node carries is one `Bind` (ADR 0031): the two channels and the node's own
-    # named second values are the same shape, so one key set closes all of them.
-    for field in value_fields()[tag]:
+    # A value's shape follows its direction (ADR 0039): a read is a `Source`, a write a `Sink`, and
+    # a key from the other direction is a frame the server would refuse.
+    for field, kind in value_fields()[tag].items():
         entry = node.get(field)
         if entry is None:
             continue
         if not isinstance(entry, dict):
             return f"{where}: {field} is {type(entry).__name__}, not an object"
-        extra = set(entry) - bind_keys()
+        keys = address_keys()[kind]
+        extra = set(entry) - keys
         if extra:
-            return f"{where}.{field}: {_names(extra)} is not a field of a value (slot/scope/default/path/type)"
+            allowed = "/".join(sorted(keys))
+            return f"{where}.{field}: {_names(extra)} is not a field of a {kind.__name__.lower()} ({allowed})"
 
     for field in ("children", "item"):
         kids = node.get(field)

@@ -110,14 +110,14 @@ def page(ctx: Context, match) -> None:
     something to more than the one device that asked (a broadcast, a nudge from a timer) says it the
     same way.
 
-    The address and the title come from the declaration above — `ctx.page` builds the markers — so
+    The address and the title come from the declaration above — the framework builds the markers — so
     the handler passes its content and nothing else.
     """
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
         slots.status.set(h.text("ready"))
-    ctx.page(
+    return (
         h.frame(
             h.text("Chat", variant="heading-1"),
             h.text(source=slots.status, variant="muted", id="status"),
@@ -248,10 +248,10 @@ def on_stop(ctx: Context, frame: dict) -> None:
 def register(app, slots: DemoSlots) -> None:
     """Put this page on the app: its route, and its two uplinks.
 
-    The route is declared here as a call rather than a decorator (`app.route(...)(page)`) because this
+    The route is declared here as a call rather than a decorator (`app.page(...)(page)`) because this
     module must not import the app: under `python3 -m examples.X.demo_app` the app module runs as
     `__main__`, and `from .demo_app import app` would build a second copy of it.
     """
-    app.route("/chat", title="Chat")(page)
+    app.page("/chat", title="Chat")(page)
     app.on(slots.chat.send, on_send)
     app.on(slots.chat.stop, on_stop)

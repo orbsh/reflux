@@ -64,7 +64,7 @@ python3 tools/vendor.py build --fluxen ../fluxen       # trunk build a fluxen ch
 python3 tools/vendor.py install --dist ../fluxen/examples/renderer/dist   # adopt an existing build
 ```
 
-`fetch` installs four files — the JS glue, its wasm, `assets/main.css`, `assets/custom.css` — and
+`fetch` installs four files — the JS glue, its wasm, `assets/core.css`, `assets/custom.css` — and
 writes `versions.json` with the rev plus a sha256 and size per file. The gates compare against that
 file over HTTP (`gate_t0`), so a stale or hand-edited bundle fails as a red gate rather than a page
 that half-loads.
@@ -118,11 +118,9 @@ from reflux.sdk import markers
 app = App()                       # one object; every declaration below hangs on it
 
 
-@app.route("/", title="Hello")
+@app.page("/", title="Hello")
 def home(ctx, match):
-    return markers.page(
-        "/",
-        "Hello",
+    return h.frame(
         h.text("Hello", variant="heading-1"),
         # a field's exit is its group: the bundle holds the sink, the field only names its key
         h.bundle(h.input(tag="name", id="name"), sink=ctx.slot.name.change),
@@ -141,12 +139,14 @@ if __name__ == "__main__":
 
 What the pieces are:
 
-- **`@app.route("/")`** declares a page on that app's table, right above its handler. (`@route(…)`
+- **`@app.page("/")`** declares a page on that app's table, right above its handler. (`@page(…)`
   is the same declaration against the module-level table `App()` reads by default — use it when the
-  table is shared across modules, e.g. with `discover`.) The handler draws with `ctx.page(*content)` — the
-  framework wraps it in the markers and `create` for you, and a page never returns. Data the page
-  reads is a slot, seeded with a send: `ctx.slot["rows"].append(row)` (what `demo_app` does, so its
-  rows arrive before the structure that reads them).
+  table is shared across modules, e.g. with `discover`.) The handler **returns** its node; the
+  framework wraps it in the markers, writes it into the `routes` slot, and `create`s the shell around
+  it. Data the page reads is a slot, seeded with a send: `ctx.slot["rows"].append(row)` (what `demo_app`
+  does, so its rows arrive before the structure that reads them). `ctx.page(*content)` is the other
+  way to give a page — it draws instead of returning, which is what a handler driving a delivery by
+  hand (`@app.on`) reaches for; a handler does one or the other, and doing both is a startup error.
 - **`markers.page(path, title, *children)`** is what `ctx.page` builds: the two markers the page runtime
   mirrors into the address bar and the tab title, then your content. It is a convention, not a wire type
   — reach for it directly only when you are assembling a page by hand.
@@ -290,9 +290,9 @@ thing it draws are one thought:
 
 ```python
 # examples/zh/demo_app.py
-@app.route("/", title="演示")             # "/" and "演示" are the route's: `ctx.page` writes the markers
+@app.page("/", title="演示")              # "/" and "演示" are the page's: the framework writes the markers
 def home_page(ctx, match):
-    ctx.page(h.frame(h.text("演示", variant="heading-1"), ...))
+    return h.frame(h.text("演示", variant="heading-1"), ...)
 ```
 
 `h` is the vocabulary (`from reflux.sdk import h`), named the way front-end code names it. Two entry
@@ -305,7 +305,7 @@ A handler for a page's own event is written beside the frame that sends to it, a
 closure is handed the event's value and holds its slots; the framework names it when the page is drawn:
 
 ```python
-@app.route("/", title="演示")
+@app.page("/", title="演示")
 def home_page(ctx, match):
     slots = slots_of(ctx)
 
@@ -315,9 +315,8 @@ def home_page(ctx, match):
     def add_row(value):
         slots.rows.append(row_node(...))
 
-    ctx.page(
-        h.frame(
-            h.bundle(h.input(tag="name"), sink=echo, submit=["enter"]),
+    return h.frame(
+        h.bundle(h.input(tag="name"), sink=echo, submit=["enter"]),
             # the renderer draws a button only when it carries a sink, and reads that sink as nothing
             # more than "I am this group's confirm key" — the press sends the bundle's own sink
             h.bundle(h.button("加一行", sink=add_row), sink=add_row, submit=["button"]),
@@ -344,12 +343,13 @@ handler — `sink=gated(save)` — because that is where the reader asks the que
 
 A page that lives in its own module cannot import the app (under `-m` the app module runs as
 `__main__`, so importing it would build a second copy), so it takes the app as an argument and declares
-its route as a call — `app.route(...)(page)` — in the same `register` that hangs its handlers:
+its page as a call — `app.page("/chat", title="对话")(page)` — in the same `register` that hangs
+its handlers:
 
 ```python
 # examples/zh/demo_chat.py — the page, its route and its two uplinks, together
 def register(app, slots):
-    app.route("/chat", title="对话")(page)
+    app.page("/chat", title="对话")(page)
     app.on(slots.chat.send, on_send)
     app.on(slots.chat.stop, on_stop)
 ```

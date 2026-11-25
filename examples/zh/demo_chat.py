@@ -107,13 +107,13 @@ def page(ctx: Context, match) -> None:
         socket 的这一侧没有"响应"这回事，而一页日后若要同时对不止一个设备说话（广播、定时器的提醒），
         说的方式也是这个。
     
-        地址与标题来自上面那条声明 —— 标记由 `ctx.page` 造 —— 所以处理器只交内容，别的什么都不交。
+        地址与标题来自上面那条声明 —— 标记由框架按声明造 —— 所以处理器只交内容，别的什么都不交。
     """
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # 槽比一次 create 活得久：再种一遍就重复了
         slots.status.set(h.text("就绪"))
-    ctx.page(
+    return (
         h.frame(
             h.text("对话", variant="heading-1"),
             h.text(source=slots.status, variant="muted", id="status"),
@@ -246,10 +246,10 @@ def on_stop(ctx: Context, frame: dict) -> None:
 def register(app, slots: DemoSlots) -> None:
     """把这一页挂到应用上：它的路由，和它的两条上行。
     
-        路由在这里是调用式声明而不是装饰器（`app.route(...)(page)`），因为这个模块不能 import 应用：
+        路由在这里是调用式声明而不是装饰器（`app.page(...)(page)`），因为这个模块不能 import 应用：
         `python3 -m examples.X.demo_app` 时应用模块是以 `__main__` 跑的，`from .demo_app import app`
         会造出第二份。
     """
-    app.route("/chat", title="对话")(page)
+    app.page("/chat", title="对话")(page)
     app.on(slots.chat.send, on_send)
     app.on(slots.chat.stop, on_stop)

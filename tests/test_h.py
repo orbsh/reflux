@@ -71,7 +71,7 @@ class AClosureInsideData(unittest.TestCase):
         def hit(value):
             calls.append(value)
 
-        @app.route("/", title="t")
+        @app.page("/", title="t")
         def home(ctx, match):
             ctx.page(h.node(("frame", {"id": "r"}, [("button", {"sink": hit, "id": "b"}, "press")])))
 

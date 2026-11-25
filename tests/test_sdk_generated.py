@@ -114,25 +114,41 @@ class UnionTest(unittest.TestCase):
                 with self.assertRaises(pydantic.ValidationError):
                     sdk.parse(bad)
 
-    def test_a_channel_is_one_typed_bind_with_a_closed_scope(self):
-        """ADR 0031 §1-2: `{slot, scope, default, path, type}` — one shape, three legal scopes."""
-        values = {
+    def test_a_read_is_a_source_and_a_write_is_a_sink(self):
+        """ADR 0039: two directions, two shapes — a read has slot/default, a write has dest."""
+        reads = {
             "constant": {"default": "x"},
             "slot": {"slot": "notice"},
             "both": {"slot": "draft", "scope": "both"},
             "local+path": {"slot": "chan", "scope": "local", "path": "/data"},
-            "typed": {"slot": "name", "type": "text"},
-            "whole": {"slot": "s", "scope": "local", "default": "0", "type": "number", "path": "/n"},
+            "whole": {"slot": "s", "scope": "local", "default": "0", "path": "/n"},
         }
-        for name, entry in values.items():
-            with self.subTest(value=name):
+        for name, entry in reads.items():
+            with self.subTest(read=name):
                 node = sdk.parse({"type": "input", "source": entry})
                 self.assertEqual(sdk.dump(node)["source"], {**entry, "scope": entry.get("scope", "remote")})
-                node = sdk.parse({"type": "input", "tag": "f", "sink": entry})
+        writes = {
+            "dest": {"dest": "save"},
+            "both": {"dest": "draft", "scope": "both"},
+            "local+path": {"dest": "chan", "scope": "local", "path": "/data"},
+        }
+        for name, entry in writes.items():
+            with self.subTest(write=name):
+                node = sdk.parse({"type": "bundle", "sink": entry})
                 self.assertEqual(sdk.dump(node)["sink"], {**entry, "scope": entry.get("scope", "remote")})
-        # The retired vocabulary is not a second spelling: `kind` is not a field of a value.
+        # The two directions do not borrow each other's words.
+        for bad in (
+            {"type": "input", "source": {"dest": "s"}},
+            {"type": "input", "source": {"kind": "source"}},
+            {"type": "bundle", "sink": {"slot": "s"}},
+            {"type": "bundle", "sink": {"dest": "s", "default": "x"}},
+        ):
+            with self.subTest(node=bad):
+                with self.assertRaises(pydantic.ValidationError):
+                    sdk.parse(bad)
+        # A field has no exit of its own any more (ADR 0032 §2, revised): `sink` is not its field.
         with self.assertRaises(pydantic.ValidationError):
-            sdk.parse({"type": "input", "source": {"kind": "source", "source": "slot"}})
+            sdk.parse({"type": "input", "tag": "f", "sink": {"dest": "s"}})
         # The scope is closed: a typo is an error, not a new namespace.
         with self.assertRaises(pydantic.ValidationError):
             sdk.parse({"type": "input", "source": {"slot": "s", "scope": "loca"}})
@@ -214,31 +230,32 @@ class ProfileTest(unittest.TestCase):
     def test_a_slot_is_a_name_written_once(self):
         self.assertEqual(sdk.dump(sdk.text(source=Slot("title")))["source"],
                          {"scope": "remote", "slot": "title"})
-        # A bare string is not a second spelling of a slot: take the handle, or say `sdk.Bind(slot=…)`.
+        # A bare string is not a second spelling of a slot: take the handle, or say `sdk.Source(slot=…)`.
         with self.assertRaises(TypeError):
             sdk.frame(source="title")
 
-    def test_both_channels_reach_the_wire(self):
-        # A field's `tag` is what makes it a bundle member; without one a remote sink is a value
-        # nobody receives, so the SDK refuses it (ADR 0032 §2, revised 2026-11-24).
-        self.assertEqual(sdk.dump(sdk.input(tag="name", sink="save"))["sink"],
-                         {"scope": "remote", "slot": "save"})
-        self.assertEqual(sdk.dump(sdk.input(tag="name", source=Slot("prefill"), sink=Slot("name")))["source"],
+    def test_each_direction_reaches_the_wire_where_it_belongs(self):
+        # A field has one type and no exit of its own (ADR 0032 §2, revised 2026-11-24): the value
+        # it holds is named by `tag`, its exit is the bundle's, and its kind is `kind`.
+        self.assertEqual(sdk.dump(sdk.input(tag="name", source=Slot("prefill")))["source"],
                          {"scope": "remote", "slot": "prefill"})
-        node = sdk.input(tag="name", sink=sdk.Bind(slot="name", type=sdk.JsType.text))
-        self.assertEqual(sdk.dump(node)["sink"], {"scope": "remote", "slot": "name", "type": "text"})
-        with self.assertRaises(ValueError) as caught:
-            sdk.input(sink="save")
-        self.assertIn("tag", str(caught.exception), "the refusal says what is missing")
-        # A local landing is still a field's own: it lands as the value changes, inside the page.
-        local = sdk.dump(sdk.input(sink=sdk.Bind(slot="filter", scope="local")))
-        self.assertEqual(local["sink"], {"scope": "local", "slot": "filter"})
+        typed = sdk.dump(sdk.input(tag="password", kind=sdk.JsType.password))
+        self.assertEqual(typed["kind"], "password")
+        self.assertNotIn("sink", typed)
+        with self.assertRaises(TypeError):
+            sdk.input(tag="name", sink="save")  # a field has no sink to give
+        # The write belongs to the node that owns the exit: a button, or the bundle around fields.
+        self.assertEqual(sdk.dump(sdk.button("提交", sink=Slot("submit")))["sink"],
+                         {"dest": "submit", "scope": "remote"})
+        self.assertEqual(sdk.dump(sdk.bundle(sink="compose"))["sink"],
+                         {"dest": "compose", "scope": "remote"})
+        # A local landing is the bundle's too: one draw, one write, the reset still applies.
+        local = sdk.dump(sdk.bundle(sink=sdk.Sink(dest="__CONFIG__", scope="local", path="/")))
+        self.assertEqual(local["sink"], {"dest": "__CONFIG__", "path": "/", "scope": "local"})
         self.assertEqual(sdk.dump(sdk.select(options=Slot("rows")))["options"],
                          {"scope": "remote", "slot": "rows"})
         self.assertEqual(sdk.dump(sdk.input(placeholder="写点什么"))["placeholder"],
                          {"default": "写点什么", "scope": "remote"})
-        self.assertEqual(sdk.dump(sdk.button("提交", sink=Slot("submit")))["sink"],
-                         {"scope": "remote", "slot": "submit"})
         # A channel a type does not accept is not a keyword of its builder — refused where it is built.
         for call in (lambda: sdk.text(sink="x"), lambda: sdk.bundle(source="x"), lambda: sdk.tiles(sink="x")):
             with self.assertRaises(TypeError):
@@ -247,12 +264,12 @@ class ProfileTest(unittest.TestCase):
     def test_a_bundle_packs_its_fields(self):
         """ADR 0032: fields are named by `tag`, the bundle owns the sink, `submit` is its timing."""
         node = sdk.bundle(
-            sdk.input(tag="name", sink="name"),
-            sdk.input(tag="body", multiline=True, sink="body"),
+            sdk.input(tag="name"),
+            sdk.input(tag="body", multiline=True),
             sink="compose",
         )
         wire = sdk.dump(node)
-        self.assertEqual(wire["sink"], {"scope": "remote", "slot": "compose"})
+        self.assertEqual(wire["sink"], {"dest": "compose", "scope": "remote"})
         self.assertEqual([(child["tag"], child.get("multiline")) for child in wire["children"]],
                          [("name", None), ("body", True)])
         self.assertNotIn("attrs", wire)  # absent `submit` means the wire default, `[enter]`
@@ -260,25 +277,27 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(sdk.dump(sdk.bundle(submit="change"))["attrs"], {"submit": ["change"]})
         self.assertEqual(sdk.dump(sdk.bundle(submit=["enter", "button"]))["attrs"],
                          {"submit": ["enter", "button"]})
-        # A field's values ride the channels: placeholder is a read, sink a write.
-        field = sdk.dump(sdk.input(tag="note", placeholder="写点什么", sink="note"))
+        # A field's own value is a read (placeholder), and it has no write to carry.
+        field = sdk.dump(sdk.input(tag="note", placeholder="写点什么"))
         self.assertEqual(field["placeholder"], {"default": "写点什么", "scope": "remote"})
-        self.assertEqual(field["sink"], {"scope": "remote", "slot": "note"})
+        self.assertNotIn("sink", field)
         # `multiline` is a layout of `input`, not a type of its own.
         self.assertFalse(hasattr(sdk, "textarea"))
 
     def test_a_value_carries_its_scope_and_path(self):
-        # ADR 0031 §1: scope rides the value, so a local read is a `Bind`, not a second keyword.
+        # ADR 0031 §1: scope rides the value, so a local read is a `Source`, not a second keyword.
         self.assertEqual(
-            sdk.dump(sdk.text(source=sdk.Bind(slot="chan", scope="local", path="/data")))["source"],
+            sdk.dump(sdk.text(source=sdk.Source(slot="chan", scope="local", path="/data")))["source"],
             {"path": "/data", "scope": "local", "slot": "chan"},
         )
-        self.assertEqual(sdk.dump(sdk.text(source=sdk.Bind(slot="chan")))["source"],
+        self.assertEqual(sdk.dump(sdk.text(source=sdk.Source(slot="chan")))["source"],
                          {"scope": "remote", "slot": "chan"})
         with self.assertRaises(pydantic.ValidationError):
-            sdk.text(source=sdk.Bind(slot="chan", scope="loca"))
+            sdk.text(source=sdk.Source(slot="chan", scope="loca"))
+        # A write's word on a read is not a spelling of it: `dest` belongs to the other direction
+        # and is refused by the model, not quietly dropped (ADR 0039).
         with self.assertRaises(pydantic.ValidationError):
-            sdk.text(source=sdk.Bind(kind="local", slot="chan"))
+            sdk.text(source=sdk.Source(dest="chan"))
 
     def test_children_come_through(self):
         node = sdk.frame(sdk.text("a"), sdk.text("b"))

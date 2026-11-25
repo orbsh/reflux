@@ -46,7 +46,7 @@ from typing import Any, Callable, Protocol
 
 from reflux import Context, Match
 from reflux.sdk import h
-from reflux.sdk.types import Accrete, Bind
+from reflux.sdk.types import Accrete, Source
 from reflux.slots import Slot
 
 from . import scene
@@ -287,7 +287,7 @@ def page(ctx: Context, match: Match) -> None:
         s.control.set(control("▶ Play"))
         s.beat.set(h.text("not started · the button is bottom-right"))
         s.echo.set(h.text(""))
-    ctx.page(
+    return (
         h.frame(
             h.frame(  # the left column: one region, one slot
                 h.forcegraph(
@@ -451,7 +451,7 @@ def review_form(s: Demo) -> Accrete:
                     h.input(
                         tag=key,
                         selector="score",
-                        source=Bind(default=initial, type=kind),
+                        kind=kind, source=Source(default=initial),
                         placeholder=f"{name} · {KINDS.get(kind, kind)}",
                         id=f"field-{key}",
                     )
@@ -479,7 +479,7 @@ def payload(value: Any) -> Accrete:
     from its slot's node's `source.default` — so this is how a chart spec, a graph snapshot or a
     scene reaches a host.
     """
-    return h.frame(source=Bind(default=value))
+    return h.frame(source=Source(default=value))
 
 
 def hold(run: Run, seconds: float) -> None:
@@ -733,7 +733,7 @@ def register(app: Any) -> None:
     The route is a call rather than a decorator because this module must not import the app: under
     `python3 -m examples.en.demo_app` the app module runs as `__main__`.
     """
-    app.route(PAGE, title="Walkthrough")(page)
+    app.page(PAGE, title="Walkthrough")(page)
     app.on(TOGGLE, on_toggle)
     app.on(PIN, on_pin)
     app.on(SAVE, on_save)

@@ -3,12 +3,13 @@ routing.
 
     app = App()
 
-    @route("/blog/{slug}", title="文章")
-    def post(device, match): ...
+    @app.page("/blog/{slug}", title="文章")
+    def post(ctx, match):
+        return h.frame(...)
 
-    @app.dests.register("name.change")
-    def name_changed(device, frame):
-        device.emit(wire.set("echo", h.text(frame["data"])))
+    @app.on("name.change")
+    def name_changed(ctx, frame):
+        ctx.slot("echo").set(h.text(frame["data"]))
 
     app.serve(port=8000)
 
@@ -80,7 +81,7 @@ from .protocol import (
     ROUTES_SLOT,
     SIGNUP,
 )
-from .routes import DEFAULT, Match, Routes
+from .routes import DEFAULT, Match, Routes, page_of
 from .sdk import builders as h
 from .sdk import markers
 from .sdk._parse import parse
@@ -433,15 +434,16 @@ class Context:
     def page(self, *children: Any, title: str | None = None, path: str | None = None, id: str = PAGE_ID) -> None:
         """This is the page for the address this delivery is about.
 
-        A page handler **draws**; it does not return. The framework composes the frame around the
-        page (the shell once per connection, the `routes` slot after that) and sends it — which is why
-        a page handler and an uplink handler have the same shape, and why neither of them can
-        accidentally answer a device that is not the one in front of it.
+        Two ways to give a page, one word: a `@app.page` handler returns it, and a handler driving a
+        delivery by hand (`@app.on`) draws it with this call. Both land the same way — the framework
+        composes the frame around it (the shell once per connection, the `routes` slot after that)
+        and sends it, which is why neither of them can accidentally answer a device that is not the
+        one in front of it.
 
-        The page is `markers.page(...)`, built here: the address and the title are what the route
-        already declared (`@app.route("/chat", title="对话")`), so a handler passes neither — only
-        its content. `path=` / `title=` override them for the case where the declaration is not the
-        whole story (the single-page hook, which has no route).
+        The page is `markers.page(...)`, built here: the address and the title are what the page
+        already declared (`@app.page("/chat", title="对话")`), so a handler passes neither — only its
+        content. `path=` / `title=` override them for the case where the declaration is not the
+        whole story (the single page, which has no declaration to ask).
         """
         self._page = markers.page(
             self.match.path if path is None and self.match else (path if path is not None else self.device.path),
@@ -493,9 +495,9 @@ class App:
         # — is enough, and the node's id and variant are not repeated at every write.
         self.views: dict[str, Callable[[Any], Any]] = {}
         self.routes: Routes = routes if routes is not None else DEFAULT
-        # page(device, path) -> a node, or the ops of that turn; left None the route table answers
-        # (which is the shape of a routed app; one page and no routes sets this instead).
-        self.page: Callable[[Device, str], Any] | None = None
+        # The one page of an app that declares no routes: `@app.page` above its handler. A routed app
+        # leaves this None and the route table answers instead.
+        self._single: Callable[[Context, str], Any] | None = None
         # shell(ctx) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
         # A page turn replaces that one slot; an app that declares none gets `default_shell`, so
         # there is no second shape for the app with nothing around its page.
@@ -669,15 +671,35 @@ class App:
             {"dest": "location", "data": {"path": device.path, "query": device.query}},
         )
 
-    def route(
-        self, path: str, *, layout: Callable | None = None, **meta: Any
-    ) -> Callable[[Callable], Callable]:
-        """Declare a page on this app: `@app.route("/", title="首页")` above its handler.
+    def page(
+        self, path: "str | Callable | None" = None, *, layout: Callable | None = None, **meta: Any
+    ) -> Any:
+        """Declare a page — the reactive path, the one that hands the structure back.
 
-        Sugar over `self.routes.add`. The point is where the declaration hangs: on the object the
-        pages belong to, so a file reads as one app and a list of decorators, instead of a table
-        built somewhere else and handed to a constructor.
+        Three shapes, one word:
+
+        - `@app.page("/chat", title="对话")` — this address, decorated on the handler that returns it;
+          sugar over `self.routes.add`, hung where the pages live so a file reads as one app and a
+          list of declarations rather than a table built elsewhere.
+        - `@app.page` — the one page of an app that declares no routes (bare, no parentheses). It is
+          handed `(ctx, path)` because there is no declaration to ask.
+        - `@app.page()` — the same, written with parentheses.
+
+        A handler here **returns** its structure (or draws it with `ctx.page`, though returning is the
+        point of this path). Its neighbour is `@app.on`, which is handed a delivery and drives it by
+        hand: `page` is the shape where the framework composes the frame, `on` is the shape where the
+        handler says each frame itself.
         """
+        if callable(path):  # @app.page above a handler: the one page
+            self._single = path
+            return path
+        if path is None:  # @app.page() with nothing to say yet
+
+            def only(handler: Callable) -> Callable:
+                self._single = handler
+                return handler
+
+            return only
         declared: Callable[[Callable], Callable] = self.routes.add(path, layout=layout, **meta)
         return declared
 
@@ -748,12 +770,11 @@ class App:
         Private on purpose: the page is the app's, the act is the device's. `device.draw()` is how
         anything else asks for this, and `Device.go` is a move plus a draw.
         """
-        if self.page is None and len(self.routes) == 0:
+        if self._single is None and len(self.routes) == 0:
             return
         ctx = self.context(device)
-        if self.page is not None:
-            self.page(ctx, device.path)
-            drawn = ctx.take_page()
+        if self._single is not None:
+            drawn = page_of(ctx, self._single(ctx, device.path), "the single page")
         else:
             match = self.routes.match(device.path)
             drawn = None
@@ -812,7 +833,7 @@ class App:
                     device.landings[name] = (sink["__landing__"], bool(sink.get("__auth__")))
                     if device.app is not None:
                         device.app.declare(name)
-                    node["sink"] = {"slot": name}
+                    node["sink"] = {"dest": name}
                     named.append(True)
                 if node.get("children"):
                     node["children"] = walk(node["children"])
@@ -823,7 +844,7 @@ class App:
                 device.landings[name] = (sink["__landing__"], bool(sink.get("__auth__")))
                 if device.app is not None:
                     device.app.declare(name)
-                node.sink = {"slot": name}
+                node.sink = {"dest": name}
                 named.append(True)
             children = getattr(node, "children", None)
             if children:

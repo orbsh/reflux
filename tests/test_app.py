@@ -106,7 +106,7 @@ class TestPageResolution(unittest.TestCase):
         def single(ctx, path):
             ctx.page(h.text(f"single:{path}"))  # a page is a node; ops are `ctx.emit`
 
-        app.page = single
+        app.page(single)
         device = FakeDevice()
         app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/whatever"}})
         op = page_op(device)

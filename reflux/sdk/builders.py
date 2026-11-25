@@ -195,7 +195,7 @@ def input(
     horizontal: bool | None = None,
     selector: str | None = None,
     source: Any = None,
-    sink: Any = None,
+    kind: JsType | str | None = None,
     multiline: bool | None = None,
     placeholder: Any = None,
     tag: str | None = None,
@@ -204,9 +204,8 @@ def input(
     """Build a `input` node (the wire type `input`)."""
     attrs = drop_none(horizontal=horizontal, selector=selector)
     source = as_source(source, constants=False)
-    sink = as_sink(sink)
     placeholder = as_source(placeholder)
-    return parse(drop_none(type='input', attrs=attrs, source=source, sink=sink, placeholder=placeholder, id=id, multiline=multiline, tag=tag), Input)
+    return parse(drop_none(type='input', attrs=attrs, source=source, placeholder=placeholder, id=id, kind=kind, multiline=multiline, tag=tag), Input)
 
 
 def select(
@@ -214,7 +213,6 @@ def select(
     horizontal: bool | None = None,
     selector: str | None = None,
     source: Any = None,
-    sink: Any = None,
     options: Any = None,
     tag: str | None = None,
     id: str | None = None,
@@ -222,9 +220,8 @@ def select(
     """Build a `select` node (the wire type `select`)."""
     attrs = drop_none(horizontal=horizontal, selector=selector)
     source = as_source(source)
-    sink = as_sink(sink)
     options = as_source(options)
-    return parse(drop_none(type='select', attrs=attrs, source=source, sink=sink, options=options, id=id, tag=tag), Select)
+    return parse(drop_none(type='select', attrs=attrs, source=source, options=options, id=id, tag=tag), Select)
 
 
 def text(

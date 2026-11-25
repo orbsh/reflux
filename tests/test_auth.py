@@ -258,16 +258,16 @@ class TheLoginSurface(unittest.TestCase):
     """A field has no exit of its own (ADR 0032 §2, revised): its exit is the bundle's.
 
     The password field still has to say what it is — a `password` input, not a text one — and that
-    is a property of the field's channel, not of an address. So the type rides `source` and there is
-    no `sink` left on the field at all.
+    is the field's own `kind` (ADR 0032 §2, revised 2026-11-24): a field has one type, and it is
+    neither the read's nor the write's.
     """
 
-    def test_the_password_field_carries_its_type_and_no_sink(self) -> None:
+    def test_the_password_field_carries_its_kind_and_no_sink(self) -> None:
         from reflux.sdk import dump, h
-        from reflux.sdk.types import Bind, JsType
+        from reflux.sdk.types import JsType
 
-        node = h.input(tag="pass", source=Bind(type=JsType.password), id="auth-pass")
+        node = h.input(tag="pass", kind=JsType.password, id="auth-pass")
         wire = dump(node)
         self.assertNotIn("sink", wire, "a field has no exit of its own")
-        self.assertEqual(wire["source"]["type"], "password")
+        self.assertEqual(wire["kind"], "password")
         self.assertEqual(wire["tag"], "pass", "and its membership, which is what makes it send")

@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from examples.zh import demo_app
 from examples.zh import demo_chat as chat
 from examples.zh.chat_model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
+from reflux.routes import page_of
 from tests.fakes import FakeDevice
 
 
@@ -241,9 +242,8 @@ class Frames(unittest.TestCase):
         device = FakeDevice()
         match = demo_app.make_app().routes.match("/chat")
         ctx = context(device)
-        self.assertIsNone(chat.page(ctx, match))  # a page handler says nothing by returning
-        page = ctx.take_page()
-        self.assertEqual(page.type, "frame")  # it drew a page instead
+        page = page_of(ctx, chat.page(ctx, match), "/chat")  # a page handler hands its structure back
+        self.assertEqual(page.type, "frame")
         self.assertEqual(len(device.frames), 1)  # the seed left as a send, once
         self.assertEqual(device.frames[0][0]["action"], "set")
         self.assertEqual(device.frames[0][0]["slot"], "status")
