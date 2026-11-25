@@ -1,6 +1,6 @@
 # 0002 — 服务端搬到 asyncio（aiohttp），处理器就是 `async def`
 
-Status: **Accepted**（2026-11-25）。
+Status: **Accepted**（2026-11-25），**已落地**：P1–P5 全绿（`docs/PLAN.md` 同一节逐阶段记账）。
 
 ## 1. 需求
 

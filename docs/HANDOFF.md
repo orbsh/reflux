@@ -25,6 +25,12 @@
 - 第二个语言已落地（T10）：`sdks/rust/` 是从**同一份 schema 与 profile** 生成的 Rust SDK（`src/types.rs` 生成，
   `src/wire.rs` 手写），`gate_t10.py` 断言它建的七帧与 Python **逐字节相等**。词表只有一份模型
   （`tools/vocabulary.py`），两个 emitter 只做格式化——「规格是产品」这句现在有可跑的证明。
+- 服务端是 asyncio（ADR 0002，2026-11-25）：aiohttp 承载 HTTP 与通道，一条 loop、一连接读/写两个 task；处理器可
+  `async def`，页面、`shell`、`Auth.verify`、三种 announce 都能 await。并发模型写在 DESIGN「并发模型」。入口三个：
+  `app.serve_forever(port, host)`（阻塞 + Ctrl-C，CLI 用的就是这一行）、`app.serve(...)`（后台线程 + 返回 server）、
+  `app.start(...)` / `app.stop()`（嵌入与测试：自己拥有 server，可重复停）；`app.http` 是服务期的共享
+  `ClientSession`，`@app.startup` / `@app.shutdown` 建与关。手写的 WebSocket 编解码（`accept_key`／`is_upgrade`／
+  `upgrade`／`Channel`）随旧传输删除，`channel.py` 只剩 `WsChannel` 这个包装。
 - 示例应用已落地：`examples/chat/`（AI 对话）——六个后端行为（会话态／流式／停止／单飞／应用层两道门／
   模型失败变气泡）各有断言，`tools/gate_chat.py` 12 条（9 条走真 socket、3 条在真 Chromium），
   `examples/chat/walkthrough.py` 是它的快速演示（借 fluxen `examples/walkthrough.py` 的形状）。
@@ -34,7 +40,7 @@
 ```
 python3 tools/vendor.py fetch                    # 先装渲染器包（不入库；离线用 build --fluxen <path>）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 280 例
+python3 -m unittest discover -s tests -t .       # 369 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty

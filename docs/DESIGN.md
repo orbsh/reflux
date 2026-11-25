@@ -67,7 +67,18 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 
 已落地（T4）：壳连上 `/ws` 即发 hello，生产者的应用在收到它时发出这个设备的首帧（一帧里既有 `create`，也可以顺手把视图要读的槽播下去）。hello 带地址，声明了 `auth=` 的应用还带 `token`（命中就在画页之前把这条连接绑回同一个人，见「设备与身份」）；没有就不写这个字段。首帧入队之后，框架对应用 raise 一次 `connect`（见「宿主事件」）。
 
-传输落地的形状：`reflux/server.py`（aiohttp 承载静态与 index 回退、通道升级，ADR 0002）、`reflux/channel.py`（`WsChannel` 把 `WebSocketResponse` 说成通道；手写编解码还在，等 P5 删）、`reflux/dests.py`（上行落点注册表）、`reflux/app.py`（伺服壳 + `/ws` + 注册表；一个连接一个 device）。
+传输落地的形状：`reflux/server.py`（aiohttp 承载静态与 index 回退、通道升级，ADR 0002）、`reflux/channel.py`（`WsChannel` 把 `WebSocketResponse` 说成通道：编解码、分片、ping/pong、关闭握手都是 aiohttp 的）、`reflux/dests.py`（上行落点注册表）、`reflux/app.py`（伺服壳 + `/ws` + 注册表；一个连接一个 device）。
+
+### 并发模型
+
+**一条 loop，一条连接两个 task。** HTTP 与通道都在 aiohttp 的那条 loop 上（ADR 0002）；一个连接进来，`App.handle` 是它的读 task，`_pump` 是它的写 task。读 task 把每帧交给注册表，写 task 从这设备自己的 `outbox` 里取帧往 socket 上写——**分开的理由是慢客户端只能卡住自己**：写挂起时挂起的是写 task，读与别的设备都不受影响。
+
+- **一次投递一次预算**：`asyncio.timeout(handler_timeout)`（缺省 30 秒）包住每次 `dispatch`。超时取消、计一次 refusal、写一行日志，设备活着。
+- **处理器可以 await，也可以不**：`reflux/settle.py` 的 `maybe()` 是唯一入口——协程函数 await，普通函数 `asyncio.to_thread`（阻塞调用只占一个工作线程，不占 loop），返回可等待物的也 await。页面、`shell`、`Auth.verify`、三种 announce 都在这一条路径上。
+- **重画是排队的，不是开的 task**：`App.request_draw` 往 `outbox` 里放一个 `_DRAW` 标记，写 task 按序执行 `await _draw`。task 会把页面的帧排到调用者下一句 emit 之后，顺序就错了。
+- **设备之间没有共享的可变状态**：对话挂在 `Device`（`ctx.data`），槽的写落在设备自己的 `outbox`；`App.devices` 只在一个 loop 上被增删。
+- **跨线程只有一个入口**：`Device.wake()`。定时器、`to_thread` 里的处理器、`evict` 的调度都在 loop 之外发生，`wake` 知道该 `call_soon_threadsafe` 还是直接 set。
+- **`threading` 留在它该在的地方**：`Server` 造的那条 loop 线程（嵌入形态）、`serve()` 起的那条后台线程，以及 `Server._stopped`。设备、处理器、帧路径上没有线程。
 
 ### 组件形状
 

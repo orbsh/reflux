@@ -71,7 +71,7 @@ from urllib.parse import parse_qs
 
 from . import ingest, wire
 from .auth import Auth, Tokens, credentials_of
-from .channel import EVICTED, JUDGED_DEAD, WS_PATH, Channel, ChannelClosed
+from .channel import EVICTED, JUDGED_DEAD, WS_PATH, ChannelClosed
 from .settle import maybe
 from .dests import Registry
 from .protocol import (
@@ -231,7 +231,7 @@ class Device:
     def __init__(
         self,
         id: str,
-        channel: Channel,
+        channel: Any,
         record: Callable[[str, Any], None],
         stats: dict[str, int],
         outbox: int = 256,
@@ -571,7 +571,6 @@ class App:
         self.dead_after = dead_after
         self.outbox = outbox  # frames a device may queue before the middle is shed
         self.log: list[tuple[str, Any]] = []  # every frame in and out, in order
-        self._stop = threading.Event()
         self._watchdog: Any = None  # a Task inside the loop, a concurrent Future from outside
         self._loop: asyncio.AbstractEventLoop | None = None
         self.dests.builtin(f"{RESERVED_PREFIX}hello", self._on_hello)
@@ -1021,14 +1020,11 @@ class App:
         """
         if self._watchdog is not None:
             return
-        self._stop = threading.Event()
         self._loop = loop or self._loop
 
         async def tick() -> None:
-            while not self._stop.is_set():
+            while True:
                 await asyncio.sleep(self.heartbeat)
-                if self._stop.is_set():
-                    return
                 await self.watch()
 
         if self._loop is None:
@@ -1044,7 +1040,6 @@ class App:
         `Server.shutdown` calls back here, so the server is taken off the app first: a second
         `stop()` is a no-op rather than a loop (the gates and tests call it on the way out).
         """
-        self._stop.set()
         task, self._watchdog = self._watchdog, None
         loop = self._loop
         if task is not None and loop is not None and not loop.is_closed():
@@ -1209,8 +1204,6 @@ class App:
                         f"handler for {frame.get('dest')!r} ran past {self.handler_timeout}s "
                         f"({device.id} on {device.path})"
                     )
-        except ChannelClosed as exc:
-            self.dests.log.append(f"device {device.id} closed: {exc}")
         finally:
             # The writer flushes what the last handlers said, then stops: `handle` returning means
             # the client has been told everything this connection produced.
