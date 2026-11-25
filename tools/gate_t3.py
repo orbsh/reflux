@@ -85,7 +85,9 @@ PROBE = """(() => {
         danger: cs('.rx-danger', 'color'),
         plainColor: cs('.t3-plain', 'color'),
         codeFont: cs('.rx-code', 'fontFamily'),
-        cardBorder: cs('.rx-card', 'borderTopWidth'),
+        cardBorder: cs('.is-card', 'borderTopWidth'),
+        cardBg: cs('.is-card', 'backgroundColor'),
+        bodyBg: getComputedStyle(document.body).backgroundColor,
       };
     })(),
   };
@@ -260,11 +262,14 @@ def main() -> int:
                 f"font-family={style.get('codeFont')}",
             )
         )
+        # A card is a surface, not an edge (ADR 0038 §3): the shade separates it, and a rule would be the same
+        # thing said twice — and, under the skin, the only straight line among drawings.
         checks.append(
             (
-                "a card variant draws a frame",
-                str(style.get("cardBorder")) not in ("0px", "None", ""),
-                f"border-top-width={style.get('cardBorder')}",
+                "a card variant is a surface, not a rule",
+                str(style.get("cardBorder")) == "0px"
+                and style.get("cardBg") not in (None, style.get("bodyBg")),
+                f"border-top-width={style.get('cardBorder')} bg={style.get('cardBg')} page={style.get('bodyBg')}",
             )
         )
 

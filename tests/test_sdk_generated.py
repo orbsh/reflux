@@ -180,7 +180,7 @@ class ProfileTest(unittest.TestCase):
         """`variant=` is a name the profile declares; the class behind it is the profile's."""
         node = sdk.text("Title", variant="heading-2")
         self.assertEqual(sdk.dump(node)["attrs"], {"class": ["rx-heading-2"]})
-        self.assertEqual(sdk.dump(sdk.frame(sdk.text("x"), variant="card"))["attrs"], {"class": ["rx-card"]})
+        self.assertEqual(sdk.dump(sdk.frame(sdk.text("x"), variant="card"))["attrs"], {"class": ["is-card"]})
         with self.assertRaises(ValueError) as caught:
             sdk.text("x", variant="heading-9")
         self.assertIn("heading-1", str(caught.exception))  # the refusal lists the set

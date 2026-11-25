@@ -44,7 +44,7 @@
       "danger": "rx-danger"
     },
     "frame": {
-      "card": "rx-card"
+      "card": "is-card"
     }
   },
   "types": {
