@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Settings gate — the page's three members over a real browser, and the server remembering them.
+"""Settings gate — core.css's whole token surface over a real browser, and the server remembering it.
 
 The unit tests (`tests/test_settings.py`) own the server's half: unpacking the group, the whitelist, the
-ranges, the throttled write. What only a browser can answer is the other half, and it is the half
-ADR 0001 actually decided: that `scope: both` writes locally, that fluxen mirrors the members onto the
-document root as `data-*`, that `STYLE` in `www/static/reflux.js` turns those into `:root` custom
-properties, and that the renderer's `sketch` member draws borders. Four claims:
+ranges, the throttled write, and the three tables agreeing. What only a browser can answer is the half
+ADR 0001 decided: that `scope: both` writes locally, that fluxen mirrors the members onto the document
+root as `data-*`, that `TOKENS` in `www/static/reflux.js` turns those into `:root` custom properties
+(colours composed as `oklch` from `L C H`), that clearing a field hands the token back to the stylesheet,
+and that the renderer's `sketch` member draws borders.
 
-1. the first frame already carries the stored options (a new connection never sees "default, then
-   yours");
-2. a change lands **locally** — `data-accent` and `--accent` move without a round trip;
-3. the same change reaches the server and is written when the throttle window closes;
-4. a reload shows the stored values again, and the page logs no console errors.
+The fields are addressed by the order `TOKENS` declares, not by an index typed in here: the renderer does
+not put a field node's `id` on the DOM, and a table that grows must not silently move the gate onto the
+wrong control.
 
     python3 tools/gate_settings.py
 
@@ -34,7 +33,15 @@ import examples.zh.demo_app as example  # noqa: E402
 from examples.zh import demo_settings  # noqa: E402
 
 PAGE = "/settings"
-DEFAULTS = dict(demo_settings.DEFAULTS)
+
+# The page draws the sketch switch first, then one row per token in table order.
+ORDER = ["sketch", *demo_settings.TOKENS]
+START = {"sketch": False, "accent": "0.7 0.12 182.49"}  # what the server already remembers
+CORE_ACCENT = "oklch(0.7 0.12 182.49)"  # core.css's own --accent, for "clearing restores it"
+
+
+def index_of(name: str) -> int:
+    return ORDER.index(name)
 
 
 def wait_for(predicate, timeout: float = 6.0):
@@ -57,23 +64,20 @@ def custom(cdp, name: str) -> str:
 
 
 def inputs(cdp) -> list:
-    """The settings group's three fields, in the order the page declares them.
-
-    Selected by position, not by id: a field node's `id` addresses patches on the wire, and the
-    renderer does not put it on the DOM (only the frame that wraps the page does).
-    """
+    """The settings group's fields, in the order the page declares them."""
     return cdp.eval(
         "[...document.querySelectorAll('#settings-page input')].map(e => [e.type, e.value])"
     ) or []
 
 
-def set_field(cdp, index: int, value: str) -> bool:
+def set_field(cdp, name: str, value: str) -> bool:
     """Type into a field and leave it, the way a person would.
 
-    Not `el.value = x` + a synthetic `change`: the renderer listens for the events a person makes, and
-    a dispatched `Event("change")` is not one of them. Focus, select, insert text, blur — the blur is
-    what makes the browser fire a real `change`, which is the loom's timing here.
+    Not `el.value = x` + a synthetic `change`: the renderer listens for the events a person makes, and a
+    dispatched `Event("change")` is not one of them. Focus, select, insert text, blur — the blur is what
+    makes the browser fire a real `change`, which is the loom's timing here.
     """
+    index = index_of(name)
     focused = cdp.eval(
         "(() => {"
         f"const el = document.querySelectorAll('#settings-page input')[{index}];"
@@ -87,25 +91,42 @@ def set_field(cdp, index: int, value: str) -> bool:
     return True
 
 
-def press(cdp, name: str, code: int, times: int = 1) -> None:
-    for _ in range(times):
-        cdp.call("Input.dispatchKeyEvent", type="keyDown", key=name, windowsVirtualKeyCode=code, nativeVirtualKeyCode=code)
-        cdp.call("Input.dispatchKeyEvent", type="keyUp", key=name, windowsVirtualKeyCode=code, nativeVirtualKeyCode=code)
+def clear_field(cdp, name: str) -> bool:
+    """Empty a field (select-all, delete, leave) — "not set", not "zero"."""
+    index = index_of(name)
+    cdp.eval(
+        "(() => {"
+        f"const el = document.querySelectorAll('#settings-page input')[{index}];"
+        "if (!el) return false; el.focus(); el.select(); return true;"
+        "})()"
+    )
+    cdp.call(
+        "Input.dispatchKeyEvent", type="keyDown", key="Backspace", windowsVirtualKeyCode=8, nativeVirtualKeyCode=8
+    )
+    cdp.call(
+        "Input.dispatchKeyEvent", type="keyUp", key="Backspace", windowsVirtualKeyCode=8, nativeVirtualKeyCode=8
+    )
+    cdp.eval("document.activeElement && document.activeElement.blur()")
+    return True
 
 
-def step_field(cdp, index: int, target: int) -> bool:
+def press(cdp, name: str, code: int) -> None:
+    cdp.call("Input.dispatchKeyEvent", type="keyDown", key=name, windowsVirtualKeyCode=code, nativeVirtualKeyCode=code)
+    cdp.call("Input.dispatchKeyEvent", type="keyUp", key=name, windowsVirtualKeyCode=code, nativeVirtualKeyCode=code)
+
+
+def step_field(cdp, name: str, target: int) -> bool:
     """Nudge a number field with ArrowUp until it reads `target`.
 
-    Typing into it is not usable from here: a number input has no selectable caret (`select()` is a
-    no-op, the caret sits at 0), so keystrokes prepend — "18" on top of "10.0" gave "10.018". The
-    arrow keys are the field's own increment, and a person's hand on the same control does the same
-    thing.
+    Typing into it is not usable from here: a number input has no selectable caret (`select()` is a no-op,
+    the caret sits at 0), so keystrokes prepend. The arrow keys are the field's own increment, and a person's
+    hand on the same control does the same thing.
     """
+    index = index_of(name)
     cdp.eval(f"document.querySelectorAll('#settings-page input')[{index}].focus()")
     for _ in range(40):
-        value = cdp.eval(f"document.querySelectorAll('#settings-page input')[{index}].value")
         try:
-            current = float(value)
+            current = float(cdp.eval(f"document.querySelectorAll('#settings-page input')[{index}].value"))
         except (TypeError, ValueError):
             return False
         if current == target:
@@ -118,7 +139,8 @@ def step_field(cdp, index: int, target: int) -> bool:
         return False
 
 
-def click_field(cdp, index: int):
+def click_field(cdp, name: str):
+    index = index_of(name)
     return cdp.eval(
         "(() => {"
         f"const el = document.querySelectorAll('#settings-page input')[{index}];"
@@ -131,46 +153,43 @@ def main() -> int:
     checks: list[tuple[str, bool, str]] = []
     with tempfile.TemporaryDirectory() as where:
         demo_settings.settings.path = Path(where) / "settings.json"
-        demo_settings.settings.state = dict(DEFAULTS)
+        demo_settings.settings.state = dict(START)
         app = example.app
 
         with open_page(app=app, path=PAGE, settle=0.7) as (cdp, base):
             drawn = wait_for(lambda: "设置" in (cdp.eval("document.body.innerText") or ""))
             fields = len(inputs(cdp))
             checks.append(
-                ("the page draws its heading and three fields", drawn and fields >= 3, f"fields={fields}")
-            )
-
-            # 1. the first frame carried the options
-            seeded = wait_for(lambda: root_attr(cdp, "accent") == DEFAULTS["accent"])
-            checks.append(
                 (
-                    "the stored options are mirrored on the first frame",
-                    bool(seeded),
-                    f"data-accent={root_attr(cdp, 'accent')!r} data-round={root_attr(cdp, 'round')!r}",
-                )
-            )
-            checks.append(
-                (
-                    "STYLE turns the mirror into :root properties",
-                    custom(cdp, "accent").lower() == DEFAULTS["accent"] and custom(cdp, "round") == f"{DEFAULTS['round']}px",
-                    f"--accent={custom(cdp, 'accent')!r} --round={custom(cdp, 'round')!r}",
+                    "the page draws one field per token, plus the sketch switch",
+                    drawn and fields == len(ORDER),
+                    f"fields={fields} expected={len(ORDER)}",
                 )
             )
 
-            # 2. local write, no round trip
-            wrote = set_field(cdp, 1, "#c08a2e")
-            local = wait_for(lambda: (root_attr(cdp, "accent") or "").lower() == "#c08a2e")
+            # 1. the first frame carried the stored options, and the table turned them into a colour
+            seeded = wait_for(lambda: root_attr(cdp, "accent") == START["accent"])
             checks.append(
                 (
-                    "a change lands locally (data-accent, then --accent)",
-                    bool(wrote and local) and custom(cdp, "accent").lower() == "#c08a2e",
+                    "the stored token reaches the first frame and becomes an oklch property",
+                    bool(seeded) and custom(cdp, "accent") == CORE_ACCENT,
                     f"data-accent={root_attr(cdp, 'accent')!r} --accent={custom(cdp, 'accent')!r}",
                 )
             )
 
-            # 3. round takes a number and the table appends px
-            stepped = step_field(cdp, 2, 18)
+            # 2. local write, no round trip: a new triple paints at once
+            wrote = set_field(cdp, "accent", "0.62 0.15 40")
+            local = wait_for(lambda: custom(cdp, "accent") == "oklch(0.62 0.15 40)")
+            checks.append(
+                (
+                    "a colour typed as L C H is composed to oklch locally",
+                    bool(wrote and local),
+                    f"data-accent={root_attr(cdp, 'accent')!r} --accent={custom(cdp, 'accent')!r}",
+                )
+            )
+
+            # 3. a length: a number in, pixels out
+            stepped = set_field(cdp, "round", "18")
             rounded = wait_for(lambda: custom(cdp, "round") == "18px")
             checks.append(
                 (
@@ -180,58 +199,86 @@ def main() -> int:
                 )
             )
 
-            # 3b. the STYLE table has its own checks: a value it does not understand **drops the
-            # property**, which hands the look back to the stylesheet's `:root` default (10px) — it
-            # does not guess, and it does not keep a value the server would have refused.
+            # 3b. the table has its own checks: a value it does not understand **drops the property**,
+            # which hands the look back to the stylesheet's `:root` default — it does not guess.
             cdp.eval("document.documentElement.setAttribute('data-round', '99.5')")
             time.sleep(0.25)
             dropped = custom(cdp, "round")
             cdp.eval("document.documentElement.setAttribute('data-round', '18')")
             checks.append(
                 (
-                    "STYLE refuses 99.5 and falls back to the stylesheet",
-                    dropped == f"{DEFAULTS['round']}px",
-                    f"--round={dropped!r} for 99.5 (stylesheet default)",
+                    "a length out of range is refused and the stylesheet shows through",
+                    dropped == "10px",
+                    f"--round={dropped!r} for 99.5 (core.css default 10px)",
                 )
             )
 
-            # 4. sketch is the renderer's member: the mirror moves, the browser draws borders
-            toggled = click_field(cdp, 0)
-            mirrored = wait_for(lambda: root_attr(cdp, "sketch") == "true")
+            # 4. clearing a field is "not set": the member goes away and core's own value returns
+            set_field(cdp, "warn", "0.8 0.1 90")
+            wait_for(lambda: custom(cdp, "warn") == "oklch(0.8 0.1 90)")
+            clear_field(cdp, "warn")
+            cleared = wait_for(lambda: not (root_attr(cdp, "warn") or "").strip())
             checks.append(
-                ("sketch is mirrored for the renderer", bool(toggled and mirrored), f"data-sketch={root_attr(cdp, 'sketch')!r}")
+                (
+                    "clearing a field hands the token back to core.css",
+                    bool(cleared) and custom(cdp, "warn") == "oklch(0.84 0.12 92.82)",
+                    f"data-warn={root_attr(cdp, 'warn')!r} --warn={custom(cdp, 'warn')!r}",
+                )
             )
 
-            # 5. the server took the same changes (the throttle window has closed by now)
-            waited = wait_for(lambda: demo_settings.settings.state["accent"] == "#c08a2e", timeout=4.0)
+            # 5. the derived tokens follow their members: --border is width, style and colour
+            border, colour = custom(cdp, "border"), custom(cdp, "border-color")
+            checks.append(
+                (
+                    "the composed --border follows the tokens it is built from",
+                    "solid" in border and colour == custom(cdp, "secondary"),
+                    f"--border={border!r} --border-color={colour!r} secondary={custom(cdp, 'secondary')!r}",
+                )
+            )
+
+            # 6. sketch is the renderer's member: the mirror moves, the browser draws borders
+            toggled = click_field(cdp, "sketch")
+            mirrored = wait_for(lambda: root_attr(cdp, "sketch") == "true")
+            checks.append(
+                (
+                    "sketch is mirrored for the renderer",
+                    bool(toggled and mirrored),
+                    f"data-sketch={root_attr(cdp, 'sketch')!r}",
+                )
+            )
+
+            # 7. the server took the same changes (the throttle window has closed by now)
+            waited = wait_for(lambda: demo_settings.settings.state.get("accent") == "0.62 0.15 40", timeout=4.0)
             state = dict(demo_settings.settings.state)
             checks.append(
                 (
                     "the uplink reached the server and was merged",
-                    bool(waited and state["round"] == 18 and state["sketch"] is True),
+                    bool(waited and state.get("round") == "18" and state.get("sketch") is True and "warn" not in state),
                     f"state={state}",
                 )
             )
 
-            # A reload is a new document: the flag written before it is gone, so the wait below is
-            # waiting on the *new* page, not on the old DOM that happened not to have changed yet.
+            # A reload is a new document: the flag written before it is gone, so the wait below is waiting
+            # on the *new* page, not on the old DOM that happened not to have changed yet.
             cdp.eval("window.__before_reload = true; location.reload(); true")
             fresh = wait_for(lambda: cdp.eval("window.__before_reload") is None, timeout=10.0)
-            stayed = wait_for(lambda: (root_attr(cdp, "accent") or "").lower() == "#c08a2e", timeout=8.0)
+            stayed = wait_for(lambda: custom(cdp, "accent") == "oklch(0.62 0.15 40)", timeout=8.0)
             checks.append(
                 (
-                    "a reload shows the stored values again",
+                    "a reload shows the stored tokens again",
                     bool(fresh and stayed),
-                    f"fresh={fresh} data-accent={root_attr(cdp, 'accent')!r} data-sketch={root_attr(cdp, 'sketch')!r}",
+                    f"fresh={fresh} --accent={custom(cdp, 'accent')!r} data-round={root_attr(cdp, 'round')!r}",
                 )
             )
 
-            # The renderer's check icon for a bool field is an `<svg>` with an empty `viewBox`, and
-            # Chromium logs one error per render. That is fluxen's, not this page's (nothing here
-            # touches SVG); the filter names the exact message so any *other* error still fails.
+            # The renderer's check icon for a bool field is an `<svg>` with an empty `viewBox`, and Chromium
+            # logs one error per render. That is fluxen's, not this page's (nothing here touches SVG); the
+            # filter names the exact message so any *other* error still fails.
             renderer_noise = "<svg> attribute viewBox: Unexpected end of attribute"
             errors = [e for e in console_errors(cdp) if renderer_noise not in e]
-            checks.append(("the page logged no console errors (besides the renderer's svg warning)", not errors, f"errors={errors[:2]}"))
+            checks.append(
+                ("the page logged no console errors (besides the renderer's svg warning)", not errors, f"errors={errors[:2]}")
+            )
 
     return report(checks, gate="SETTINGS GATE")
 

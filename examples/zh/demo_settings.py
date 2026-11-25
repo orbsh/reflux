@@ -1,20 +1,27 @@
-"""设置页：三样东西写进页面选项槽，本机立刻生效，服务端记住（ADR 0001）。
+"""设置页：core.css 的令牌面写进页面选项槽，本机立刻生效，服务端记住（ADR 0001）。
 
 页面选项是 fluxen 的机制，不是这一页的发明：`#main` 没写 `data-config`，所以在它上面挂着的槽就叫缺省
 名 `__CONFIG__`（fluxen ADR 0038 §2），槽里放一个对象，成员**逐个**决定——页面自己那一半先、远侧
 （生产端）在后；渲染器再把标量成员镜像成文档根上的 `data-<member>`，浏览器侧的表（`www/static/reflux.js`
-的 `STYLE`）把它们落到 `:root` 的自定义属性。所以这一页没有新帧、没有新动作，只有三件普通的事：
+的 `TOKENS`）把它们落到 `:root` 的自定义属性。所以这一页没有新帧、没有新动作：
 
 1. **写**：一个组的出口 `Sink(dest="__CONFIG__", scope="both", path="/")`——`both` 是"本地先改、同时
    上行"（fluxen ADR 0031 §1），一个组只有一个出口，所以这条需求没有别的合法形状。
-2. **记**：`demo_app` 把上行交给 `on_config`，这里做白名单 + 值域校验 + 合并，随后节流落盘。落盘是
-   应用的，不是框架的：`App` 不碰磁盘。
+2. **记**：`demo_app` 把上行交给 `on_config`，这里做白名单 + 值域校验 + 合并，随后节流落盘。
 3. **起始值**：每台设备第一次被画时，外框把已存对象先 `set` 进这个槽，所以新连接、刷新、换设备的第一帧
-   就带着用户的选择，不会出现"默认 → 你的选择"那一闪。
+   就带着用户的选择。
 
-值能改的三样：`sketch`（线框模式，布尔）、`accent`（强调色，`#rrggbb`）、`round`（圆角，0–24 的整数）。
-白名单之外的成员一律丢，值域之外的也丢——两处都丢，是因为浏览器不是可信的一侧，而这个文件会被下一个
-进程读回来。
+**导出的是一张表，不是一个一个字段**：`TOKENS` 说"core 的 `:root` 上有哪些可独立设置的令牌、各自是
+什么种类"，页面按它生成控件、校验按种类选，浏览器侧那张表也按种类查。三处于是只有一份事实——名字
+（去掉 `--` 就是 `:root` 上的变量名）与种类；加一个令牌是往表里加一行，不是改三处。
+
+**颜色是 `oklch` 三元组**：成员值存 `L C H`（三个数），`oklch(...)` 只在 `reflux.js` 里合成为一次——
+于是"颜色空间"是一个决定，不是散在十几个值里的字符串。空值 = 不设 = core 的缺省（成对的
+`light-dark(a, b)` 也一起回来）。
+
+**一设就两种配色模式都钉住**：`fg`／`bg`／`surface` 在 core 里是 `light-dark(浅, 深)` 成对值，而一个
+成员只能带一个值。设置它们就等于替两种模式选同一个颜色；清空即回到成对缺省。这是 2026-11-25 定下的
+取舍（另一条路是每种模式一个成员，真有那需求再开）。
 """
 
 from __future__ import annotations
@@ -29,14 +36,91 @@ from reflux import Context
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, Sink, Source
 
-__all__ = ["CONFIG", "DEFAULTS", "MEMBERS", "Store", "flatten", "merge", "on_config", "page", "register", "seed", "state"]
+__all__ = [
+    "CONFIG",
+    "CORE",
+    "DEFAULTS",
+    "GROUPS",
+    "KEYWORDS",
+    "LABELS",
+    "MEMBERS",
+    "Store",
+    "TOKENS",
+    "flatten",
+    "merge",
+    "on_config",
+    "page",
+    "register",
+    "seed",
+    "state",
+]
 
 CONFIG = "__CONFIG__"  # fluxen 的页面选项槽：`#main` 上没有 `data-config`，就是缺省名
 
-DEFAULTS: dict[str, Any] = {"sketch": False, "accent": "#4fb3a5", "round": 10}
+# core.css 的 `:root` 令牌面：名字（`--` 之后那一段）→ 种类。派生的两个不在这里：`--border-color` 缺省
+# 是 `var(--secondary)`、`--border` 由宽／线型／色拼出来 —— 它们跟着表里的成员走。
+TOKENS: dict[str, str] = {
+    "fg": "color",
+    "bg": "color",
+    "surface": "color",
+    "accent": "color",
+    "primary": "color",
+    "secondary": "color",
+    "disabled": "color",
+    "warn": "color",
+    "error": "color",
+    "border-color": "color",
+    "round": "length",
+    "input-round": "length",
+    "border-width": "length",
+    "border-style": "keyword",
+}
 
-# 一个成员一个校验：通过就给出规整之后的值，不通过返回 None（这一条丢，其余照收）。
-ACCENT = re.compile(r"^#[0-9a-fA-F]{6}$")
+# 页面上的分组：只是排版，不参与校验。
+GROUPS: list[tuple[str, str, list[str]]] = [
+    ("颜色 · oklch 三元组（L C H）", "color", [n for n, k in TOKENS.items() if k == "color"]),
+    ("尺寸 · 数字（像素）", "length", [n for n, k in TOKENS.items() if k == "length"]),
+    ("边框线型", "keyword", [n for n, k in TOKENS.items() if k == "keyword"]),
+]
+
+LABELS: dict[str, str] = {
+    "fg": "前景 / 文字",
+    "bg": "背景",
+    "surface": "表面（卡片）",
+    "accent": "强调色",
+    "primary": "主色",
+    "secondary": "次色",
+    "disabled": "禁用",
+    "warn": "警告",
+    "error": "错误",
+    "border-color": "边框色",
+    "round": "圆角",
+    "input-round": "输入框圆角",
+    "border-width": "边框宽",
+    "border-style": "边框线型",
+}
+
+# core.css 里的缺省，只用来当输入框的占位与页面上的说明：真正的缺省在样式表里，这里从不写它。
+CORE: dict[str, str] = {
+    "fg": "0.18 0 0 / 深色 0.98 0 0",
+    "bg": "1 0 0 / 深色 0.15 0 0",
+    "surface": "0.965 0 0 / 深色 0.205 0 0",
+    "accent": "0.7 0.12 182.49",
+    "primary": "0.98 0.06 107.14",
+    "secondary": "0.93 0 0",
+    "disabled": "0.6 0 0",
+    "warn": "0.84 0.12 92.82",
+    "error": "0.63 0.19 23.03",
+    "border-color": "var(--secondary)",
+    "round": "10",
+    "input-round": "5.6（0.35em）",
+    "border-width": "1",
+    "border-style": "solid",
+}
+
+KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
+
+DEFAULTS: dict[str, Any] = {"sketch": False}  # 令牌不进缺省：不设就是 core 的缺省
 
 
 def _bool(value: Any) -> bool | None:
@@ -47,30 +131,56 @@ def _bool(value: Any) -> bool | None:
     return None
 
 
-def _accent(value: Any) -> str | None:
-    cleaned = value.strip() if isinstance(value, str) else ""
-    return cleaned.lower() if ACCENT.match(cleaned) else None
+def _color(value: Any) -> str | None:
+    """`L C H` → 规整成同样的三元组。范围：亮度 0–1、彩度 0–0.4、色相 0–360。
 
-
-def _round(value: Any) -> int | None:
-    if isinstance(value, bool):  # bool 是 int 的子类，这里不能让它过
-        return None
-    if isinstance(value, float) and not value.is_integer():
+    也接受已经写好的 `oklch(L C H)`：这个值是人看着改的，不是只给程序写的。
+    """
+    text = value.strip() if isinstance(value, str) else ""
+    if text.lower().startswith("oklch(") and text.endswith(")"):
+        text = text[6:-1]
+    parts = [part for part in re.split(r"[\s,]+", text.strip()) if part]
+    if len(parts) != 3:
         return None
     try:
-        number = int(value)
+        light, chroma, hue = (float(part.rstrip("%")) for part in parts)
+    except ValueError:
+        return None
+    if not (0.0 <= light <= 1.0 and 0.0 <= chroma <= 0.4 and 0.0 <= hue <= 360.0):
+        return None
+    return f"{light:g} {chroma:g} {hue:g}"
+
+
+def _length(value: Any) -> str | None:
+    """一个 0–64 的数（像素由浏览器侧补上）。`px` 后缀可以写，会被去掉。"""
+    if isinstance(value, bool):  # bool 是 int 的子类，这里不能让它过
+        return None
+    text = value.strip() if isinstance(value, str) else value
+    if isinstance(text, str) and text.lower().endswith("px"):
+        text = text[:-2]
+    try:
+        number = float(text)
     except (TypeError, ValueError):
         return None
-    return number if 0 <= number <= 24 else None
+    if not 0.0 <= number <= 64.0:
+        return None
+    return f"{number:g}"
 
 
-MEMBERS: dict[str, Any] = {"sketch": _bool, "accent": _accent, "round": _round}
+def _keyword(value: Any) -> str | None:
+    text = value.strip().lower() if isinstance(value, str) else ""
+    return text if text in KEYWORDS else None
+
+
+_BY_KIND = {"color": _color, "length": _length, "keyword": _keyword}
+
+MEMBERS: dict[str, Any] = {"sketch": _bool, **{name: _BY_KIND[kind] for name, kind in TOKENS.items()}}
 
 
 def flatten(payload: Any) -> dict:
     """把渲染器打包的一组字段摊成 `{成员: 值}`。
 
-    组的出口把每个字段送出时带着它自己的那份记录（`{字段: {"data": 值, ...}}`，聊天页的 `prompt_of`
+    组的出口把每个字段送出时带着它自己那份记录（`{字段: {"data": 值, ...}}`，聊天页的 `prompt_of`
     拆的是同一个形状），而这一页要的是成员本身——那一层是渲染器的，不是协议的一部分，所以拆包在这里，
     而且拆得全：畸形的帧给出 `{}`，绝不抛异常。
     """
@@ -90,6 +200,10 @@ def flatten(payload: Any) -> dict:
 def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:
     """白名单 + 值域校验之后的新状态，以及被丢掉的那些成员。
 
+    空值不是坏值：**清空一个字段就是"不设"**，成员从状态里退场，core 的缺省（成对的 `light-dark` 也在
+    里面）随之回来。只有"有值但不合法"才进 `rejected`——组的出口把这个组的所有字段一起打包上行，空着的
+    那些因此每帧都来一趟，它们不是错误。
+
     只有**通过校验且真的不同**的成员才换，所以一次"没改变什么"的上行不会让落盘动一下。
     """
     merged = dict(state)
@@ -98,6 +212,9 @@ def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:
         check = MEMBERS.get(name)
         if check is None:
             rejected.append(name)
+            continue
+        if isinstance(value, str) and not value.strip():
+            merged.pop(name, None)
             continue
         clean = check(value)
         if clean is None:
@@ -186,37 +303,87 @@ def seed(ctx: Context) -> None:
     ctx.slot(CONFIG).set(h.frame(source=Source(default=dict(state().state))))
 
 
-def field(label: str, name: str, kind: str, value: Any) -> Accrete:
-    """一个设置项：一行说明加一个字段。字段的 `tag` 就是成员名——组的出口按它打包。"""
+def field(name: str, kind: str, value: Any) -> Accrete:
+    """一个令牌一行：说明、控件、（颜色的）实时色块。
+
+    色块自己读变量（`background: var(--fg)`），所以它显示的就是这一刻生效的颜色——不需要第二份状态。
+    字段的 `tag` 就是成员名，组的出口按它打包。
+    """
+    control = h.input(
+        tag=name,
+        # 一律 text：`number` 输入框在空着的时候打包出 0（"没写" 变成了 "设成 0"），而这里的空值
+        # 是"不设"——三种种类都由校验器认，不靠控件的类型。
+        kind="text",
+        selector="cfg",
+        source=Source(default=value),
+        placeholder=CORE.get(name, ""),
+        id=f"cfg-{name}",
+    )
+    row: list[Accrete] = [h.text(f"{LABELS.get(name, name)} · {name}", variant="muted"), control]
+    if kind == "color":
+        row.append(
+            h.frame(
+                style={
+                    "background": f"var(--{name})",
+                    "border": "var(--border)",
+                    "border-radius": "6px",
+                    "min-height": "22px",
+                },
+                id=f"swatch-{name}",
+            )
+        )
     return h.frame(
-        h.text(label, variant="muted"),
-        h.input(tag=name, kind=kind, selector="cfg", source=Source(default=value), id=f"cfg-{name}"),
-        grid={"grid-template-columns": "1fr 2fr", "gap": "8px", "align-items": "center"},
+        *row,
+        grid={
+            "grid-template-columns": "1fr 2fr 30px" if kind == "color" else "1fr 2fr",
+            "gap": "8px",
+            "align-items": "center",
+        },
         id=f"setting-{name}",
     )
 
 
 def page(ctx: Context, match) -> Accrete:
-    """设置页 —— 一个组，三个字段，一个出口。
+    """设置页 —— 一个组，core 的令牌面全部生成成字段，一个出口。
 
     出口只写一次（组是唯一的），`submit=["change"]` 说"值一变就发"，`reset="keep"` 说"发完别清空"——
     清空是给表单用的，设置项不是提交一次就作废的东西。
     """
     now = state().state
+    groups: list[Accrete] = []
+    for title, kind, names in GROUPS:
+        groups.append(
+            h.frame(
+                h.text(title, variant="heading-3"),
+                *[field(name, kind, now.get(name, "")) for name in names],
+                grid={"grid-template-rows": f"auto repeat({len(names)}, auto)", "gap": "8px"},
+                variant="card",
+                id=f"group-{kind}",
+            )
+        )
     return h.frame(
         h.text("设置", variant="heading-1"),
         h.text(
-            "这三样进页面选项槽 `__CONFIG__`：本机立刻生效，同时上行到服务端记住（ADR 0001）。"
-            "线框模式归渲染器（它按 `data-sketch` 画边框），强调色与圆角归 `:root` 的自定义属性。",
+            "core.css 的令牌面：颜色写 `oklch` 三元组（亮度 0–1、彩度 0–0.4、色相 0–360），尺寸写数字（像素）。"
+            "值一变本机立刻生效，同时上行到服务端记住（ADR 0001）；清空一个字段就是不设，回到样式表的缺省。",
             variant="muted",
         ),
         h.loom(
-            # loom 是一行 flex：把三行装进一个 frame，排法是页面的事（与复核表同一形状）。
             h.frame(
-                field("线框模式", "sketch", "bool", now["sketch"]),
-                field("强调色", "accent", "text", now["accent"]),
-                field("圆角（0–24）", "round", "number", now["round"]),
-                grid={"grid-template-rows": "auto auto auto", "gap": "10px"},
+                h.frame(
+                    h.text("线框模式（渲染器自己画的边框）", variant="muted"),
+                    h.input(
+                        tag="sketch",
+                        kind="bool",
+                        selector="cfg",
+                        source=Source(default=now["sketch"]),
+                        id="cfg-sketch",
+                    ),
+                    grid={"grid-template-columns": "1fr 2fr", "gap": "8px", "align-items": "center"},
+                    id="setting-sketch",
+                ),
+                *groups,
+                grid={"grid-template-rows": f"auto repeat({len(groups)}, auto)", "gap": "14px"},
                 id="config-rows",
             ),
             sink=Sink(dest=CONFIG, scope="both", path="/"),
@@ -225,8 +392,9 @@ def page(ctx: Context, match) -> Accrete:
             id="config-form",
         ),
         h.text("白名单之外或值域之外的成员会被丢掉，两处都查：浏览器不是可信的一侧。", variant="muted"),
+        h.text(source=Source(slot="settings.note"), id="settings-note"),
         id="settings-page",
-        grid={"grid-template-rows": "auto auto auto auto", "gap": "12px", "align-content": "start"},
+        grid={"grid-template-rows": "auto auto auto auto auto", "gap": "12px", "align-content": "start"},
     )
 
 

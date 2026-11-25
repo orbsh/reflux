@@ -11,41 +11,70 @@
  * 下次握手带上，空标记就没收。存的是浏览器自己的存储，所以刷新还是同一个用户——这正是 token 存在
  * 的理由；下行帧它看不见，凭证只能走标记。
  *
- * 第五件事是 `STYLE` 那张表（ADR 0001 §3）：页面选项的成员被渲染器镜像成文档根上的 `data-<member>`，
+ * 第五件事是 `TOKENS` 那张表（ADR 0001 §3）：页面选项的成员被渲染器镜像成文档根上的 `data-<member>`，
  * 而 CSS 读不到属性值——`attr()` 落不进 `var()`——所以把值变成 `--*` 必须有人做，做的人就是这里。
  * 表是**闭集**：表里没有的成员一概不碰（`sketch` 归渲染器，它按 `data-sketch` 画边框），值域校验
  * 也在表里，因为 `data-*` 是任何人都能写的面。
+ *
+ * 表里写的是**名字与种类**，不是"成员 → 变量"的对照：名字去掉 `--` 就是 core.css 的令牌名，映射因此
+ * 是一条规则。颜色成员存的是 `L C H` 三元组，`oklch(...)` 只在这里合成一次 —— 颜色空间是一个决定。
  */
 const PATH_ID = "reflux:path";
 const TITLE_ID = "reflux:title";
 const TOKEN_ID = "reflux:token";
 const TOKEN_KEY = "reflux:token";
 
-// 页面选项 -> :root 的自定义属性。表是白名单：成员不在表里，就不上色。
-// `accent` 只收 #rrggbb（`--accent` 是 core.css 的颜色令牌），`round` 只收 0–24 的整数（`--round` 是
-// 注册过的 <length>，所以要补 px）。
-const STYLE = {
-  accent: {
-    variable: "--accent",
-    check: (raw) => (/^#[0-9a-fA-F]{6}$/.test(raw.trim()) ? raw.trim().toLowerCase() : null),
-  },
-  round: {
-    variable: "--round",
-    check: (raw) => {
-      const value = Number(raw);
-      return Number.isInteger(value) && value >= 0 && value <= 24 ? `${value}px` : null;
-    },
-  },
+// core.css 的 `:root` 令牌面 -> 种类。表是白名单：成员不在表里，就不上色。变量名由成员名加 `--` 得到，
+// 所以没有第二张对照表；加一个令牌是加一行（服务端那张表是同一份事实，测试钉着两边相等）。
+const TOKENS = {
+  fg: "color",
+  bg: "color",
+  surface: "color",
+  accent: "color",
+  primary: "color",
+  secondary: "color",
+  disabled: "color",
+  warn: "color",
+  error: "color",
+  "border-color": "color",
+  round: "length",
+  "input-round": "length",
+  "border-width": "length",
+  "border-style": "keyword",
 };
 
+const KEYWORDS = new Set(["solid", "dashed", "dotted", "double", "none"]);
+
+// 一个成员值 -> 这个成员该写进 `--*` 的东西。null 表示"不设"（空值）或"不合法"，两种都撤掉属性：
+// 前者是用户的意图（回到样式表的缺省），后者是不猜一个近似的。
+function tokenValue(kind, raw) {
+  const text = raw.trim();
+  if (text === "") return null;
+  if (kind === "color") {
+    const parts = text.split(/[\s,]+/).filter(Boolean);
+    if (parts.length !== 3) return null;
+    const [light, chroma, hue] = parts.map((part) => Number(part.replace(/%$/, "")));
+    if (![light, chroma, hue].every(Number.isFinite)) return null;
+    if (light < 0 || light > 1 || chroma < 0 || chroma > 0.4 || hue < 0 || hue > 360) return null;
+    return `oklch(${light} ${chroma} ${hue})`;
+  }
+  if (kind === "length") {
+    const value = Number(text.replace(/px$/i, ""));
+    return Number.isFinite(value) && value >= 0 && value <= 64 ? `${value}px` : null;
+  }
+  const keyword = text.toLowerCase();
+  return KEYWORDS.has(keyword) ? keyword : null;
+}
+
 function paint() {
-  // 属性 -> 自定义属性。值不合法就把这一条撤掉（回到 core.css 的缺省），不猜一个近似的。
+  // 属性 -> 自定义属性，一条规则对所有令牌（名字即变量名）。
   const root = document.documentElement;
-  for (const [member, rule] of Object.entries(STYLE)) {
+  for (const [member, kind] of Object.entries(TOKENS)) {
     const raw = root.getAttribute(`data-${member}`);
-    const value = raw === null ? null : rule.check(raw);
-    if (value === null) root.style.removeProperty(rule.variable);
-    else root.style.setProperty(rule.variable, value);
+    const value = raw === null ? null : tokenValue(kind, raw);
+    const variable = `--${member}`;
+    if (value === null) root.style.removeProperty(variable);
+    else root.style.setProperty(variable, value);
   }
 }
 
@@ -176,6 +205,6 @@ export function start() {
   paint(); // 首屏的页面选项（渲染器可能比这里先跑）
   new MutationObserver(paint).observe(document.documentElement, {
     attributes: true,
-    attributeFilter: Object.keys(STYLE).map((member) => `data-${member}`),
+    attributeFilter: Object.keys(TOKENS).map((member) => `data-${member}`),
   });
 }

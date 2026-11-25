@@ -1,10 +1,10 @@
 # 0001 — 设置页：选项槽、双写，和谁给 CSS 上色
 
-Status: **Accepted**（2026-11-25），**已落地**：`examples/{zh,en}/demo_settings.py` + `www/static/reflux.js` 的 `STYLE` 表 + `tools/gate_settings.py`（十条门）。
+Status: **Accepted**（2026-11-25），**已落地**：`examples/{zh,en}/demo_settings.py` + `www/static/reflux.js` 的 `TOKENS` 表 + `tools/gate_settings.py`（十一条门）。
 
 ## 1. 三条需求，一个已有的机制
 
-设置页要能改三样东西：线框模式（手绘边框）、主题（`core.css` 里的颜色与圆角变量）、以及"刷新之后还是我选的那样"。前两样看着像渲染器的事，其实 fluxen 已经把机制做完了，本仓要做的只是用它。
+设置页要能改 `core.css` 的**整个令牌面**（十个颜色、三个长度、一个线型）、线框模式（手绘边框），以及"刷新之后还是我选的那样"。前两样看着像渲染器的事，其实 fluxen 已经把机制做完了，本仓要做的只是用它。
 
 fluxen ADR 0038 §2 定的形状：**页面选项是一个槽里的一个对象**，槽名由 `#main[data-config]` 给（缺省 `__CONFIG__`，本仓的 `#main` 没写这个属性，所以就是缺省），成员**逐个**决定——页面自己那一半先，远侧（生产端）在后。§3 再给一条：生效的对象按**标量成员**镜像成文档根上的 `data-<member>` 属性，一个 effect、一个成员一条属性。线框是 `sketch` 成员：`true` 时渲染器自己用 roughr 画边框（§3-4），`normal` 时一个节点都不多。
 
@@ -24,13 +24,13 @@ fluxen ADR 0038 §2 定的形状：**页面选项是一个槽里的一个对象*
 
 - **命名调色板**：值只发名字（`theme: "amber"`），`reflux.css` 里按 `html[data-theme="amber"]` 映射到令牌。不需要桥，但值不能任意——与"设置 css 中的颜色、圆角等变量"这条需求不符。它不冲突，将来要做成一组预设也只是往同一个成员里写名字，代码不动。
 - **根节点的 `attrs.style`**（`{"--accent": "#c08a2e"}`）：渲染器原样写进 `style`（`frame.rs:201` 就是 `format!("{k}: {v};")`），自定义属性合法、子树继承，零 JS。但那个 `style` 是**绘制期拼出来的字符串**，不是响应式信号：改一次值就要服务端往返一次、重画那个节点。调一次圆角就是一帧，不可用。
-- **决定：客户端 runtime 加一张表**。`www/static/reflux.js` 里放 `STYLE`，把 `data-<member>` 落到 `:root` 的 `--*`：`accent`（颜色，格式校验）与 `round`（0–24 整数，补 `px`）。值任意、改动即时（本地半边先写，镜像和上色在同一帧内完成）、没有往返。
+- **决定：客户端 runtime 加一张表**。`www/static/reflux.js` 里放 `TOKENS`，把 `data-<member>` 落到 `:root` 的 `--*`。表里写的是**名字与种类**（`color` / `length` / `keyword`），变量名由名字加 `--` 得到——所以映射是一条规则，不是一张对照表；加一个令牌是加一行，服务端那张同名的表有测试钉着两边相等。值任意、改动即时（本地半边先写，镜像和上色在同一帧内完成）、没有往返。
 
 它是客户端 runtime 的第五件事，排在前四件（握手、地址栏、标题、token）之后，而且**只读属性**：不看帧、不碰 socket——那条边界没有动。
 
 ## 4. 拦截的边界
 
-`STYLE` 表是**闭集**，不是一个"任意属性 → 任意变量"的通路：表里没有的成员一概不碰。`sketch` 留给渲染器（它按 `data-sketch` 画边框，`--round` 还会被压成 0，因为形状归那张画），`theme` 留给 `reflux.css` 的 `html[data-theme=…]` 块（将来若做预设），将来别的成员归各自的层。
+`TOKENS` 表是**闭集**，不是一个"任意属性 → 任意变量"的通路：表里没有的成员一概不碰，而且它对着 `core.css` 的 `:root` 块，测试逐个比过——导出的面与样式表一致。`sketch` 留给渲染器（它按 `data-sketch` 画边框，`--round` 还会被压成 0，因为形状归那张画），`theme` 留给 `reflux.css` 的 `html[data-theme=…]` 块（将来若做预设），将来别的成员归各自的层。
 
 于是"CSS 相关的先由宿主 runtime 拦下，剩下的还是 fluxen 的"在浏览器侧成立，而 fluxen 一个 CSS 变量都不认识——`data-*` 是它能给到的极限，正好够。
 
@@ -54,3 +54,21 @@ fluxen ADR 0038 §2 定的形状：**页面选项是一个槽里的一个对象*
 - 不新增线上词汇：没有 settings 帧、没有新动作、没有第二个协议。
 - 不把持久化放进框架：`App` 不碰磁盘，落盘属于示例应用（`--settings <path>`，缺省 `./.demo-settings.json`，入 `.gitignore`）。
 - 不在 `reflux.js` 里做"任意属性 → 任意变量"：表就是白名单，校验也在表里。浏览器不是可信的一侧，服务端另有一道。
+## 8. 导出的令牌面（2026-11-25 扩到 core 的全部）
+
+`TOKENS` 是一张表，页面按它生成控件、校验按种类挑、浏览器侧按种类落到 `:root`：
+
+| 种类 | 令牌 | 值 |
+|---|---|---|
+| color | `fg` `bg` `surface` `accent` `primary` `secondary` `disabled` `warn` `error` `border-color` | `L C H` 三元组（亮度 0–1、彩度 0–0.4、色相 0–360），浏览器侧合成 `oklch(...)` |
+| length | `round` `input-round` `border-width` | 数字 0–64，浏览器侧补 `px` |
+| keyword | `border-style` | `solid` `dashed` `dotted` `double` `none` |
+
+派生的两个不单独设：`--border-color` 的缺省是 `var(--secondary)`，`--border` 由宽／线型／色拼出来——跟着表里的成员走，`gate_settings` 那条"`--border` 跟着它拼的三样"就是验这个。
+
+四条随之定下的事实：
+
+- **颜色空间只在一处决定**：成员值存 `L C H` 三个数，`oklch()` 只在 `reflux.js` 合成一次。服务端校验是数值区间；`oklch(0.7 0.1 200)` 这样写进来的也接受（这个值是人看着改的）。
+- **空值 = 不设**：一个组的出口把这个组的所有字段一起打包上行，空字段因此每一帧都来一趟——它们不是错误，而是把成员从状态里撤掉、把令牌交回样式表的缺省。所以 `merge` 只把"有值且不合法"记进 `rejected`，浏览器侧对空值也只是 `removeProperty`。
+- **成对值的取舍**：`fg`／`bg`／`surface` 在 core 里是 `light-dark(浅, 深)`，一个成员只能带一个值。设置它们就是替两种配色模式选同一个颜色，清空即回到成对缺省。另一条路（每种模式一个成员）留到真有需求时再开。
+- **控件一律 `text`**：`number` 输入框空着的时候打包出 `0`，那会把"没写"变成"设成 0"——门里当场撞到过（`border-width`/`input-round` 被写成 0）。三种种类的判断在校验器里，不在控件的类型上。

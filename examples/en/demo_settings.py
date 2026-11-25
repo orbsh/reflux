@@ -1,27 +1,34 @@
-"""The settings page: three things written into the page-options slot, live locally and remembered
-by the server (ADR 0001).
+"""The settings page: core.css's token surface written into the page-options slot — instant locally,
+remembered by the server (ADR 0001).
 
-Page options are fluxen's mechanism, not this page's invention: `#main` carries no `data-config`, so
-the slot hanging off it is the default name `__CONFIG__` (fluxen ADR 0038 §2), the slot holds one
-object, and members are decided **member by member** — the page's own half first, the far side (the
-producer) after. The renderer then mirrors scalar members onto the document root as `data-<member>`,
-and the browser-side table (`STYLE` in `www/static/reflux.js`) turns those into `:root` custom
-properties. So this page adds no frame and no action — only three ordinary things:
+Page options are fluxen's mechanism, not this page's invention: `#main` carries no `data-config`, so the
+slot hanging on it has the default name `__CONFIG__` (fluxen ADR 0038 §2). The slot holds one object and
+its members are decided **one by one** — the page's own half first, the far (producer) side after — and the
+renderer mirrors scalar members onto the document root as `data-<member>`, where the browser-side table
+(`TOKENS` in `www/static/reflux.js`) turns them into `:root` custom properties. So this page adds no frame
+and no verb:
 
-1. **write** — one group's outlet is `Sink(dest="__CONFIG__", scope="both", path="/")`; `both` means
-   "assign locally, then mirror up" (fluxen ADR 0031 §1), and a group has exactly one outlet, so this
-   requirement has no other legal shape.
-2. **remember** — `demo_app` hands the uplink to `on_config`, which applies the whitelist and the value
-   ranges, merges, and schedules a throttled write. Persistence belongs to the example, not to the
-   framework: `App` does not touch disk.
-3. **starting value** — the first time a device is drawn, the shell writes the stored object into this
-   slot, so a new connection, a refresh or another device shows the user's choices in its very first
-   frame instead of flashing "default, then yours".
+1. **write**: one group's outlet, `Sink(dest="__CONFIG__", scope="both", path="/")` — `both` is "assign
+   locally and mirror the change up" (fluxen ADR 0031 §1), and a group has one outlet, so this requirement
+   has no other legal shape;
+2. **remember**: `demo_app` hands the uplink to `on_config`, which whitelists, checks ranges, merges, and
+   writes to disk on a throttle;
+3. **start from what is stored**: the first time a device is drawn, the shell writes the stored object into
+   the slot, so a new connection, a reload or another device begins with the user's choices.
 
-Three things can change: `sketch` (wireframe, boolean), `accent` (a `#rrggbb` colour) and `round` (an
-integer 0–24). Anything outside the whitelist is dropped, and so is anything outside a value range —
-both sides check, because the browser is not the trusted side and this file is read back by the next
-process.
+**What is exported is a table, not a field at a time**: `TOKENS` says which `:root` tokens core.css has that
+can be set on their own, and what kind each one is. The page generates the controls from it, the validator
+is picked by kind, and the browser table checks by kind too — so the three places share one fact (the name,
+i.e. the variable without `--`, and the kind), and adding a token is one row, not three edits.
+
+**Colours are `oklch` triples**: a member holds `L C H` (three numbers) and `oklch(...)` is composed exactly
+once, in `reflux.js` — so the colour space is one decision instead of a string in every default. An empty
+value means "not set", which hands the token back to core.css (including its paired `light-dark(a, b)`).
+
+**Setting one pins both colour schemes**: `fg` / `bg` / `surface` are `light-dark(light, dark)` pairs in core,
+and one member can only carry one value. Setting one of them chooses that colour for both schemes; clearing
+it brings the pair back. That is the trade decided on 2026-11-25 (the other road — one member per scheme —
+can be opened when something needs it).
 """
 
 from __future__ import annotations
@@ -36,15 +43,93 @@ from reflux import Context
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, Sink, Source
 
-__all__ = ["CONFIG", "DEFAULTS", "MEMBERS", "Store", "flatten", "merge", "on_config", "page", "register", "seed", "state"]
+__all__ = [
+    "CONFIG",
+    "CORE",
+    "DEFAULTS",
+    "GROUPS",
+    "KEYWORDS",
+    "LABELS",
+    "MEMBERS",
+    "Store",
+    "TOKENS",
+    "flatten",
+    "merge",
+    "on_config",
+    "page",
+    "register",
+    "seed",
+    "state",
+]
 
-CONFIG = "__CONFIG__"  # fluxen's page-options slot: `#main` has no `data-config`, so this is the default
+CONFIG = "__CONFIG__"  # fluxen's page-options slot: `#main` has no `data-config`, so this is the default name
 
-DEFAULTS: dict[str, Any] = {"sketch": False, "accent": "#4fb3a5", "round": 10}
+# core.css's `:root` token surface: name (after `--`) → kind. The two derived ones are not here:
+# `--border-color` defaults to `var(--secondary)`, and `--border` is composed from width/style/colour — they
+# follow the members in this table.
+TOKENS: dict[str, str] = {
+    "fg": "color",
+    "bg": "color",
+    "surface": "color",
+    "accent": "color",
+    "primary": "color",
+    "secondary": "color",
+    "disabled": "color",
+    "warn": "color",
+    "error": "color",
+    "border-color": "color",
+    "round": "length",
+    "input-round": "length",
+    "border-width": "length",
+    "border-style": "keyword",
+}
 
-# One check per member: it returns the tidied value, or None when this member is dropped (the rest are
-# still taken).
-ACCENT = re.compile(r"^#[0-9a-fA-F]{6}$")
+# How the page groups them: layout only, no part of the checks.
+GROUPS: list[tuple[str, str, list[str]]] = [
+    ("Colours · oklch triples (L C H)", "color", [n for n, k in TOKENS.items() if k == "color"]),
+    ("Sizes · numbers (pixels)", "length", [n for n, k in TOKENS.items() if k == "length"]),
+    ("Border style", "keyword", [n for n, k in TOKENS.items() if k == "keyword"]),
+]
+
+LABELS: dict[str, str] = {
+    "fg": "Foreground / text",
+    "bg": "Background",
+    "surface": "Surface (cards)",
+    "accent": "Accent",
+    "primary": "Primary",
+    "secondary": "Secondary",
+    "disabled": "Disabled",
+    "warn": "Warning",
+    "error": "Error",
+    "border-color": "Border colour",
+    "round": "Corner radius",
+    "input-round": "Input radius",
+    "border-width": "Border width",
+    "border-style": "Border style",
+}
+
+# core.css's defaults, used only as the inputs' placeholders and as documentation: the real default lives in
+# the stylesheet, and this file never writes it.
+CORE: dict[str, str] = {
+    "fg": "0.18 0 0 / dark 0.98 0 0",
+    "bg": "1 0 0 / dark 0.15 0 0",
+    "surface": "0.965 0 0 / dark 0.205 0 0",
+    "accent": "0.7 0.12 182.49",
+    "primary": "0.98 0.06 107.14",
+    "secondary": "0.93 0 0",
+    "disabled": "0.6 0 0",
+    "warn": "0.84 0.12 92.82",
+    "error": "0.63 0.19 23.03",
+    "border-color": "var(--secondary)",
+    "round": "10",
+    "input-round": "5.6 (0.35em)",
+    "border-width": "1",
+    "border-style": "solid",
+}
+
+KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
+
+DEFAULTS: dict[str, Any] = {"sketch": False}  # tokens are not defaults: unset means core's default
 
 
 def _bool(value: Any) -> bool | None:
@@ -55,40 +140,67 @@ def _bool(value: Any) -> bool | None:
     return None
 
 
-def _accent(value: Any) -> str | None:
-    cleaned = value.strip() if isinstance(value, str) else ""
-    return cleaned.lower() if ACCENT.match(cleaned) else None
+def _color(value: Any) -> str | None:
+    """`L C H` → the same triple, normalised. Ranges: lightness 0–1, chroma 0–0.4, hue 0–360.
 
-
-def _round(value: Any) -> int | None:
-    if isinstance(value, bool):  # bool is an int subclass; it must not pass here
-        return None
-    if isinstance(value, float) and not value.is_integer():
+    A written-out `oklch(L C H)` is accepted too: this value is read and edited by a person, not only
+    written by a program.
+    """
+    text = value.strip() if isinstance(value, str) else ""
+    if text.lower().startswith("oklch(") and text.endswith(")"):
+        text = text[6:-1]
+    parts = [part for part in re.split(r"[\s,]+", text.strip()) if part]
+    if len(parts) != 3:
         return None
     try:
-        number = int(value)
+        light, chroma, hue = (float(part.rstrip("%")) for part in parts)
+    except ValueError:
+        return None
+    if not (0.0 <= light <= 1.0 and 0.0 <= chroma <= 0.4 and 0.0 <= hue <= 360.0):
+        return None
+    return f"{light:g} {chroma:g} {hue:g}"
+
+
+def _length(value: Any) -> str | None:
+    """A number 0–64 (pixels are appended by the browser side). A `px` suffix may be written and is dropped."""
+    if isinstance(value, bool):  # bool is an int subclass; it must not pass here
+        return None
+    text = value.strip() if isinstance(value, str) else value
+    if isinstance(text, str) and text.lower().endswith("px"):
+        text = text[:-2]
+    try:
+        number = float(text)
     except (TypeError, ValueError):
         return None
-    return number if 0 <= number <= 24 else None
+    if not 0.0 <= number <= 64.0:
+        return None
+    return f"{number:g}"
 
 
-MEMBERS: dict[str, Any] = {"sketch": _bool, "accent": _accent, "round": _round}
+def _keyword(value: Any) -> str | None:
+    text = value.strip().lower() if isinstance(value, str) else ""
+    return text if text in KEYWORDS else None
+
+
+_BY_KIND = {"color": _color, "length": _length, "keyword": _keyword}
+
+MEMBERS: dict[str, Any] = {"sketch": _bool, **{name: _BY_KIND[kind] for name, kind in TOKENS.items()}}
 
 
 def flatten(payload: Any) -> dict:
-    """Unwrap a renderer-packed field group into `{member: value}`.
+    """Unpack the group the renderer sends into `{member: value}`.
 
-    A group's outlet sends each field with its own record (`{field: {"data": value, ...}}`, the same
-    shape the chat page's `prompt_of` unwraps), while this page wants the members themselves — that
-    layer is the renderer's, not the protocol's, so it is unwrapped here and unwrapped completely: a
-    malformed frame gives `{}`, never an exception.
+    The group's outlet sends each field with its own record (`{field: {"data": value, ...}}` — the shape the
+    chat page's `prompt_of` unpacks), and this page wants the member itself: that layer is the renderer's,
+    not part of the protocol, so it is unpacked here — and fully: a malformed frame yields `{}` and never
+    raises.
     """
     if not isinstance(payload, dict):
         return {}
     out: dict[str, Any] = {}
     for name, entry in payload.items():
         if isinstance(entry, dict):
-            if "data" not in entry:  # a record without its value is malformed, not an object member
+            if "data" not in entry:  # a record with no value is malformed, not an object member
                 continue
             entry = entry["data"]
         if entry is not None:
@@ -97,10 +209,15 @@ def flatten(payload: Any) -> dict:
 
 
 def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:
-    """The state after the whitelist and the ranges, plus the members that were dropped.
+    """The state after the whitelist and the range checks, plus the members that were dropped.
 
-    Only members that pass **and actually differ** are replaced, so an uplink that changed nothing
-    never moves the disk.
+    An empty value is not a bad value: **clearing a field means "not set"**, the member leaves the state,
+    and core's default (paired `light-dark` included) comes back. Only "has a value and it is invalid" goes
+    into `rejected` — the group's outlet packs every field it holds, so the empty ones arrive on every
+    frame, and they are not errors.
+
+    Only members that pass and actually differ are replaced, so an uplink that changes nothing never causes
+    a write.
     """
     merged = dict(state)
     rejected: list[str] = []
@@ -108,6 +225,9 @@ def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:
         check = MEMBERS.get(name)
         if check is None:
             rejected.append(name)
+            continue
+        if isinstance(value, str) and not value.strip():
+            merged.pop(name, None)
             continue
         clean = check(value)
         if clean is None:
@@ -118,24 +238,23 @@ def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:
 
 
 class Store:
-    """The one thing this application remembers: its page options.
+    """The one thing this app remembers: page options.
 
-    The write is **throttled**: `submit=["change"]` means one uplink per keystroke (sliders and text
-    fields alike), so several changes in a short window write only the last one, and a change that
-    changed nothing writes nothing at all. The write is atomic (`.tmp`, then `replace`), because the
-    next process reads it back.
+    The write is **throttled**: `submit=["change"]` is one uplink per keystroke (sliders and inputs both),
+    so a burst of changes writes only the last one, and a value that did not change writes nothing. The
+    write is atomic (`.tmp` then `replace`) because the next process reads it back.
     """
 
     def __init__(self, path: str | Path = ".demo-settings.json", delay: float = 0.35) -> None:
         self.path = Path(path)
         self.delay = delay
         self.state: dict[str, Any] = dict(DEFAULTS)
-        self.writes = 0  # how many times it hit the disk: tests and the snapshot read this
+        self.writes = 0  # how many times it hit the disk: tests and snapshots read it
         self.rejected: list[str] = []
         self._timer: asyncio.TimerHandle | None = None
 
     def load(self) -> dict:
-        """Read what was stored (a missing file, bad JSON and out-of-whitelist members are just "none")."""
+        """Read back what was stored (a missing file, bad JSON, a member off the whitelist: all just "none")."""
         try:
             stored = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -144,7 +263,7 @@ class Store:
         return self.state
 
     def apply(self, payload: Any) -> dict:
-        """One uplink: merge, and schedule a write when something moved. Returns the merged state."""
+        """One uplink: merge, and schedule a write if anything changed. Returns the merged state."""
         before = dict(self.state)
         self.state, self.rejected = merge(self.state, flatten(payload))
         if self.state != before:
@@ -152,25 +271,25 @@ class Store:
         return self.state
 
     def save_soon(self) -> None:
-        """Schedule a write; the throttle window is `delay`, and another change inside it pushes it back."""
+        """Schedule one write, throttled by `delay`: another change inside the window pushes it out."""
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
         try:
             loop = asyncio.get_running_loop()
-        except RuntimeError:  # no loop (a test calling the handler by hand): write now, don't pretend
+        except RuntimeError:  # no loop (a test calling the handler directly): write now, do not pretend
             self.flush()
             return
         self._timer = loop.call_later(self.delay, self.flush)
 
     def flush(self) -> None:
-        """Write once, now. `self.writes` counts them, so a test can tell "scheduled" from "written"."""
+        """Write once, now. `self.writes` counts it, which is how tests tell "scheduled" from "written"."""
         self._timer = None
         temp = self.path.with_name(self.path.name + ".tmp")
         try:
             temp.write_text(json.dumps(self.state, ensure_ascii=False, indent=1), encoding="utf-8")
             temp.replace(self.path)
-        except OSError as exc:  # there is no "disk full" setting: log it, don't turn a click into a crash
+        except OSError as exc:  # there is no "disk is full" setting: log it, do not crash on a click
             print(f"[settings] could not write {self.path}: {exc!r}", flush=True)
             return
         self.writes += 1
@@ -180,60 +299,108 @@ settings = Store()
 
 
 def state() -> Store:
-    """The one store: there is one app."""
+    """The one store: the app is one app."""
     return settings
 
 
 def seed(ctx: Context) -> None:
-    """The first time a device is drawn, write this slot (ADR 0001 §5).
+    """The first time a device is drawn, write this slot first (ADR 0001 §5).
 
-    The order is the point: a slot write is a `send`, and the page's frame leaves at the end of
-    `_draw`, so the value arrives first and the structure second — the renderer has the members
-    before it paints the first page tree.
+    Order matters: the slot write is a `send`, and the page's frame leaves at the end of `_draw`, so values
+    arrive before the structure — the renderer has the members by the time it gets the first page tree.
     """
     if ctx.data.get("config_seeded"):
         return
     ctx.data["config_seeded"] = True
-    # The slot holds an **object**: fluxen reads this node's `source.default` (`config_members`), so it
-    # is handed over in a `frame` with no shape of its own — the walkthrough's `payload()` spelling.
+    # The slot holds an **object**: fluxen reads this node's `source.default` (`config_members`), so a
+    # `frame` with no structure carries it — the same shape the walkthrough page's `payload()` uses.
     ctx.slot(CONFIG).set(h.frame(source=Source(default=dict(state().state))))
 
 
-def field(label: str, name: str, kind: str, value: Any) -> Accrete:
-    """One setting: a line of prose and a field. The field's `tag` is the member name — the group's
-    outlet packs by it."""
+def field(name: str, kind: str, value: Any) -> Accrete:
+    """One token row: a label, a control, and (for colours) a live swatch.
+
+    The swatch reads the variable itself (`background: var(--fg)`), so it shows the colour in force at that
+    moment — no second copy of the state. A field's `tag` is the member name; the group's outlet packs by it.
+    """
+    control = h.input(
+        tag=name,
+        # Always `text`: an empty `number` input packs as 0 ("not written" turns into "set to zero"), and an
+        # empty value here means "not set". All three kinds are recognised by their validator, not by the
+        # control's type.
+        kind="text",
+        selector="cfg",
+        source=Source(default=value),
+        placeholder=CORE.get(name, ""),
+        id=f"cfg-{name}",
+    )
+    row: list[Accrete] = [h.text(f"{LABELS.get(name, name)} · {name}", variant="muted"), control]
+    if kind == "color":
+        row.append(
+            h.frame(
+                style={
+                    "background": f"var(--{name})",
+                    "border": "var(--border)",
+                    "border-radius": "6px",
+                    "min-height": "22px",
+                },
+                id=f"swatch-{name}",
+            )
+        )
     return h.frame(
-        h.text(label, variant="muted"),
-        h.input(tag=name, kind=kind, selector="cfg", source=Source(default=value), id=f"cfg-{name}"),
-        grid={"grid-template-columns": "1fr 2fr", "gap": "8px", "align-items": "center"},
+        *row,
+        grid={
+            "grid-template-columns": "1fr 2fr 30px" if kind == "color" else "1fr 2fr",
+            "gap": "8px",
+            "align-items": "center",
+        },
         id=f"setting-{name}",
     )
 
 
 def page(ctx: Context, match) -> Accrete:
-    """The settings page — one group, three fields, one outlet.
+    """The settings page — one group, core's whole token surface generated as fields, one outlet.
 
-    The outlet is written once (a group has exactly one); `submit=["change"]` says "send when a value
-    changes", and `reset="keep"` says "don't clear after sending" — clearing is for forms, and a
-    setting is not something that expires once submitted.
+    The outlet is written once (a group is unique), `submit=["change"]` says "send when the value moves", and
+    `reset="keep"` says "do not clear after sending" — clearing is for forms, and a setting is not something
+    that expires after one submit.
     """
     now = state().state
+    groups: list[Accrete] = []
+    for title, kind, names in GROUPS:
+        groups.append(
+            h.frame(
+                h.text(title, variant="heading-3"),
+                *[field(name, kind, now.get(name, "")) for name in names],
+                grid={"grid-template-rows": f"auto repeat({len(names)}, auto)", "gap": "8px"},
+                variant="card",
+                id=f"group-{kind}",
+            )
+        )
     return h.frame(
         h.text("Settings", variant="heading-1"),
         h.text(
-            "These three go into the page-options slot `__CONFIG__`: live on this client at once, and "
-            "mirrored up so the server remembers (ADR 0001). Wireframe belongs to the renderer (it draws "
-            "borders off `data-sketch`); accent and round belong to `:root` custom properties.",
+            "core.css's token surface: colours are `oklch` triples (lightness 0–1, chroma 0–0.4, hue 0–360), "
+            "sizes are numbers (pixels). A change takes effect locally at once and goes up to the server to be "
+            "remembered (ADR 0001); clearing a field means \"not set\", which restores the stylesheet's default.",
             variant="muted",
         ),
         h.loom(
-            # a loom is one flex row: three rows go inside a frame — layout is the page's business
-            # (the same shape as the review form).
             h.frame(
-                field("Wireframe", "sketch", "bool", now["sketch"]),
-                field("Accent", "accent", "text", now["accent"]),
-                field("Round (0–24)", "round", "number", now["round"]),
-                grid={"grid-template-rows": "auto auto auto", "gap": "10px"},
+                h.frame(
+                    h.text("Sketch mode (the renderer draws its own borders)", variant="muted"),
+                    h.input(
+                        tag="sketch",
+                        kind="bool",
+                        selector="cfg",
+                        source=Source(default=now["sketch"]),
+                        id="cfg-sketch",
+                    ),
+                    grid={"grid-template-columns": "1fr 2fr", "gap": "8px", "align-items": "center"},
+                    id="setting-sketch",
+                ),
+                *groups,
+                grid={"grid-template-rows": f"auto repeat({len(groups)}, auto)", "gap": "14px"},
                 id="config-rows",
             ),
             sink=Sink(dest=CONFIG, scope="both", path="/"),
@@ -241,23 +408,23 @@ def page(ctx: Context, match) -> Accrete:
             reset="keep",
             id="config-form",
         ),
-        h.text("Members outside the whitelist or outside a value range are dropped; both sides check, "
-               "because the browser is not the trusted side.", variant="muted"),
+        h.text("Members outside the whitelist or outside their ranges are dropped, checked in both places: the browser is not the trusted side.", variant="muted"),
+        h.text(source=Source(slot="settings.note"), id="settings-note"),
         id="settings-page",
-        grid={"grid-template-rows": "auto auto auto auto", "gap": "12px", "align-content": "start"},
+        grid={"grid-template-rows": "auto auto auto auto auto", "gap": "12px", "align-content": "start"},
     )
 
 
 async def on_config(ctx: Context, frame: dict) -> None:
-    """One settings uplink: merge, validate, schedule the write. The note line says what was dropped."""
+    """One settings uplink: merge, check, write on a throttle. The note says which member was refused."""
     store = state()
     before = dict(store.state)
     store.apply(frame.get("data"))
     lost = [name for name in store.rejected if name]
     if lost:
-        ctx.slot("settings.note").set(h.text(f"not accepted: {', '.join(sorted(lost))} (whitelist or range)"))
+        ctx.slot("settings.note").set(h.text(f"Refused: {', '.join(sorted(lost))} (whitelist or range)"))
     elif store.state != before:
-        ctx.slot("settings.note").set(h.text(f"saved: {', '.join(sorted(store.state))}"))
+        ctx.slot("settings.note").set(h.text(f"Saved: {', '.join(sorted(store.state))}"))
 
 
 def register(app, slots: Any = None) -> None:

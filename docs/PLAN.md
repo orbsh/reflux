@@ -87,7 +87,8 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] 设置页：`examples/{zh,en}/demo_settings.py` 一页，一个组装 `sketch`（`kind: bool`）、`accent`、`round`，`sink=Sink(dest="__CONFIG__", scope="both", path="/")`、`submit=["change"]`、`reset="keep"`；`demo_app.py` 注册 `/settings` 路由、第七个导航项与 `on_go` 的一行。**槽里放的是"无形状"的 `frame`**：fluxen 读的是这个节点的 `source.default`（`config_members`），所以 `Slot.set(dict)` 会被 `wire` 拒——与走查页 `payload()` 同一个写法。
 - [x] 上行与持久化：`on_config` → `Store.apply`（`flatten` 拆渲染器那份 `{字段: {data: 值}}`、白名单 `sketch`/`accent`/`round`、值域 `#rrggbb` 与 0–24 整数、bool 不接受 `1`、合并后只收真变了的），`save_soon` 节流（`loop.call_later`，窗口内连续改动只写最后一次），`flush` 原子写（`.tmp` + `replace`）；`--settings <path>` 缺省 `./.demo-settings.json`（入 `.gitignore`），启动时 `load()`；外框每台设备第一次被画时把已存对象写进槽，新连接第一帧即生效（`seed`，带 `config_seeded` 一次性）。`tests/test_settings.py` 21 例。
 - [x] 上色：`www/static/reflux.js` 的 `STYLE` 表（白名单 + 值域：`accent` 只收 `#rrggbb`、`round` 0–24 补 `px`），`paint()` 先读一次再挂 `MutationObserver`（只听这两个属性），值不合法就撤掉那条自定义属性、交回样式表缺省；DESIGN「客户端 runtime」与 `HANDOFF` 记了这条新契约。
-- [x] 验证：`tools/gate_settings.py` 十条（真 Chromium）：第一帧带着已存选项、`STYLE` 把镜像落成 `:root` 属性、一次改动**本地**就动（`data-accent` → `--accent`）、`round` 10→18 变 `18px`、表对 99.5 回落到样式表缺省、`sketch` 镜像给渲染器、上行到服务端并合并、刷新后仍是存下的值、控制台除渲染器那条 `<svg> viewBox` 警告外无错误。`tests/test_settings.py` 21 例 + 全量 390 例 + 十一门全绿。
+- [x] 验证：`tools/gate_settings.py` 十条（真 Chromium）：第一帧带着已存选项、`TOKENS` 把镜像落成 `:root` 属性、一次改动**本地**就动（`data-accent` → `--accent`）、`round` 10→18 变 `18px`、表对 99.5 回落到样式表缺省、`sketch` 镜像给渲染器、上行到服务端并合并、刷新后仍是存下的值、控制台除渲染器那条 `<svg> viewBox` 警告外无错误。`tests/test_settings.py` 21 例 + 全量 390 例 + 十一门全绿。
+- [x] 扩到 core 的整个令牌面（2026-11-25）：`TOKENS` 由三个成员变成一张表（颜色十、长度三、线型一），页面按表生成控件、`reflux.js` 按种类落到 `:root`（颜色存 `L C H`、合成 `oklch`），空值 = 不设、回到 `light-dark` 成对缺省；`tests/test_settings.py` 新增"表对着 core.css 的 `:root` 块一个不漏"与"浏览器表 == 服务端表"两例，`tools/gate_settings.py` 十一条（含清空即回缺省、`--border` 跟着拼它的三样）。
 
 ## 服务端搬到 asyncio（ADR 0002，2026-11-25，已落地）
 
