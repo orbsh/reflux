@@ -1,7 +1,7 @@
 """What `pip install` has to produce: one wheel, and everything a served page needs inside it.
 
 The page tree lives at the repository root (`www/`), but a wheel cannot reach the repository: the build
-copies it to `reflux/www/` and fetches the pinned renderer into it first (`hatch_build.py`). These tests
+copies it to `reflux/www/` and fetches a renderer bundle into it first (`hatch_build.py`). These tests
 hold the two halves that are checkable without building: the declarations that make the wheel what it is,
 and the layout `PAGE_ROOT` resolves to — in a checkout, and inside an installed package.
 """
@@ -35,10 +35,11 @@ class TheBuild(unittest.TestCase):
         self.assertTrue((ROOT / "hatch_build.py").is_file())
 
     def test_an_sdist_can_still_build_a_wheel(self) -> None:
-        # A wheel built *from* the sdist needs the page tree (what it serves), the pin, and the fetch
-        # script (what fills the vendored bundle). Missing any of the three, the sdist is a dead end.
+        # A wheel built *from* the sdist needs the page tree (what it serves) and the fetch script
+        # (what fills the vendored bundle). Missing either, the sdist is a dead end. There is no pin
+        # to ship: what gets installed is the newest release at the moment that wheel is built.
         include = PYPROJECT["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
-        for needed in ("/www", "/vendor", "/tools/vendor.py", "/hatch_build.py"):
+        for needed in ("/www", "/tools/vendor.py", "/hatch_build.py"):
             self.assertIn(needed, include)
 
     def test_the_wheel_carries_the_package(self) -> None:
@@ -63,12 +64,18 @@ class ThePageRoot(unittest.TestCase):
         for name in ("reflux.js", "reflux.css", "logo.svg"):
             self.assertTrue((PAGE_ROOT / STATIC_PREFIX.strip("/") / name).is_file(), name)
 
-    def test_the_renderer_bundle_is_the_one_the_pin_names(self) -> None:
+    def test_the_renderer_bundle_records_itself(self) -> None:
+        """No pin (2026-11-25): the bundle says what it is, and nothing upstream says what it must be."""
         manifest = BUNDLE / "versions.json"
         if not manifest.is_file():
             self.skipTest("the renderer bundle is not installed here — run tools/vendor.py fetch")
-        pin = json.loads((ROOT / "vendor" / "pin.json").read_text(encoding="utf-8"))
-        self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["rev"], pin["rev"])
+        recorded = json.loads(manifest.read_text(encoding="utf-8"))
+        self.assertRegex(recorded["rev"], r"^[0-9a-f]{7,}$", "the manifest must name the rev it came from")
+        self.assertTrue(recorded.get("entry", {}).get("js"), "the manifest must name the entry point")
+        self.assertFalse(
+            (ROOT / "vendor" / "pin.json").exists(),
+            "reflux follows the renderer's newest release; a pin would make that untrue",
+        )
 
 
 if __name__ == "__main__":

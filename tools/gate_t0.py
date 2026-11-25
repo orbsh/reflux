@@ -82,7 +82,7 @@ def main() -> int:
 
         seen = set(served_paths(cdp))
         checks.append((
-            "the request set is exactly the pinned set",
+            "the request set is exactly what the manifest lists",
             seen == expected,
             f"extra={sorted(seen - expected)} missing={sorted(expected - seen)}",
         ))

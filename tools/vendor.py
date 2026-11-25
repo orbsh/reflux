@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Install the pinned renderer bundle into `www/static/vendor/fluxen/`.
+"""Install the renderer bundle into `www/static/vendor/fluxen/`, always the newest one.
 
 The bundle is **not** in git: it is a build product of another repository (fluxen's
 `crates/ui_leptos`, `trunk build --release`), it is ~3 MB of hashed names, and every
-commit of it would be a binary diff that says nothing. What *is* in git is the pin —
-`vendor/pin.json` — and the reader's contract with it: `versions.json` next to the
-bundle, carrying the rev and a sha256 + size per file. Every gate reads that file
-(`gate_t0` over HTTP), so a stale or hand-edited bundle fails loudly instead of
-half-loading.
+commit of it would be a binary diff that says nothing.
+
+There is no pin (2026-11-25): reflux follows the renderer's newest release, so what a
+`fetch` installs depends on when it runs. `versions.json` stays next to the bundle as a
+*record* — the rev, and a sha256 + size per file — and every gate reads it (`gate_t0`
+over HTTP), so a truncated or hand-edited bundle fails loudly instead of half-loading.
+It describes what landed; it does not constrain what may land.
 
 Three ways in, one output layout:
 
-    python3 tools/vendor.py fetch                    # from the release the pin names
-    python3 tools/vendor.py build --fluxen ../fluxen # trunk build, then install
+    python3 tools/vendor.py fetch                     # the newest release, resolved now
+    python3 tools/vendor.py build --fluxen ../fluxen  # trunk build a checkout, then install it
     python3 tools/vendor.py install --dist ../fluxen/dist-release
 
 `fetch` is what CI and a fresh clone use (no Rust toolchain needed). `build`/`install`
@@ -46,9 +48,10 @@ from typing import NoReturn
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "www" / "static" / "vendor" / "fluxen"
-PIN = ROOT / "vendor" / "pin.json"
 PREFIX = "vendor/fluxen/"
 CORE = ("assets/core.css", "assets/custom.css")
+# Who publishes the bundle. No rev is recorded ahead of time: `fetch` asks for the newest release.
+RELEASE_REPO = "orbsh/fluxen"
 
 
 def die(msg: str) -> NoReturn:
@@ -185,14 +188,47 @@ def unpack(blob: bytes, rev: str) -> dict:
     return manifest
 
 
-def fetch(tag: str, rev: str, asset: str) -> dict:
-    pin = json.loads(PIN.read_text())
-    url = pin.get("asset_url") or (
-        f"https://github.com/{pin['releases']}/releases/download/{tag}/{asset}"
-    )
-    print(f"GET {url}")
+def _api(path: str) -> dict:
+    """One GitHub API call. Unauthenticated, so the rate limit is a caller's problem, not ours."""
+    url = f"https://api.github.com/{path}"
     try:
-        with urllib.request.urlopen(url, timeout=120) as r:  # noqa: S310 — https, pinned tag
+        with urllib.request.urlopen(url, timeout=60) as r:  # noqa: S310 — https, api.github.com
+            return json.loads(r.read())
+    except Exception as e:  # urllib raises a zoo; the message is what matters
+        die(f"GitHub API failed for {path} ({e})")
+
+
+def newest(repo: str) -> tuple[str, str, str]:
+    """`(tag, rev, asset_url)` of that repo's newest release.
+
+    The rev is the tag's commit, because that is what `versions.json` records and what a reader
+    compares against a checkout. An annotated tag points at a tag object first, one hop from the
+    commit.
+    """
+    rel = _api(f"repos/{repo}/releases/latest")
+    tag = rel.get("tag_name") or die(f"{repo} has no releases")
+    assets = [a for a in rel.get("assets", []) if a["name"].endswith(".tar.gz")]
+    if not assets:
+        die(f"{repo} {tag} ships no .tar.gz asset")
+    ref = _api(f"repos/{repo}/git/ref/tags/{tag}")["object"]
+    if ref["type"] == "tag":
+        ref = _api(f"repos/{repo}/git/tags/{ref['sha']}")["object"]
+    return tag, ref["sha"][:7], assets[0]["browser_download_url"]
+
+
+def fetch(repo: str, tag: str | None = None) -> dict:
+    if tag:
+        asset = f"fluxen-ui-{tag}.tar.gz"
+        url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
+        ref = _api(f"repos/{repo}/git/ref/tags/{tag}")["object"]
+        if ref["type"] == "tag":
+            ref = _api(f"repos/{repo}/git/tags/{ref['sha']}")["object"]
+        rev = ref["sha"][:7]
+    else:
+        tag, rev, url = newest(repo)
+    print(f"GET {tag} ({rev}): {url}")
+    try:
+        with urllib.request.urlopen(url, timeout=120) as r:  # noqa: S310 — https, the release itself
             blob = r.read()
     except Exception as e:  # urllib raises a zoo; the message is what matters
         die(f"download failed ({e}) — build locally with `build --fluxen <path>` if offline")
@@ -203,9 +239,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    f = sub.add_parser("fetch", help="download the release the pin names")
-    f.add_argument("--tag", help="release tag (default: the pin's)")
-    f.add_argument("--asset", help="asset name (default: the pin's)")
+    f = sub.add_parser("fetch", help="download the newest release (or a named tag)")
+    f.add_argument("--repo", default=RELEASE_REPO, help=f"owner/name (default: {RELEASE_REPO})")
+    f.add_argument("--tag", help="a specific tag instead of the newest")
 
     b = sub.add_parser("build", help="trunk build a fluxen checkout, then install it")
     b.add_argument("--fluxen", required=True, help="path to a fluxen checkout")
@@ -219,10 +255,9 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--tag", help="also cut a release tarball under dist-release/")
 
     a = ap.parse_args(argv)
-    pin = json.loads(PIN.read_text()) if PIN.exists() else {}
 
     if a.cmd == "fetch":
-        fetch(a.tag or pin["tag"], pin["rev"], a.asset or pin["asset"])
+        fetch(a.repo, a.tag)
     elif a.cmd == "build":
         src = pathlib.Path(a.fluxen).resolve()
         if not (src / "crates/ui_leptos/Trunk.toml").exists():

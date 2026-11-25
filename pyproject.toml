@@ -29,13 +29,13 @@ packages = ["reflux"]
 
 [tool.hatch.build.targets.wheel.hooks.custom]
 
-# An sdist without `www/`, `vendor/` and `tools/vendor.py` could not build a wheel: the page tree is
-# what the wheel serves and the pin + fetch script are what put the renderer loom inside it.
+# An sdist without `www/` and `tools/vendor.py` could not build a wheel: the page tree is what the
+# wheel serves and the fetch script is what puts a renderer bundle inside it (the newest release, since
+# reflux does not pin one).
 [tool.hatch.build.targets.sdist]
 include = [
     "/reflux",
     "/www",
-    "/vendor",
     "/tools/vendor.py",
     "/hatch_build.py",
     "/pyproject.toml",

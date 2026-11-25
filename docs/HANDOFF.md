@@ -165,8 +165,8 @@ www/index.html                 页面：静态；`#main` 钉通道与编码；<b
 www/static/reflux.js           客户端 runtime：标记镜像、hello、popstate（只读 DOM，不持 socket）
 www/static/reflux.css          @layer reflux 的七条令牌规则 + 藏两个保留标记
 www/static/logo.svg            页面自己的图片资产（fixture 与示例都用它）
-www/static/vendor/fluxen/      装出来的渲染器包 + versions.json（gitignore，不入仓库；`tools/vendor.py fetch`）
-vendor/pin.json                该装哪个 release：fluxen 修订 / tag / 资产 URL
+www/static/vendor/fluxen/      装出来的渲染器包 + versions.json（gitignore，不入仓库；`tools/vendor.py fetch`
+                               取 fluxen 最新 release，本仓不钉版本；versions.json 只是"装的是哪个 rev"的记录）
 tools/cdp.py                   CDP 夹具：open_page（起服务、等启动、注入 error hook）、真鼠标/按键、Ws 客户端
 tools/vendor.py                装渲染器包：fetch（release）/ build（trunk 构建）/ install（已有 dist）
 tools/gate_ingest.py          入站门（真 socket，无 chromium）

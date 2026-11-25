@@ -12,7 +12,7 @@ Sections:
 - **mutations** — how much DOM one turn changes, per plane (real browser). The claim under
   measurement is the one DESIGN makes: a turn is one transaction and the change lands on the plane
   it addresses, not on the whole tree.
-- **paint** — the pinned assets' size, DOMContentLoaded, and the time from document start to a
+- **paint** — the renderer's assets size, DOMContentLoaded, and the time from document start to a
   drawn tree (three runs, median).
 - **cpu** — 100 devices × 50 frames/s for 5 s. The clients run in a **child process**, so the CPU
   number is the server's own; frames are the denominator, not seconds.
