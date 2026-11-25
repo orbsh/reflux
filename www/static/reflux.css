@@ -50,8 +50,11 @@
     color: var(--error);
   }
 
+  /* A card sits above the page: the framework's `--surface` is the page colour stepped one notch away, so
+     the card reads as a layer even where its edge is quiet. Fallback to `--bg` for a bundle that predates
+     the token — a flat card, not a broken one. */
   .rx-card {
-    background: var(--bg);
+    background: var(--surface, var(--bg));
     border: var(--border);
     border-radius: var(--round);
     padding: 0.6em;
