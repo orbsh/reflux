@@ -486,7 +486,7 @@ def on_disconnect(device, frame):
 
 **参考应用里的走查页**（`examples/zh/demo/page.py`，2026-11-24）：fluxen 的 `examples/walkthrough.py` 变成 `/demo` 一页。剧本内容抽成 `examples/zh/demo/scene.py` 的字面量（原文、两张图的 spec、关系图的节点与揭示表、30 天序列），页面只负责播：一拍一次槽写，绝不重画页面，所以图表出现不会重建消息，3D 模块也不会重挂。四域各读一个槽（左关系图／右消息流／落点 chips／控件），播放状态挂 `device.data`——一条连接一份剧本，关掉标签页就结束。控件是悬浮按钮，四态（播放／暂停／继续／重播）；暂停是块边界的等待，续跑从原偏移接上，重播删行重跑而不刷新页面。控件标签不能由槽写（`button` 读 `source.default`），所以整枚按钮节点写在 `control` 槽里，靠 `frame` 的 `source` 挂一个节点（ADR 0027）。页面的模块宿主（g2chart／两个查看器／编辑器）由页面自己挂，缺盘时页面就地写「looked in …」。
 
-**只有这一个应用，四页**（2026-11-24 合并）：`examples/zh/demo_app.py` 拥有外框与 `/`、`/about`，`examples/zh/demo_chat.py` 是 `/chat`，`examples/zh/demo/page.py` 是 `/demo`，名字集中在 `examples/zh/demo_slots.py`。此前是两份应用（`demo_app` 加 `examples/app` 的概览＋对话），合并的理由是它们答的是同一个问题——「一个应用长什么样」——而概览页的图表与 3D 由走查页覆盖得更彻底。删掉的那一半里唯一不可替代的是对话页，它整套搬了过来，行为与断言都留着：`tests/test_chat_example.py` 24 例（含 SSE 读取器对本地桩）、`tools/gate_chat.py` 12 条（真 socket + Chromium）。`/status` 这个 operator 端点随之进了 `demo_app`，`tests/test_example_status.py` 钉它。
+**只有这一个应用，四页**（2026-11-24 合并）：`examples/zh/demo_app.py` 拥有外框与 `/`、`/about`，`examples/zh/demo_chat.py` 是 `/chat`，`examples/zh/demo/page.py` 是 `/demo`，名字集中在 `examples/zh/demo_slots.py`。此前是两份应用（`demo_app` 加 `examples/app` 的概览＋对话），合并的理由是它们答的是同一个问题——「一个应用长什么样」——而概览页的图表与 3D 由走查页覆盖得更彻底。删掉的那一半里唯一不可替代的是对话页，它整套搬了过来，行为与断言都留着：`tests/test_chat_example.py` 25 例（含 SSE 读取器对本地桩、异步读器与同步读器逐条对齐、启动钩子把会话交给模型）、`tools/gate_chat.py` 12 条（真 socket + Chromium）。`/status` 这个 operator 端点随之进了 `demo_app`，`tests/test_example_status.py` 钉它。
 
 **同一份应用，两种语言**（2026-11-24）：`examples/zh/` 与 `examples/en/` 是同一个参考应用写了两遍，不是一棵树上盖一张文案表——打开哪一种语言的那棵树，里面就只有那一种语言（界面文字、注释、函数文档）。两棵树各有自己的路由表（`App(routes=Routes())`），所以两版可以同时起服务，各自的 `/` 互不占用；页面模块跨模块时不能 import 应用（`python3 -m examples.X.demo_app` 时应用模块以 `__main__` 跑，import 出去就是第二份），所以页在 `register(app)` 里以调用式声明（`app.page("/chat", title="对话")(page)`），而不是装饰器。`reflux.cli routes` 也随之改成"先在导入的模块里找 `app`，找不到再用默认表"。守着这条规矩的是 `tests/test_two_trees.py`：两棵树把每条路由各画一次、逐节点比对 id（结构必须一样，只有文字该不同），再看 `examples/en/` 里有没有汉字、`examples/zh/` 里有没有英文 docstring。
 
@@ -508,7 +508,7 @@ def on_disconnect(device, frame):
 - **停止的半句不进上下文**：停止是事件 + 块边界检查；已经显示出去的部分留在页面上（带 `⏹`），但不写进 `Chat.turns`。判据是模型视角的质量：半句会污染下一轮对上一问的理解，而读者已经看见它被打断——两边各自诚实，分叉是选择不是疏漏。
 - **单飞与两道应用门**：流未结束时再来一条 → 状态行说「上一条还在流」，不静默丢；空消息与超 `MAX_CHARS` 在同一处拒。**长度是应用的事，不是协议的事**：`ingest` 只查帧形状，对提示词多长没有意见。
 - **模型失败变气泡**：异常在 worker 里被吞成回话槽里的文本 + 状态行（`出错：<类型>`），不往上抛——处理器抛了只会进日志，读者看到的是「话说一半停住」。
-- **模型是一条缝**：`Model.reply(context) -> Iterator[str]`。`Scripted` 离线确定性（默认；示例必须能裸跑），`OpenAI` 走 OpenAI 兼容的 SSE。**后者没有对着真端点跑过**（本机没有 key）：请求体与 SSE 读器用本地 stub 测，那部分能独立于厂商出错，其余是厂商的。
+- **模型是一条缝**：`Model.reply(context) -> AsyncIterator[str]`（异步迭代，ADR 0002 P4）。`Scripted` 离线确定性（默认；示例必须能裸跑），`OpenAI` 走 OpenAI 兼容的 SSE，读的是框架共享的 `app.http`（`demo_chat.share_http` 在启动钩子里把会话交给模型、在关闭钩子里收回，模型不拥有连接池）。**后者没有对着真端点跑过**（本机没有 key）：请求体与 SSE 读器（同步 `parse_sse` 与异步 `parse_sse_async` 共用一条 `sse_piece` 判据）用本地 stub 测，那部分能独立于厂商出错，其余是厂商的。
 - **仓里第一支通用 WS 客户端**（`tools/wire_probe.py`）：`reflux.channel` 只接升级，`tools/cdp.py` 那支对着 DevTools 说。walkthrough 与门都用它——演示不必开浏览器。
 
 `walkthrough.py` 的形状借自 fluxen 的 `examples/walkthrough.py`：编号步骤、一次 Enter、边跑边打帧；`--auto` 无人值守、`--delay` 控块间隔、`--attach` 连已在跑的应用。六步各对应上面一条，输出是后端的自述（状态行原文）。

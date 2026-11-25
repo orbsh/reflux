@@ -465,17 +465,16 @@ def main(argv: list[str] | None = None) -> int:
     demo_chat.settings.window = args.window
     demo_chat.settings.model = demo_chat.OpenAI() if args.model == "openai" else demo_chat.Scripted(window=args.window)
     app = make_app()
-    if args.port == 0:
-        server = app.make_server(0, args.host)
-        print(f"[reflux] serving the reference app on http://{args.host}:{server.server_address[1]}/", flush=True)
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            server.server_close()
-        return 0
-    app.serve_forever(args.port, args.host)
+    demo_chat.share_http(app, demo_chat.settings.model)
+
+    server = app.start(0 if args.port == 0 else args.port, args.host)
+    print(f"[reflux] serving the reference app on http://{args.host}:{server.server_address[1]}/", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        app.stop()  # hooks -> the shared session -> the watchdog -> the server, in one place
     return 0
 
 

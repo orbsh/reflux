@@ -8,13 +8,14 @@ and it is six pieces of behaviour, one per section — each asserted in `tests/t
    the socket *is* the state, so a refresh is a new conversation and nothing leaks when a client goes
    away. The transcript is also the page tree's (the rows), so the backend keeps only what the model
    needs: turns, and how many of them the window holds.
-2. **streaming** — a worker thread per reply appends chunks with
+2. **streaming** — one task per reply (`asyncio`) appends chunks with
    `reply.patch("/source/default", chunk, op="append")` — a `Slot`, not a name in a string. The frame
-   queue is the device's, so one client's slow write never holds a model call or another device.
+   queue is the device's, so one client's slow write never holds a model call or another device, and
+   waiting for the model suspends this coroutine rather than a thread.
 3. **single flight** — a second message while one is streaming is refused *with a reason on the
    status line*, not silently dropped: the composer is not disabled, so the second send is a real
    event and deserves a real answer.
-4. **stop** — `chat.stop` sets an event the worker checks at chunk boundaries. A stopped reply is
+4. **stop** — `chat.stop` sets an `asyncio.Event` that the reply's task checks at chunk boundaries. A stopped reply is
    **not** added to the context even though part of it is on screen: half a sentence is worse for the
    next turn than no sentence, and the status line says so.
 5. **a failing model is a bubble** — the exception becomes text in the reply slot plus a status line;
@@ -29,9 +30,9 @@ from the command line — one place for the whole app, because there is one app.
 
 from __future__ import annotations
 
-import threading
-import time
+import asyncio
 from dataclasses import dataclass, field
+from typing import Any
 
 from reflux import Context
 from reflux.sdk import h
@@ -41,7 +42,7 @@ from reflux.slots import Slot
 from .chat_model import Model, OpenAI, Scripted, Turn
 from .demo_slots import DemoSlots, slots_of
 
-__all__ = ["Chat", "MAX_CHARS", "OpenAI", "Scripted", "Turn", "WINDOW", "page", "prompt_of", "register", "send", "settings", "stream"]
+__all__ = ["Chat", "MAX_CHARS", "OpenAI", "Scripted", "Turn", "WINDOW", "on_disconnect", "page", "prompt_of", "register", "send", "share_http", "settings", "stream"]
 
 TEXT_VALUE = "/source/default"  # pointer into a text node stored in a slot
 MAX_CHARS = 4096  # an application limit, not a wire limit
@@ -72,8 +73,10 @@ class Chat:
     total: int = 0  # turns ever recorded, so the reader can see the difference
     seq: int = 0  # reply counter: slot and row names
     busy: bool = False
-    stop: threading.Event = field(default_factory=threading.Event)
-    lock: threading.Lock = field(default_factory=threading.Lock)
+    stop: asyncio.Event = field(default_factory=asyncio.Event)
+    # The task doing the streaming: one per conversation (the `busy` flag guarantees it), kept so that
+    # a stop, a crash and a test can all see it.
+    task: Any = None
 
     def record(self, role: str, text: str) -> Turn:
         """Add a turn and keep the window: the model sees the last `window` turns, nothing older."""
@@ -159,12 +162,17 @@ def prompt_of(frame: dict) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def spawn(target, args: tuple) -> None:
-    """Start a reply's worker. A module-level seam so a test can run the reply inline instead."""
-    threading.Thread(target=target, args=args, daemon=True).start()
+def launch(coro: Any) -> Any:
+    """Start a reply as a task. A module-level seam, so a test can run it inline or not at all.
+
+    The handler already lives on the loop (ADR 0002 P2), so no thread is involved: `create_task` is
+    saying "this answer runs alongside this connection, but it is not part of any one delivery's
+    budget".
+    """
+    return asyncio.ensure_future(coro)
 
 
-def send(ctx: Context, chat: Chat, text: str) -> None:
+async def send(ctx: Context, chat: Chat, text: str) -> None:
     """Take one message: refuse it with a reason, or put it on screen and start the reply."""
     slots = slots_of(ctx)
     if not text.strip():
@@ -173,14 +181,15 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
     if len(text) > MAX_CHARS:
         slots.status.set(h.text(f"too long: {len(text)} characters > the {MAX_CHARS}-character limit — nothing was sent"))
         return
-    with chat.lock:
-        if chat.busy:
-            slots.status.set(h.text("the previous reply is still streaming: press Stop, or wait for it"))
-            return
-        chat.busy = True
-        chat.stop.clear()
-        chat.seq += 1
-        seq = chat.seq
+    # One delivery runs at a time on a loop, so this stretch has no await and no race: flipping
+    # `busy` is atomic.
+    if chat.busy:
+        slots.status.set(h.text("the previous reply is still streaming: press Stop, or wait for it"))
+        return
+    chat.busy = True
+    chat.stop.clear()
+    chat.seq += 1
+    seq = chat.seq
 
     chat.record("user", text)
     context = list(chat.turns)  # a snapshot: the window may move while the model is answering
@@ -190,27 +199,28 @@ def send(ctx: Context, chat: Chat, text: str) -> None:
         slots.messages.append(row(h.text(source=reply), id=f"row-bot-{seq}"))
         reply.set(h.text(""))
         slots.status.set(h.text(f"answering… ({chat.model.name})"))
-    spawn(stream, (ctx, chat, reply, context))
+    chat.task = launch(stream(ctx, chat, reply, context))
 
 
-def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
-    """One reply, chunk by chunk. Synchronous on purpose: the thread is the caller's choice, so a
-    test can run a whole reply without one."""
+async def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
+    """One reply, chunk by chunk. A coroutine: waiting for the model is an `await`, so a test can run
+    a whole reply inline."""
     pieces: list[str] = []
     failure: Exception | None = None
     try:
-        for chunk in chat.model.reply(context):
+        async for chunk in chat.model.reply(context):
             if chat.stop.is_set():
                 break
             pieces.append(chunk)
             reply.patch(TEXT_VALUE, chunk, op="append")
             if chat.delay:
-                time.sleep(chat.delay)
+                await asyncio.sleep(chat.delay)
+    except asyncio.CancelledError:  # shutdown, or a device that went away: not the model's failure
+        raise
     except Exception as exc:  # a model is a remote system: its failure is data, not control flow
         failure = exc
     finally:
-        with chat.lock:
-            chat.busy = False
+        chat.busy = False
 
     slots = slots_of(ctx)
     if failure is not None:
@@ -227,15 +237,15 @@ def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> None:
     slots.status.set(h.text(chat.status()))
 
 
-def on_send(ctx: Context, frame: dict) -> None:
+async def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
         slots_of(ctx).status.set(h.text("this frame carried no text field — nothing was sent"))
         return
-    send(ctx, state(ctx), text)
+    await send(ctx, state(ctx), text)
 
 
-def on_stop(ctx: Context, frame: dict) -> None:
+async def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     slots = slots_of(ctx)
     if not chat.busy:
@@ -243,6 +253,36 @@ def on_stop(ctx: Context, frame: dict) -> None:
         return
     chat.stop.set()
     slots.status.set(h.text("stopping…"))
+
+
+def share_http(app, model) -> None:
+    """Hand the framework's shared session to the model (ADR 0002 §7): `demo_app` calls this when it
+    starts serving.
+
+    One app, one pool, and the model does not own it: the hook runs inside `_boot`, where `app.http`
+    already exists, and `_halt` closes it.
+    """
+    if not hasattr(model, "http"):
+        return
+
+    @app.startup
+    def hook() -> None:
+        model.http = app.http
+
+    @app.shutdown
+    def unhook() -> None:
+        # The session is the app's, and it closes when the app stops; a model must not keep a closed
+        # session around to send its next request through.
+        model.http = None
+
+
+async def on_disconnect(ctx: Context, frame: dict) -> None:
+    """The connection is gone, so the reply is too: streaming chunks into a device that no longer
+    exists is wasted work, and `task` is the only handle on it."""
+    chat = ctx.data.get("chat")
+    task = getattr(chat, "task", None) if chat is not None else None
+    if task is not None and not task.done():
+        task.cancel()
 
 
 def register(app, slots: DemoSlots) -> None:
@@ -255,3 +295,5 @@ def register(app, slots: DemoSlots) -> None:
     app.page("/chat", title="Chat")(page)
     app.on(slots.chat.send, on_send)
     app.on(slots.chat.stop, on_stop)
+    app.on("disconnect", on_disconnect)
+

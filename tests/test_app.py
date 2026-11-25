@@ -136,6 +136,7 @@ class TestTheDemoApp(unittest.TestCase):
                 "demo.review",
                 "demo.save",
                 "demo.toggle",
+                "disconnect",
                 "go.about",
                 "go.chat",
                 "go.counter",

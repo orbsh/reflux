@@ -7,14 +7,19 @@ stub, since there is no key on this machine to call a real provider with).
 
 from __future__ import annotations
 
+import asyncio
 import json
+
+import aiohttp
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from examples.zh import demo_app
 from examples.zh import demo_chat as chat
-from examples.zh.chat_model import CHUNK, OpenAI, Turn, parse_sse, scripted_reply
+from tests.fakes import run_sync
+from examples.zh.chat_model import CHUNK, OpenAI, Turn, parse_sse, parse_sse_async, scripted_reply
+from reflux.app import App
 from reflux.routes import page_of
 from tests.fakes import FakeDevice
 
@@ -90,31 +95,31 @@ class Refusals(unittest.TestCase):
         self.conversation = chat.Chat(model=chat.Scripted(), delay=0.0)
 
     def test_an_empty_message_is_refused_with_a_reason(self):
-        chat.send(context(self.device), self.conversation, "   ")
+        run_sync(chat.send(context(self.device), self.conversation, "   "))
         self.assertEqual(status_text(self.device), "空消息没有发出去")
         self.assertEqual(len(self.device.frames), 1)  # one status line, no rows
         self.assertEqual(self.conversation.total, 0)
 
     def test_an_oversized_message_is_refused_at_the_apps_own_boundary(self):
-        chat.send(context(self.device), self.conversation, "字" * (chat.MAX_CHARS + 1))
+        run_sync(chat.send(context(self.device), self.conversation, "字" * (chat.MAX_CHARS + 1)))
         self.assertIn("太长", status_text(self.device))
         self.assertIn(str(chat.MAX_CHARS), status_text(self.device))
         self.assertEqual(self.conversation.total, 0)
 
     def test_a_second_message_while_streaming_is_refused_not_dropped(self):
         self.conversation.busy = True
-        chat.send(context(self.device), self.conversation, "再说一句")
+        run_sync(chat.send(context(self.device), self.conversation, "再说一句"))
         self.assertEqual(status_text(self.device), "上一条还在流：按「停止」或等它结束")
         self.assertEqual(self.conversation.total, 0)
 
     def test_accepted_message_puts_two_rows_on_screen(self):
         device, conversation = self.device, self.conversation
-        original = chat.spawn
-        chat.spawn = lambda target, args: None  # do not start the reply: this case is the send
+        original = chat.launch
+        chat.launch = lambda coro: coro.close()  # do not start the reply: this case is the send
         try:
-            chat.send(context(device), conversation, "你好")
+            run_sync(chat.send(context(device), conversation, "你好"))
         finally:
-            chat.spawn = original
+            chat.launch = original
         ops = [op for frame in device.frames for op in frame]
         actions = [op.get("action") for op in ops]
         self.assertEqual(actions, ["append", "append", "set", "set"])
@@ -131,7 +136,7 @@ class Streaming(unittest.TestCase):
         self.conversation = chat.Chat(model=chat.Scripted(window=12), delay=0.0)
 
     def test_a_reply_lands_chunk_by_chunk_and_becomes_a_turn(self):
-        chat.stream(context(self.device), self.conversation, context(self.device).slot("reply.1"), [Turn("user", "你好")])
+        run_sync(chat.stream(context(self.device), self.conversation, context(self.device).slot("reply.1"), [Turn("user", "你好")]))
         expected = "".join(scripted_reply([Turn("user", "你好")], 12))
         self.assertEqual(patched(self.device), expected)
         self.assertGreater(len(self.device.frames), 3)  # many small patches, not one write
@@ -145,14 +150,14 @@ class Streaming(unittest.TestCase):
         class Stoppable:
             name = "stoppable"
 
-            def reply(self, context):
+            async def reply(self, context):
                 for i, piece in enumerate("abcdefghij"):
                     if i == 3:
                         conversation.stop.set()  # the user pressed 停止 mid-stream
                     yield piece
 
         conversation.model = Stoppable()
-        chat.stream(context(self.device), conversation, context(self.device).slot("reply.1"), [Turn("user", "hi")])
+        run_sync(chat.stream(context(self.device), conversation, context(self.device).slot("reply.1"), [Turn("user", "hi")]))
         landed = patched(self.device)
         self.assertTrue(landed.startswith("abc"), landed)  # stopped at a chunk boundary
         self.assertIn("⏹", landed)  # and says so in the bubble itself
@@ -165,12 +170,12 @@ class Streaming(unittest.TestCase):
         class Broken:
             name = "broken"
 
-            def reply(self, context):
+            async def reply(self, context):
                 raise RuntimeError("boom")
-                yield  # pragma: no cover — the protocol needs a generator
+                yield  # pragma: no cover — the protocol needs an async generator
 
         self.conversation.model = Broken()
-        chat.stream(context(self.device), self.conversation, context(self.device).slot("reply.1"), [Turn("user", "hi")])
+        run_sync(chat.stream(context(self.device), self.conversation, context(self.device).slot("reply.1"), [Turn("user", "hi")]))
         self.assertIn("模型出错：boom", patched(self.device))
         self.assertTrue(status_text(self.device).startswith("出错：RuntimeError"))
         self.assertFalse(self.conversation.busy)
@@ -191,12 +196,12 @@ class OneExchange(unittest.TestCase):
 
     def sent(self) -> None:
         """Send one message with the reply held back — `send` is the subject in the first two cases."""
-        original = chat.spawn
-        chat.spawn = lambda target, args: None
+        original = chat.launch
+        chat.launch = lambda coro: coro.close()
         try:
-            chat.send(context(self.device), self.conversation, "你好")
+            run_sync(chat.send(context(self.device), self.conversation, "你好"))
         finally:
-            chat.spawn = original
+            chat.launch = original
 
     def test_the_fact_lands_before_the_first_frame_leaves(self):
         conversation, device = self.conversation, self.device
@@ -223,12 +228,11 @@ class OneExchange(unittest.TestCase):
         self.assertEqual(frame[2]["slot"], "reply.1")  # the region the bubble reads, made in the same batch
 
     def test_every_later_frame_only_addresses_that_region(self):
-        original = chat.spawn
-        chat.spawn = lambda target, args: target(*args)  # the whole reply, inline
-        try:
-            chat.send(context(self.device), self.conversation, "你好")
-        finally:
-            chat.spawn = original
+        async def one_exchange():
+            await chat.send(context(self.device), self.conversation, "你好")
+            await self.conversation.task  # the reply is a task now: wait for it, like a client would
+
+        run_sync(one_exchange())
         later = self.device.frames[1:]
         self.assertGreater(len(later), 3)
         for frame in later[:-1]:
@@ -285,6 +289,79 @@ class Sse(unittest.TestCase):
         self.assertEqual(list(parse_sse([b'data: {"error":{"message":"nope"}}\n'])), [])
 
 
+class TheReplyDiesWithTheConnection(unittest.TestCase):
+    def test_disconnect_cancels_the_streaming_task(self):
+        ctx = context(self.device)
+        conversation = chat.Chat(model=chat.Scripted(), delay=0.0)
+        ctx.data["chat"] = conversation
+
+        async def run() -> bool:
+            conversation.task = asyncio.ensure_future(asyncio.sleep(30))
+            await chat.on_disconnect(ctx, {"dest": "disconnect", "data": {"reason": "closed"}})
+            await asyncio.sleep(0)
+            return conversation.task.cancelled()
+
+        self.assertTrue(run_sync(run()), "a reply must not outlive the device it writes to")
+
+    def test_a_finished_reply_is_left_alone(self):
+        ctx = context(self.device)
+        conversation = chat.Chat(model=chat.Scripted(), delay=0.0)
+        ctx.data["chat"] = conversation
+
+        async def run():
+            conversation.task = asyncio.ensure_future(asyncio.sleep(0))
+            await conversation.task
+            await chat.on_disconnect(ctx, {"dest": "disconnect", "data": {}})
+            return conversation.task.done()
+
+        self.assertTrue(run_sync(run()))
+
+    def setUp(self):
+        self.device = FakeDevice()
+
+
+class TheAsyncReader(unittest.TestCase):
+    def test_it_says_what_the_sync_reader_says(self):
+        lines = [
+            b": keep-alive\n",
+            b'data: {"choices":[{"delta":{"content":"\xe4\xbd\xa0"}}]}\n',
+            b'data: {"choices":[{"delta":{"content":null}}]}\n',
+            b"data: [DONE]\n",
+            b'data: {"choices":[{"delta":{"content":"never"}}]}\n',
+        ]
+
+        async def collect():
+            async def source():
+                for line in lines:
+                    yield line
+
+            return [piece async for piece in parse_sse_async(source())]
+
+        self.assertEqual(run_sync(collect()), list(parse_sse(lines)))
+
+    def test_the_client_refuses_to_guess_a_session(self):
+        client = OpenAI(base_url="http://127.0.0.1:1/v1", api_key="k")
+
+        async def first_piece():
+            return [piece async for piece in client.reply([Turn("user", "hi")])]
+
+        with self.assertRaises(RuntimeError) as caught:
+            run_sync(first_piece())
+        self.assertIn("app.http", str(caught.exception))
+
+    def test_the_startup_hook_hands_the_model_the_session(self):
+        app = App()
+        model = OpenAI(base_url="http://127.0.0.1:1/v1", api_key="k")
+        chat.share_http(app, model)
+        app.start(port=0)
+        try:
+            self.assertIsNotNone(model.http)
+            self.assertIs(model.http, app.http)
+        finally:
+            app.stop()
+        self.assertIsNone(model.http, "the session the hook lent belongs to the app, and went with it")
+
+
 class _Stub(BaseHTTPRequestHandler):
     """A one-shot SSE endpoint: enough to exercise the client's request and reader."""
 
@@ -326,7 +403,13 @@ class OpenAIClient(unittest.TestCase):
 
     def test_it_asks_for_a_stream_and_yields_the_deltas(self):
         client = OpenAI(model="stub-1", base_url=f"http://127.0.0.1:{self.port}/v1", api_key="test-key")
-        pieces = list(client.reply([Turn("user", "打个招呼")]))
+
+        async def read() -> list[str]:
+            async with aiohttp.ClientSession() as session:
+                client.http = session  # what @app.startup hands it
+                return [piece async for piece in client.reply([Turn("user", "打个招呼")])]
+
+        pieces = run_sync(read())
         self.assertEqual(pieces, ["你好", "，世界"])
         seen = _Stub.seen
         self.assertEqual(seen["path"], "/v1/chat/completions")

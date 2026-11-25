@@ -68,7 +68,7 @@ Status: **Accepted**（2026-11-25）。
 - `server.py`：`SimpleHTTPRequestHandler` 与挂载表 → `web.Application` 的路由（静态 + index 兜底）；`serve_forever` 的位置由 `App.serve()` 接。
 - `app.py`：`handle` → 一条连接 task；`_pump` / `flush_device` / `await_frames` / `outbox` → `asyncio.Queue` + `drain`；看门狗 → 一个 task；`Device.emit` 从"唤醒线程"变成"入队，必要时调度一次写"。
 - `cli.py`：跑 `App.serve()`。
-- `examples/{zh,en}/chat_model.py`：`Iterator[str]` → `AsyncIterator[str]`（脚本模型 `await asyncio.sleep`；SSE 腿用 `app.http` 的 `ClientSession`）。`demo_chat.py` 的流式线程 → task。
+- `examples/{zh,en}/chat_model.py`：`Iterator[str]` → `AsyncIterator[str]`；SSE 腿用 `app.http` 的 `ClientSession`（`urllib` 与它的阻塞读一起退场），同步读器与异步读器共用一条行判据。`demo_chat.py` 的流式线程 → task，`threading.Event`/`Lock` → `asyncio.Event`（一个 loop 上一次投递，`busy` 的翻转不需要锁）；设备走了，`disconnect` 的处理器 cancel 那条 task。
 - 文档：`docs/DESIGN.md:70` 那句 "`channel.py`（HTTP 升级 + 文本帧编解码，stdlib）" 改写；`HANDOFF` 记 `serve()` 与 `start()` 的分工、`to_thread` 是唯一跨界点。
 - 测试夹具：后台起服务的形状保留（`start()`/`stop()`），断言不变；门是端到端的，仍走真实端口。
 
