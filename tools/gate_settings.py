@@ -5,12 +5,12 @@ The unit tests (`tests/test_settings.py`) own the server's half: unpacking the g
 ranges, the throttled write, and the three tables agreeing. What only a browser can answer is the half
 ADR 0001 decided: that `scope: both` writes locally, that fluxen mirrors the members onto the document
 root as `data-*`, that `TOKENS` in `www/static/reflux.js` turns those into `:root` custom properties
-(colours composed as `oklch` from `L C H`), that clearing a field hands the token back to the stylesheet,
-and that the renderer's `sketch` member draws borders.
+(colours composed as `oklch` from `L C H`), that the palette's tiles set and show the choice, and that
+the renderer's `sketch` member draws borders.
 
-The fields are addressed by the order `TOKENS` declares, not by an index typed in here: the renderer does
-not put a field node's `id` on the DOM, and a table that grows must not silently move the gate onto the
-wrong control.
+Controls are addressed by position within their kind (the renderer does not put a field node's `id` on
+the DOM), and the orders are derived from `TOKENS` so a table that grows cannot silently move this gate
+onto the wrong control.
 
     python3 tools/gate_settings.py
 
@@ -34,14 +34,15 @@ from examples.zh import demo_settings  # noqa: E402
 
 PAGE = "/settings"
 
-# The page draws the sketch switch first, then one row per token in table order.
-ORDER = ["sketch", *demo_settings.TOKENS]
-START = {"sketch": False, "accent": "0.7 0.12 182.49"}  # what the server already remembers
-CORE_ACCENT = "oklch(0.7 0.12 182.49)"  # core.css's own --accent, for "clearing restores it"
+# What the page draws, in order: the sketch switch, then one row per token in table order.
+COLOURS = [name for name, kind in demo_settings.TOKENS.items() if kind == "color"]
+LENGTHS = [name for name, kind in demo_settings.TOKENS.items() if kind == "length"]
+SELECTS = [*COLOURS, *[name for name, kind in demo_settings.TOKENS.items() if kind == "keyword"]]
+INPUTS = ["sketch", *LENGTHS]
+CONTROLS = len(INPUTS) + len(SELECTS)
 
-
-def index_of(name: str) -> int:
-    return ORDER.index(name)
+START = {"sketch": False, "accent": "0.7 0.12 200"}  # what the server already remembers (a palette tile)
+PICKED = demo_settings.HUES[4]  # the tile this gate clicks for accent
 
 
 def wait_for(predicate, timeout: float = 6.0):
@@ -63,21 +64,19 @@ def custom(cdp, name: str) -> str:
     ) or ""
 
 
-def inputs(cdp) -> list:
-    """The settings group's fields, in the order the page declares them."""
-    return cdp.eval(
-        "[...document.querySelectorAll('#settings-page input')].map(e => [e.type, e.value])"
-    ) or []
+def controls(cdp) -> int:
+    """How many controls the page drew: inputs plus selects (a `select` is a list of tiles, not an input)."""
+    return cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .select').length") or 0
 
 
 def set_field(cdp, name: str, value: str) -> bool:
-    """Type into a field and leave it, the way a person would.
+    """Type into a text field and leave it, the way a person would.
 
     Not `el.value = x` + a synthetic `change`: the renderer listens for the events a person makes, and a
     dispatched `Event("change")` is not one of them. Focus, select, insert text, blur — the blur is what
     makes the browser fire a real `change`, which is the loom's timing here.
     """
-    index = index_of(name)
+    index = INPUTS.index(name)
     focused = cdp.eval(
         "(() => {"
         f"const el = document.querySelectorAll('#settings-page input')[{index}];"
@@ -91,56 +90,21 @@ def set_field(cdp, name: str, value: str) -> bool:
     return True
 
 
-def clear_field(cdp, name: str) -> bool:
-    """Empty a field (select-all, delete, leave) — "not set", not "zero"."""
-    index = index_of(name)
-    cdp.eval(
+def click_tile(cdp, name: str, index: int):
+    """Click one tile of a token's palette — the option rows carry `as-stretch`; the last child is a layer."""
+    select = SELECTS.index(name)
+    return cdp.eval(
         "(() => {"
-        f"const el = document.querySelectorAll('#settings-page input')[{index}];"
-        "if (!el) return false; el.focus(); el.select(); return true;"
+        f"const box = document.querySelectorAll('#settings-page .select')[{select}];"
+        "if (!box) return null;"
+        f"const tile = box.children[{index}];"  # the option rows are the box's children; a layer follows them
+        "if (!tile) return null; tile.click(); return true;"
         "})()"
     )
-    cdp.call(
-        "Input.dispatchKeyEvent", type="keyDown", key="Backspace", windowsVirtualKeyCode=8, nativeVirtualKeyCode=8
-    )
-    cdp.call(
-        "Input.dispatchKeyEvent", type="keyUp", key="Backspace", windowsVirtualKeyCode=8, nativeVirtualKeyCode=8
-    )
-    cdp.eval("document.activeElement && document.activeElement.blur()")
-    return True
-
-
-def press(cdp, name: str, code: int) -> None:
-    cdp.call("Input.dispatchKeyEvent", type="keyDown", key=name, windowsVirtualKeyCode=code, nativeVirtualKeyCode=code)
-    cdp.call("Input.dispatchKeyEvent", type="keyUp", key=name, windowsVirtualKeyCode=code, nativeVirtualKeyCode=code)
-
-
-def step_field(cdp, name: str, target: int) -> bool:
-    """Nudge a number field with ArrowUp until it reads `target`.
-
-    Typing into it is not usable from here: a number input has no selectable caret (`select()` is a no-op,
-    the caret sits at 0), so keystrokes prepend. The arrow keys are the field's own increment, and a person's
-    hand on the same control does the same thing.
-    """
-    index = index_of(name)
-    cdp.eval(f"document.querySelectorAll('#settings-page input')[{index}].focus()")
-    for _ in range(40):
-        try:
-            current = float(cdp.eval(f"document.querySelectorAll('#settings-page input')[{index}].value"))
-        except (TypeError, ValueError):
-            return False
-        if current == target:
-            break
-        press(cdp, "ArrowUp" if current < target else "ArrowDown", 38 if current < target else 40)
-    cdp.eval("document.activeElement && document.activeElement.blur()")
-    try:
-        return float(cdp.eval(f"document.querySelectorAll('#settings-page input')[{index}].value")) == target
-    except (TypeError, ValueError):
-        return False
 
 
 def click_field(cdp, name: str):
-    index = index_of(name)
+    index = INPUTS.index(name)
     return cdp.eval(
         "(() => {"
         f"const el = document.querySelectorAll('#settings-page input')[{index}];"
@@ -158,12 +122,12 @@ def main() -> int:
 
         with open_page(app=app, path=PAGE, settle=0.7) as (cdp, base):
             drawn = wait_for(lambda: "设置" in (cdp.eval("document.body.innerText") or ""))
-            fields = len(inputs(cdp))
+            shown = controls(cdp)
             checks.append(
                 (
-                    "the page draws one field per token, plus the sketch switch",
-                    drawn and fields == len(ORDER),
-                    f"fields={fields} expected={len(ORDER)}",
+                    "the page draws one control per token, plus the sketch switch",
+                    drawn and shown == CONTROLS,
+                    f"controls={shown} expected={CONTROLS}",
                 )
             )
 
@@ -172,29 +136,30 @@ def main() -> int:
             checks.append(
                 (
                     "the stored token reaches the first frame and becomes an oklch property",
-                    bool(seeded) and custom(cdp, "accent") == CORE_ACCENT,
+                    bool(seeded) and custom(cdp, "accent") == f"oklch({START['accent']})",
                     f"data-accent={root_attr(cdp, 'accent')!r} --accent={custom(cdp, 'accent')!r}",
                 )
             )
 
-            # 2. local write, no round trip: a new triple paints at once
-            wrote = set_field(cdp, "accent", "0.62 0.15 40")
-            local = wait_for(lambda: custom(cdp, "accent") == "oklch(0.62 0.15 40)")
+            # 2. the palette: one click, no round trip, and nothing else moves
+            bg_before = custom(cdp, "bg")
+            wrote = click_tile(cdp, "accent", demo_settings.HUES.index(PICKED))
+            local = wait_for(lambda: custom(cdp, "accent") == f"oklch({PICKED})")
             checks.append(
                 (
-                    "a colour typed as L C H is composed to oklch locally",
-                    bool(wrote and local),
+                    "a palette tile paints locally and moves nothing else",
+                    bool(wrote and local) and custom(cdp, "bg") == bg_before,
                     f"data-accent={root_attr(cdp, 'accent')!r} --accent={custom(cdp, 'accent')!r}",
                 )
             )
 
             # 3. a length: a number in, pixels out
-            stepped = set_field(cdp, "round", "18")
+            wrote_round = set_field(cdp, "round", "18")
             rounded = wait_for(lambda: custom(cdp, "round") == "18px")
             checks.append(
                 (
                     "round moves (10 → 18) and becomes a length",
-                    bool(stepped and rounded),
+                    bool(wrote_round and rounded),
                     f"--round={custom(cdp, 'round')!r} data-round={root_attr(cdp, 'round')!r}",
                 )
             )
@@ -213,16 +178,14 @@ def main() -> int:
                 )
             )
 
-            # 4. clearing a field is "not set": the member goes away and core's own value returns
-            set_field(cdp, "warn", "0.8 0.1 90")
-            wait_for(lambda: custom(cdp, "warn") == "oklch(0.8 0.1 90)")
-            clear_field(cdp, "warn")
-            cleared = wait_for(lambda: not (root_attr(cdp, "warn") or "").strip())
+            # 4. the border style is picked from its own list of words
+            click_tile(cdp, "border-style", demo_settings.KEYWORDS.index("dashed"))
+            dashed = wait_for(lambda: custom(cdp, "border-style") == "dashed")
             checks.append(
                 (
-                    "clearing a field hands the token back to core.css",
-                    bool(cleared) and custom(cdp, "warn") == "oklch(0.84 0.12 92.82)",
-                    f"data-warn={root_attr(cdp, 'warn')!r} --warn={custom(cdp, 'warn')!r}",
+                    "the border style is a click, and it reaches :root",
+                    bool(dashed) and root_attr(cdp, "border-style") == "dashed",
+                    f"data-border-style={root_attr(cdp, 'border-style')!r} --border-style={custom(cdp, 'border-style')!r}",
                 )
             )
 
@@ -231,7 +194,7 @@ def main() -> int:
             checks.append(
                 (
                     "the composed --border follows the tokens it is built from",
-                    "solid" in border and colour == custom(cdp, "secondary"),
+                    "dashed" in border and colour == custom(cdp, "secondary"),
                     f"--border={border!r} --border-color={colour!r} secondary={custom(cdp, 'secondary')!r}",
                 )
             )
@@ -248,12 +211,17 @@ def main() -> int:
             )
 
             # 7. the server took the same changes (the throttle window has closed by now)
-            waited = wait_for(lambda: demo_settings.settings.state.get("accent") == "0.62 0.15 40", timeout=4.0)
+            waited = wait_for(lambda: demo_settings.settings.state.get("accent") == PICKED, timeout=4.0)
             state = dict(demo_settings.settings.state)
             checks.append(
                 (
                     "the uplink reached the server and was merged",
-                    bool(waited and state.get("round") == "18" and state.get("sketch") is True and "warn" not in state),
+                    bool(
+                        waited
+                        and state.get("round") == "18"
+                        and state.get("border-style") == "dashed"
+                        and state.get("sketch") is True
+                    ),
                     f"state={state}",
                 )
             )
@@ -262,7 +230,7 @@ def main() -> int:
             # on the *new* page, not on the old DOM that happened not to have changed yet.
             cdp.eval("window.__before_reload = true; location.reload(); true")
             fresh = wait_for(lambda: cdp.eval("window.__before_reload") is None, timeout=10.0)
-            stayed = wait_for(lambda: custom(cdp, "accent") == "oklch(0.62 0.15 40)", timeout=8.0)
+            stayed = wait_for(lambda: custom(cdp, "accent") == f"oklch({PICKED})", timeout=8.0)
             checks.append(
                 (
                     "a reload shows the stored tokens again",

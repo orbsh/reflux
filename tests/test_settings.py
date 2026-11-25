@@ -214,7 +214,11 @@ class TestThePage(unittest.TestCase):
         self.assertEqual(loom["attrs"]["reset"], "keep")
 
     def test_every_member_is_a_field_of_that_group(self):
-        tags = [node.get("tag") for node in self.walk(self.drawn()) if node.get("type") == "input"]
+        tags = [
+            node.get("tag")
+            for node in self.walk(self.drawn())
+            if node.get("type") in ("input", "select")  # colours and the border style are picked, not typed
+        ]
         self.assertEqual(sorted(tags), sorted(settings.MEMBERS))
 
 

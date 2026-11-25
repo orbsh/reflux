@@ -120,6 +120,29 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
+# 调色板：颜色不从键盘来，从这些格子里点。中性阶给"没有彩度"的令牌（前景、背景、表面……），色相环给
+# 需要彩度的（强调、主色、警告、错误）。每一格就是一个 `select` 选项，它的 id 就是送上去的三元组。
+NEUTRALS = ["1 0 0", "0.965 0 0", "0.93 0 0", "0.84 0 0", "0.6 0 0", "0.4 0 0", "0.25 0 0", "0.15 0 0"]
+HUES = ["0.7 0.12 30", "0.7 0.12 90", "0.7 0.13 150", "0.7 0.12 200", "0.7 0.12 250", "0.7 0.13 320"]
+WORDS_SLOT = "palettes.words"
+
+PALETTE_OF: dict[str, list[str]] = {
+    "fg": NEUTRALS,
+    "bg": NEUTRALS,
+    "surface": NEUTRALS,
+    "secondary": NEUTRALS,
+    "disabled": NEUTRALS,
+    "border-color": NEUTRALS,
+    "accent": HUES,
+    "primary": HUES,
+    "warn": HUES,
+    "error": HUES,
+}
+
+# 哪个令牌读哪张板：有彩度的读色相环，其余读中性阶。名字即插槽名，`select` 的选项从那里读。
+HUED = {"accent", "primary", "warn", "error"}
+PALETTE_SLOT: dict[str, str] = {name: ("palettes.hue" if name in HUED else "palettes.neutral") for name in PALETTE_OF}
+
 DEFAULTS: dict[str, Any] = {"sketch": False}  # 令牌不进缺省：不设就是 core 的缺省
 
 
@@ -308,38 +331,69 @@ def field(name: str, kind: str, value: Any) -> Accrete:
 
     色块自己读变量（`background: var(--fg)`），所以它显示的就是这一刻生效的颜色——不需要第二份状态。
     字段的 `tag` 就是成员名，组的出口按它打包。
+
+    颜色是一格一格的调色板（`select` 的选项就是色块，选项的 id 就是送上去的三元组），线型也是点出来的
+    ——这一页的颜色没有"自己填"的控件。`select` 是一个字段，出口在它所在的组：点一格 = 一次 `change`。
     """
-    control = h.input(
-        tag=name,
-        # 一律 text：`number` 输入框在空着的时候打包出 0（"没写" 变成了 "设成 0"），而这里的空值
-        # 是"不设"——三种种类都由校验器认，不靠控件的类型。
-        kind="text",
-        selector="cfg",
-        source=Source(default=value),
-        placeholder=CORE.get(name, ""),
-        id=f"cfg-{name}",
-    )
-    row: list[Accrete] = [h.text(f"{LABELS.get(name, name)} · {name}", variant="muted"), control]
+    # 一个 `select` 的选项行由它的 `source` 那个槽给（这一版渲染器读的是 `source`，不是 `options`；
+    # 见 ADR 0001 §9）。值不从这里来：`tag` 让它在组里有自己的一份，组负责打包与上行。
     if kind == "color":
-        row.append(
-            h.frame(
-                style={
-                    "background": f"var(--{name})",
-                    "border": "var(--border)",
-                    "border-radius": "6px",
-                    "min-height": "22px",
-                },
-                id=f"swatch-{name}",
-            )
+        control: Accrete = h.select(
+            tag=name,
+            selector="cfg",
+            source=Source(slot=PALETTE_SLOT[name]),
+            id=f"cfg-{name}",
         )
+    elif kind == "keyword":
+        control = h.select(
+            tag=name,
+            selector="cfg",
+            source=Source(slot=WORDS_SLOT),
+            id=f"cfg-{name}",
+        )
+    else:
+        control = h.input(
+            tag=name,
+            # 一律 text：`number` 输入框在空着的时候打包出 0（"没写" 变成了 "设成 0"），而这里的空值
+            # 是"不设"——种类的判断在校验器里，不在控件的类型上。
+            kind="text",
+            selector="cfg",
+            source=Source(default=value),
+            placeholder=CORE.get(name, ""),
+            id=f"cfg-{name}",
+        )
+    preview = (
+        h.frame(
+            style={
+                "background": f"var(--{name})",
+                "border": "var(--border)",
+                "border-radius": "6px",
+                "min-height": "22px",
+            },
+            id=f"here-{name}",
+        )
+        if kind == "color"
+        else h.text("")
+    )
     return h.frame(
-        *row,
-        grid={
-            "grid-template-columns": "1fr 2fr 30px" if kind == "color" else "1fr 2fr",
-            "gap": "8px",
-            "align-items": "center",
-        },
+        h.text(f"{LABELS.get(name, name)} · {name}", variant="muted"),
+        control,
+        preview,
+        grid={"grid-template-columns": "1fr 3fr 26px", "gap": "8px", "align-items": "center"},
         id=f"setting-{name}",
+    )
+
+
+def swatch(triple: str) -> Accrete:
+    """调色板上的一格：id 就是三元组本身，所以点它等于把那个颜色选中。"""
+    return h.frame(
+        style={
+            "background": f"oklch({triple})",
+            "border-radius": "4px",
+            "min-height": "20px",
+            "flex": "1 1 auto",
+        },
+        id=triple,
     )
 
 
@@ -350,6 +404,19 @@ def page(ctx: Context, match) -> Accrete:
     清空是给表单用的，设置项不是提交一次就作废的东西。
     """
     now = state().state
+    # 调色板是一次发送，不是页面树的一部分：一个 `select` 的选项只能从**槽**里读（`bind_list` 只认 slot），
+    # 所以三张板每条连接写一次——槽活得比一次 `create` 长，第二次进这一页不必重写。
+    for slot_name, tiles in (("palettes.neutral", NEUTRALS), ("palettes.hue", HUES)):
+        if not ctx.data.get(f"{slot_name}.seeded"):
+            ctx.data[f"{slot_name}.seeded"] = True
+            palette = ctx.slot(slot_name)
+            for triple in tiles:
+                palette.append(swatch(triple))
+    if not ctx.data.get(f"{WORDS_SLOT}.seeded"):
+        ctx.data[f"{WORDS_SLOT}.seeded"] = True
+        words = ctx.slot(WORDS_SLOT)
+        for word in KEYWORDS:
+            words.append(h.text(word, id=word))
     groups: list[Accrete] = []
     for title, kind, names in GROUPS:
         groups.append(
@@ -364,8 +431,8 @@ def page(ctx: Context, match) -> Accrete:
     return h.frame(
         h.text("设置", variant="heading-1"),
         h.text(
-            "core.css 的令牌面：颜色写 `oklch` 三元组（亮度 0–1、彩度 0–0.4、色相 0–360），尺寸写数字（像素）。"
-            "值一变本机立刻生效，同时上行到服务端记住（ADR 0001）；清空一个字段就是不设，回到样式表的缺省。",
+            "core.css 的令牌面：颜色在调色板里点（存的是 oklch 三元组 `L C H`：亮度 0–1、彩度 0–0.4、色相 0–360），"
+            "尺寸填数字（像素），线型点一下。值一变本机立刻生效，同时上行到服务端记住（ADR 0001）。",
             variant="muted",
         ),
         h.loom(

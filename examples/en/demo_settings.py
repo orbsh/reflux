@@ -129,6 +129,31 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
+# The palette: colours are picked from these tiles, never typed. The neutral ramp is for tokens without
+# chroma (foreground, background, surface, …), the hue ring for the ones that need it (accent, primary,
+# warning, error). Each tile is one `select` option, and its id is the triple that gets sent up.
+NEUTRALS = ["1 0 0", "0.965 0 0", "0.93 0 0", "0.84 0 0", "0.6 0 0", "0.4 0 0", "0.25 0 0", "0.15 0 0"]
+HUES = ["0.7 0.12 30", "0.7 0.12 90", "0.7 0.13 150", "0.7 0.12 200", "0.7 0.12 250", "0.7 0.13 320"]
+WORDS_SLOT = "palettes.words"
+
+PALETTE_OF: dict[str, list[str]] = {
+    "fg": NEUTRALS,
+    "bg": NEUTRALS,
+    "surface": NEUTRALS,
+    "secondary": NEUTRALS,
+    "disabled": NEUTRALS,
+    "border-color": NEUTRALS,
+    "accent": HUES,
+    "primary": HUES,
+    "warn": HUES,
+    "error": HUES,
+}
+
+# Which tile set a token reads: the ones with chroma read the hue ring, the rest the neutral ramp. The name is
+# the slot name, and a `select` reads its options from there.
+HUED = {"accent", "primary", "warn", "error"}
+PALETTE_SLOT: dict[str, str] = {name: ("palettes.hue" if name in HUED else "palettes.neutral") for name in PALETTE_OF}
+
 DEFAULTS: dict[str, Any] = {"sketch": False}  # tokens are not defaults: unset means core's default
 
 
@@ -318,43 +343,75 @@ def seed(ctx: Context) -> None:
 
 
 def field(name: str, kind: str, value: Any) -> Accrete:
-    """One token row: a label, a control, and (for colours) a live swatch.
+    """One token row: a label, a control, and (for colours) a live preview.
 
-    The swatch reads the variable itself (`background: var(--fg)`), so it shows the colour in force at that
+    The preview reads the variable itself (`background: var(--fg)`), so it shows the colour in force at that
     moment — no second copy of the state. A field's `tag` is the member name; the group's outlet packs by it.
+
+    A colour is a palette of tiles: the `select`'s options are swatches, and an option's id is the triple that
+    travels up. The border style is picked the same way. Neither is typed — `select` is one field whose exit is
+    the group it sits in, so a tile click is one `change`.
     """
-    control = h.input(
-        tag=name,
-        # Always `text`: an empty `number` input packs as 0 ("not written" turns into "set to zero"), and an
-        # empty value here means "not set". All three kinds are recognised by their validator, not by the
-        # control's type.
-        kind="text",
-        selector="cfg",
-        source=Source(default=value),
-        placeholder=CORE.get(name, ""),
-        id=f"cfg-{name}",
-    )
-    row: list[Accrete] = [h.text(f"{LABELS.get(name, name)} · {name}", variant="muted"), control]
+    # A `select` takes its option rows from the slot in `source` (this renderer reads `source`, not `options`
+    # — see ADR 0001 §9). The value does not come from here: the `tag` gives it a copy inside the group, and
+    # the group packs and sends it.
     if kind == "color":
-        row.append(
-            h.frame(
-                style={
-                    "background": f"var(--{name})",
-                    "border": "var(--border)",
-                    "border-radius": "6px",
-                    "min-height": "22px",
-                },
-                id=f"swatch-{name}",
-            )
+        control: Accrete = h.select(
+            tag=name,
+            selector="cfg",
+            source=Source(slot=PALETTE_SLOT[name]),
+            id=f"cfg-{name}",
         )
+    elif kind == "keyword":
+        control = h.select(
+            tag=name,
+            selector="cfg",
+            source=Source(slot=WORDS_SLOT),
+            id=f"cfg-{name}",
+        )
+    else:
+        control = h.input(
+            tag=name,
+            # Always `text`: an empty `number` input packs as 0 ("not written" turns into "set to zero"), and
+            # an empty value here means "not set". The kind is judged by the validator, not the control.
+            kind="text",
+            selector="cfg",
+            source=Source(default=value),
+            placeholder=CORE.get(name, ""),
+            id=f"cfg-{name}",
+        )
+    preview = (
+        h.frame(
+            style={
+                "background": f"var(--{name})",
+                "border": "var(--border)",
+                "border-radius": "6px",
+                "min-height": "22px",
+            },
+            id=f"here-{name}",
+        )
+        if kind == "color"
+        else h.text("")
+    )
     return h.frame(
-        *row,
-        grid={
-            "grid-template-columns": "1fr 2fr 30px" if kind == "color" else "1fr 2fr",
-            "gap": "8px",
-            "align-items": "center",
-        },
+        h.text(f"{LABELS.get(name, name)} · {name}", variant="muted"),
+        control,
+        preview,
+        grid={"grid-template-columns": "1fr 3fr 26px", "gap": "8px", "align-items": "center"},
         id=f"setting-{name}",
+    )
+
+
+def swatch(triple: str) -> Accrete:
+    """One tile of the palette: its id is the triple itself, so clicking it means choosing that colour."""
+    return h.frame(
+        style={
+            "background": f"oklch({triple})",
+            "border-radius": "4px",
+            "min-height": "20px",
+            "flex": "1 1 auto",
+        },
+        id=triple,
     )
 
 
@@ -366,6 +423,20 @@ def page(ctx: Context, match) -> Accrete:
     that expires after one submit.
     """
     now = state().state
+    # A palette is a send, not part of the page tree: a `select` reads its options from a **slot** only
+    # (`bind_list` takes a slot), so the three tile sets are written once per connection — a slot outlives a
+    # `create`, so the second visit to this page does not write them again.
+    for slot_name, tiles in (("palettes.neutral", NEUTRALS), ("palettes.hue", HUES)):
+        if not ctx.data.get(f"{slot_name}.seeded"):
+            ctx.data[f"{slot_name}.seeded"] = True
+            palette = ctx.slot(slot_name)
+            for triple in tiles:
+                palette.append(swatch(triple))
+    if not ctx.data.get(f"{WORDS_SLOT}.seeded"):
+        ctx.data[f"{WORDS_SLOT}.seeded"] = True
+        words = ctx.slot(WORDS_SLOT)
+        for word in KEYWORDS:
+            words.append(h.text(word, id=word))
     groups: list[Accrete] = []
     for title, kind, names in GROUPS:
         groups.append(
@@ -380,9 +451,9 @@ def page(ctx: Context, match) -> Accrete:
     return h.frame(
         h.text("Settings", variant="heading-1"),
         h.text(
-            "core.css's token surface: colours are `oklch` triples (lightness 0–1, chroma 0–0.4, hue 0–360), "
-            "sizes are numbers (pixels). A change takes effect locally at once and goes up to the server to be "
-            "remembered (ADR 0001); clearing a field means \"not set\", which restores the stylesheet's default.",
+            "core.css's token surface: colours are picked from the palette (what travels is an oklch triple "
+            "`L C H` — lightness 0–1, chroma 0–0.4, hue 0–360), sizes are numbers (pixels), the border style is a "
+            "click. A change takes effect locally at once and goes up to the server to be remembered (ADR 0001).",
             variant="muted",
         ),
         h.loom(
