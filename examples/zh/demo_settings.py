@@ -120,19 +120,22 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# 有彩度的这四个用色相环：环只给色相（角度就是色相），亮度和彩度由这一页按令牌钉住——取各自缺省的那
-# 两个数。环打包的就是 `L C H` 三元组，所以成员值、校验器、浏览器那侧都不必知道有个环。
-TONE: dict[str, tuple[float, float]] = {
-    "accent": (0.7, 0.12),
-    "primary": (0.98, 0.06),
-    "warn": (0.84, 0.12),
-    "error": (0.63, 0.19),
+# 十个颜色令牌都用同一个**色盘**：盘面是 oklch 的两个自由度——角度是色相、半径是彩度（圆心是灰），
+# 第三个（亮度）盘面放不下，按令牌钉住，取各自缺省的那个数。盘打包的就是 `L C H` 三元组，所以成员值、
+# 校验器、浏览器那侧都不必知道有个盘。
+LIGHT: dict[str, float] = {
+    "fg": 0.18,
+    "bg": 1.0,
+    "surface": 0.965,
+    "accent": 0.7,
+    "primary": 0.98,
+    "secondary": 0.93,
+    "disabled": 0.6,
+    "warn": 0.84,
+    "error": 0.63,
+    "border-color": 0.93,  # 缺省是 `var(--secondary)`，跟它同一个亮度
 }
 
-# 没有彩度的令牌（前景、背景、表面……）没有色相可挑：给它们一排中性阶的格子，点哪格取哪个三元组。每格
-# 是一个 `select` 选项，选项的 id 就是送上去的三元组。
-NEUTRALS = ["1 0 0", "0.965 0 0", "0.93 0 0", "0.84 0 0", "0.6 0 0", "0.4 0 0", "0.25 0 0", "0.15 0 0"]
-NEUTRAL_SLOT = "palettes.neutral"
 WORDS_SLOT = "palettes.words"
 
 
@@ -325,28 +328,19 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     色块自己读变量（`background: var(--fg)`），所以它显示的就是这一刻生效的颜色——不需要第二份状态。
     字段的 `tag` 就是成员名，组的出口按它打包。
 
-    颜色是一格一格的调色板（`select` 的选项就是色块，选项的 id 就是送上去的三元组），线型也是点出来的
-    ——这一页的颜色没有"自己填"的控件。`select` 是一个字段，出口在它所在的组：点一格 = 一次 `change`。
+    颜色都在同一个人色盘上点（角度=色相、半径=彩度、圆心是灰），线型是点出来的词——这一页没有"自己填"
+    的控件。盘与词表都是字段，出口在它们所在的组：点一下 = 一次 `change`。
     """
-    # 一个 `select` 的选项行由它的 `source` 那个槽给（这一版渲染器读的是 `source`，不是 `options`；
-    # 见 ADR 0001 §9）。值不从这里来：`tag` 让它在组里有自己的一份，组负责打包与上行。
-    if kind == "color" and name in TONE:
-        light, chroma = TONE[name]
-        control: Accrete = h.hue(
+    if kind == "color":
+        control: Accrete = h.disc(
             tag=name,
-            light=light,
-            chroma=chroma,
+            light=LIGHT[name],
             source=Source(default=value),
             id=f"cfg-{name}",
         )
-    elif kind == "color":
-        control = h.select(
-            tag=name,
-            selector="cfg",
-            source=Source(slot=NEUTRAL_SLOT),
-            id=f"cfg-{name}",
-        )
     elif kind == "keyword":
+        # 一个 `select` 的选项行由它的 `source` 那个槽给（这一版渲染器读的是 `source`，不是 `options`；
+        # 见 ADR 0001 §9）。值不从这里来：`tag` 让它在组里有自己的一份，组负责打包与上行。
         control = h.select(
             tag=name,
             selector="cfg",
@@ -386,19 +380,6 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     )
 
 
-def swatch(triple: str) -> Accrete:
-    """调色板上的一格：id 就是三元组本身，所以点它等于把那个颜色选中。"""
-    return h.frame(
-        style={
-            "background": f"oklch({triple})",
-            "border-radius": "4px",
-            "min-height": "20px",
-            "flex": "1 1 auto",
-        },
-        id=triple,
-    )
-
-
 def page(ctx: Context, match) -> Accrete:
     """设置页 —— 一个组，core 的令牌面全部生成成字段，一个出口。
 
@@ -408,11 +389,6 @@ def page(ctx: Context, match) -> Accrete:
     now = state().state
     # 调色板是一次发送，不是页面树的一部分：一个 `select` 的选项只能从**槽**里读（`bind_list` 只认 slot），
     # 所以三张板每条连接写一次——槽活得比一次 `create` 长，第二次进这一页不必重写。
-    if not ctx.data.get(f"{NEUTRAL_SLOT}.seeded"):
-        ctx.data[f"{NEUTRAL_SLOT}.seeded"] = True
-        palette = ctx.slot(NEUTRAL_SLOT)
-        for triple in NEUTRALS:
-            palette.append(swatch(triple))
     if not ctx.data.get(f"{WORDS_SLOT}.seeded"):
         ctx.data[f"{WORDS_SLOT}.seeded"] = True
         words = ctx.slot(WORDS_SLOT)
@@ -432,8 +408,8 @@ def page(ctx: Context, match) -> Accrete:
     return h.frame(
         h.text("设置", variant="heading-1"),
         h.text(
-            "core.css 的令牌面：有彩度的颜色在**色相环**上点（角度就是色相，亮度和彩度按令牌钉住），"
-            "没有彩度的那几个在一条中性阶上点，尺寸填数字（像素），线型点一下。存的是 oklch 三元组 "
+            "core.css 的令牌面：颜色都在**同一个色盘**上点——盘面是 oklch 的色相（角度）与彩度（半径），"
+            "圆心是灰；亮度按令牌钉住（取各自缺省）。尺寸填数字（像素），线型点一下。存的是 oklch 三元组 "
             "`L C H`（亮度 0–1、彩度 0–0.4、色相 0–360）。值一变本机立刻生效，同时上行到服务端记住（ADR 0001）。",
             variant="muted",
         ),

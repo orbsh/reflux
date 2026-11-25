@@ -156,12 +156,13 @@ NODES: dict[str, dict] = {
         "source": {"slot": "opts", "default": "a"},
     },
     "text": text("text"),
-    # A hue ring (fluxen ADR 0048): the attrs pin the two terms a circle cannot show, the angle picks the
-    # hue, and what it packs is the written-out `L C H` triple a colour member takes.
-    "hue": {
-        "type": "hue",
-        "tag": "gate.hue",
-        "attrs": {"light": 0.7, "chroma": 0.12},
+    # A disc in the oklch plane (fluxen ADR 0048): the angle picks the hue, the radius the chroma, the
+    # `attrs.light` pins the term a face cannot show, and what it packs is the written-out `L C H` triple a
+    # colour member takes.
+    "disc": {
+        "type": "disc",
+        "tag": "gate.disc",
+        "attrs": {"light": 0.7},
         "source": {"default": "0.7 0.12 200"},
     },
 }

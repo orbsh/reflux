@@ -7,7 +7,7 @@ from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
 
-__all__ = ["button", "canvas", "entry", "forcegraph", "frame", "hue", "image", "input", "loom", "panel", "path", "select", "svg", "text", "tiles"]
+__all__ = ["button", "canvas", "disc", "entry", "forcegraph", "frame", "image", "input", "loom", "panel", "path", "select", "svg", "text", "tiles"]
 
 def frame(
     *children: Accrete,
@@ -223,19 +223,18 @@ def select(
     return parse(drop_none(type='select', attrs=attrs, source=source, options=options, id=id, tag=tag), Select)
 
 
-def hue(
+def disc(
     *,
-    chroma: float | None = None,
     light: float | None = None,
     selector: str | None = None,
     source: Any = None,
     tag: str | None = None,
     id: str | None = None,
-) -> Hue:
-    """Build a `hue` node (the wire type `hue`)."""
-    attrs = drop_none(chroma=chroma, light=light, selector=selector)
+) -> Disc:
+    """Build a `disc` node (the wire type `disc`)."""
+    attrs = drop_none(light=light, selector=selector)
     source = as_source(source)
-    return parse(drop_none(type='hue', attrs=attrs, source=source, id=id, tag=tag), Hue)
+    return parse(drop_none(type='disc', attrs=attrs, source=source, id=id, tag=tag), Disc)
 
 
 def text(

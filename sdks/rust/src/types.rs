@@ -652,12 +652,9 @@ pub fn select(horizontal: Option<bool>, selector: Option<&str>, source: Option<S
     Value::Object(node)
 }
 
-/// Build a `hue` node (the wire type `hue`).
-pub fn hue(chroma: Option<f64>, light: Option<f64>, selector: Option<&str>, source: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
+/// Build a `disc` node (the wire type `disc`).
+pub fn disc(light: Option<f64>, selector: Option<&str>, source: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
-    if let Some(v) = chroma {
-        put(&mut attrs, "chroma", Value::from(v));
-    }
     if let Some(v) = light {
         put(&mut attrs, "light", Value::from(v));
     }
@@ -678,7 +675,7 @@ pub fn hue(chroma: Option<f64>, light: Option<f64>, selector: Option<&str>, sour
     if let Some(v) = tag {
         put(&mut node, "tag", s(v));
     }
-    put(&mut node, "type", s("hue"));
+    put(&mut node, "type", s("disc"));
     Value::Object(node)
 }
 

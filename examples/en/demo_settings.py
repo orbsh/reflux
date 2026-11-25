@@ -129,20 +129,23 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# The four tokens that carry chroma get a hue ring: the ring gives the hue (the angle *is* the hue) and this
-# page pins the other two terms per token — its own default lightness and chroma. What the ring packs is the
-# `L C H` triple, so the member, the validators and the browser never learn that a ring was involved.
-TONE: dict[str, tuple[float, float]] = {
-    "accent": (0.7, 0.12),
-    "primary": (0.98, 0.06),
-    "warn": (0.84, 0.12),
-    "error": (0.63, 0.19),
+# All ten colour tokens use the same **disc**: its face holds two of oklch's degrees of freedom — the angle is
+# the hue, the radius the chroma, the centre is grey — and the third (lightness) does not fit on a face, so it
+# is pinned per token to that token's own default. What the disc packs is the `L C H` triple, so the member,
+# the validators and the browser never learn that a disc was involved.
+LIGHT: dict[str, float] = {
+    "fg": 0.18,
+    "bg": 1.0,
+    "surface": 0.965,
+    "accent": 0.7,
+    "primary": 0.98,
+    "secondary": 0.93,
+    "disabled": 0.6,
+    "warn": 0.84,
+    "error": 0.63,
+    "border-color": 0.93,  # its default is `var(--secondary)`, so it sits at the same lightness
 }
 
-# A token without chroma (foreground, background, surface, …) has no hue to pick: those get a row of tiles on
-# the neutral ramp, and clicking one takes its triple. Each tile is one `select` option whose id is the triple.
-NEUTRALS = ["1 0 0", "0.965 0 0", "0.93 0 0", "0.84 0 0", "0.6 0 0", "0.4 0 0", "0.25 0 0", "0.15 0 0"]
-NEUTRAL_SLOT = "palettes.neutral"
 WORDS_SLOT = "palettes.words"
 
 DEFAULTS: dict[str, Any] = {"sketch": False}  # tokens are not defaults: unset means core's default
@@ -339,30 +342,21 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     The preview reads the variable itself (`background: var(--fg)`), so it shows the colour in force at that
     moment — no second copy of the state. A field's `tag` is the member name; the group's outlet packs by it.
 
-    A colour is a palette of tiles: the `select`'s options are swatches, and an option's id is the triple that
-    travels up. The border style is picked the same way. Neither is typed — `select` is one field whose exit is
-    the group it sits in, so a tile click is one `change`.
+    Every colour is picked on the same disc (angle = hue, radius = chroma, the centre is grey) and the border
+    style is a word to click — nothing here is typed. Both are fields whose exit is the group they sit in, so
+    one click is one `change`.
     """
-    # A `select` takes its option rows from the slot in `source` (this renderer reads `source`, not `options`
-    # — see ADR 0001 §9). The value does not come from here: the `tag` gives it a copy inside the group, and
-    # the group packs and sends it.
-    if kind == "color" and name in TONE:
-        light, chroma = TONE[name]
-        control: Accrete = h.hue(
+    if kind == "color":
+        control: Accrete = h.disc(
             tag=name,
-            light=light,
-            chroma=chroma,
+            light=LIGHT[name],
             source=Source(default=value),
             id=f"cfg-{name}",
         )
-    elif kind == "color":
-        control = h.select(
-            tag=name,
-            selector="cfg",
-            source=Source(slot=NEUTRAL_SLOT),
-            id=f"cfg-{name}",
-        )
     elif kind == "keyword":
+        # A `select` takes its option rows from the slot in `source` (this renderer reads `source`, not
+        # `options` — see ADR 0001 §9). The value does not come from here: the `tag` gives it a copy inside
+        # the group, and the group packs and sends it.
         control = h.select(
             tag=name,
             selector="cfg",
@@ -402,19 +396,6 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     )
 
 
-def swatch(triple: str) -> Accrete:
-    """One tile of the palette: its id is the triple itself, so clicking it means choosing that colour."""
-    return h.frame(
-        style={
-            "background": f"oklch({triple})",
-            "border-radius": "4px",
-            "min-height": "20px",
-            "flex": "1 1 auto",
-        },
-        id=triple,
-    )
-
-
 def page(ctx: Context, match) -> Accrete:
     """The settings page — one group, core's whole token surface generated as fields, one outlet.
 
@@ -426,11 +407,6 @@ def page(ctx: Context, match) -> Accrete:
     # A palette is a send, not part of the page tree: a `select` reads its options from a **slot** only
     # (`bind_list` takes a slot), so the three tile sets are written once per connection — a slot outlives a
     # `create`, so the second visit to this page does not write them again.
-    if not ctx.data.get(f"{NEUTRAL_SLOT}.seeded"):
-        ctx.data[f"{NEUTRAL_SLOT}.seeded"] = True
-        palette = ctx.slot(NEUTRAL_SLOT)
-        for triple in NEUTRALS:
-            palette.append(swatch(triple))
     if not ctx.data.get(f"{WORDS_SLOT}.seeded"):
         ctx.data[f"{WORDS_SLOT}.seeded"] = True
         words = ctx.slot(WORDS_SLOT)
@@ -450,9 +426,11 @@ def page(ctx: Context, match) -> Accrete:
     return h.frame(
         h.text("Settings", variant="heading-1"),
         h.text(
-            "core.css's token surface: colours are picked from the palette (what travels is an oklch triple "
-            "`L C H` — lightness 0–1, chroma 0–0.4, hue 0–360), sizes are numbers (pixels), the border style is a "
-            "click. A change takes effect locally at once and goes up to the server to be remembered (ADR 0001).",
+            "core.css's token surface: every colour is picked on the same disc — its face is oklch's hue (the "
+            "angle) and chroma (the radius), the centre is grey, and lightness is pinned per token to its own "
+            "default. Sizes are numbers (pixels) and the border style is a click. What travels is an oklch triple "
+            "`L C H` (lightness 0–1, chroma 0–0.4, hue 0–360). A change takes effect locally at once and goes up "
+            "to the server to be remembered (ADR 0001).",
             variant="muted",
         ),
         h.loom(

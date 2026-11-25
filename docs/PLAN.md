@@ -89,7 +89,7 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] 上色：`www/static/reflux.js` 的 `STYLE` 表（白名单 + 值域：`accent` 只收 `#rrggbb`、`round` 0–24 补 `px`），`paint()` 先读一次再挂 `MutationObserver`（只听这两个属性），值不合法就撤掉那条自定义属性、交回样式表缺省；DESIGN「客户端 runtime」与 `HANDOFF` 记了这条新契约。
 - [x] 验证：`tools/gate_settings.py` 十条（真 Chromium）：第一帧带着已存选项、`TOKENS` 把镜像落成 `:root` 属性、一次改动**本地**就动（`data-accent` → `--accent`）、`round` 10→18 变 `18px`、表对 99.5 回落到样式表缺省、`sketch` 镜像给渲染器、上行到服务端并合并、刷新后仍是存下的值、控制台除渲染器那条 `<svg> viewBox` 警告外无错误。`tests/test_settings.py` 21 例 + 全量 390 例 + 十一门全绿。
 - [x] 扩到 core 的整个令牌面（2026-11-25）：`TOKENS` 由三个成员变成一张表（颜色十、长度三、线型一），页面按表生成控件、`reflux.js` 按种类落到 `:root`（颜色存 `L C H`、合成 `oklch`），空值 = 不设、回到 `light-dark` 成对缺省；`tests/test_settings.py` 新增"表对着 core.css 的 `:root` 块一个不漏"与"浏览器表 == 服务端表"两例，`tools/gate_settings.py` 十一条（含清空即回缺省、`--border` 跟着拼它的三样）。
-- [x] 颜色改成点出来的（2026-11-25）：fluxen 加了 `hue` 色相环（ADR 0048，字段而非新类别，值就是 `L C H` 三元组），有彩度的四个令牌用它、其余用中性格子，线型是五个词；`gate_settings` 十二条（环一次点击只动 `accent`、中性阶只动 `bg`、上行之后状态里只有这三样）。
+- [x] 颜色改成点出来的（2026-11-25）：fluxen 加了 `oklch` 色盘 `disc`（ADR 0048，字段而非新类别，值就是 `L C H` 三元组；角度是色相、半径是彩度、圆心是灰，亮度按令牌钉住），十个颜色令牌共用它，线型是五个词；`gate_settings` 十二条（盘一次点击只动 `accent`、盘的圆心只动 `bg`、上行之后状态里只有这几样）。
 
 ## 服务端搬到 asyncio（ADR 0002，2026-11-25，已落地）
 

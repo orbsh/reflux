@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "HueAttr", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Emit", "ForceGraphStyle", "Hue", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Debounce", "Dir", "Direction", "DiscAttr", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Disc", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -62,6 +62,15 @@ class Direction(Enum):
     R = 'R'
 
 
+class DiscAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    light: float = Field(
+        ...,
+        description='Lightness the disc keeps (0–1). The face is drawn at this lightness, so the disc is a slice of the\nspace, not the whole of it.',
+    )
+    selector: str | None = None
+
+
 class Draggable(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -110,16 +119,6 @@ class Header(BaseModel):
         description='`1` (default) or `2`: how many LINES of header cells there are along the field axis. A\ndirection word (`rows`) named where the header sat, which stopped being true the moment\n`dir: row` made the header a column; a layer is one line whatever axis it runs on.',
     )
     selector: str
-
-
-class HueAttr(BaseModel):
-    chroma: float = Field(
-        ...,
-        description='Chroma the ring keeps (0–0.4). A neutral token (chroma 0) has no hue to pick: the ring is for\nthe tokens that carry chroma, and the page says so by not using it there.',
-    )
-    class_: list[str] | None = Field(None, alias='class')
-    light: float = Field(..., description='Lightness the ring keeps (0–1).')
-    selector: str | None = None
 
 
 class ImageAttr(BaseModel):
@@ -302,6 +301,22 @@ class Canvas(BaseModel):
     type: Literal['canvas'] = 'canvas'
 
 
+class Disc(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    attrs: DiscAttr | None = None
+    id: str | None = None
+    source: Source | None = Field(
+        None, description='The current value, in the triple spelling above.'
+    )
+    tag: str | None = Field(
+        None,
+        description="The field's name inside an enclosing loom (same rule as `input`).",
+    )
+    type: Literal['disc'] = 'disc'
+
+
 class Emit(RootModel[Debounce | Throttle]):
     root: Debounce | Throttle = Field(
         ...,
@@ -368,22 +383,6 @@ class ForceGraphStyle(BaseModel):
         validate_default=True,
     )
     velocity_decay: float | None = 0.4000000059604645
-
-
-class Hue(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    attrs: HueAttr | None = None
-    id: str | None = None
-    source: Source | None = Field(
-        None, description='The current value, in the triple spelling above.'
-    )
-    tag: str | None = Field(
-        None,
-        description="The field's name inside an enclosing loom (same rule as `input`).",
-    )
-    type: Literal['hue'] = 'hue'
 
 
 class Image(BaseModel):
@@ -606,7 +605,7 @@ class Tiles(BaseModel):
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Hue | Text | Stamp], Field(discriminator='type')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Disc | Text | Stamp], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
@@ -614,11 +613,11 @@ Accept.model_rebuild()
 ButtonAttr.model_rebuild()
 ClassAttr.model_rebuild()
 Debounce.model_rebuild()
+DiscAttr.model_rebuild()
 Draggable.model_rebuild()
 FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
 Header.model_rebuild()
-HueAttr.model_rebuild()
 ImageAttr.model_rebuild()
 Sink.model_rebuild()
 SizeAttr.model_rebuild()
@@ -631,8 +630,8 @@ Throttle.model_rebuild()
 Window.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()
+Disc.model_rebuild()
 ForceGraphStyle.model_rebuild()
-Hue.model_rebuild()
 Image.model_rebuild()
 Input.model_rebuild()
 LoomAttr.model_rebuild()

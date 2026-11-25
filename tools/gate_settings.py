@@ -5,8 +5,9 @@ The unit tests (`tests/test_settings.py`) own the server's half: unpacking the g
 ranges, the throttled write, and the three tables agreeing. What only a browser can answer is the half
 ADR 0001 decided: that `scope: both` writes locally, that fluxen mirrors the members onto the document
 root as `data-*`, that `TOKENS` in `www/static/reflux.js` turns those into `:root` custom properties
-(colours composed as `oklch` from `L C H`), that the palette's tiles set and show the choice, and that
-the renderer's `sketch` member draws borders.
+(colours composed as `oklch` from `L C H`), that the disc's face sets and shows the choice — its angle and
+radius are two of oklch's three terms, and the shape of the click is what the renderer owns — and that the
+renderer's `sketch` member draws borders.
 
 Controls are addressed by position within their kind (the renderer does not put a field node's `id` on
 the DOM), and the orders are derived from `TOKENS` so a table that grows cannot silently move this gate
@@ -34,23 +35,20 @@ from examples.zh import demo_settings  # noqa: E402
 
 PAGE = "/settings"
 
-# What the page draws, in order: the sketch switch, then one row per token in table order. A colour with
-# chroma is a hue ring, one without is a row of tiles, and the border style is a row of words.
+# What the page draws, in order: the sketch switch, then one row per token in table order. Every colour is a
+# disc in the oklch plane, and the border style is a row of words.
 COLOURS = [name for name, kind in demo_settings.TOKENS.items() if kind == "color"]
 LENGTHS = [name for name, kind in demo_settings.TOKENS.items() if kind == "length"]
-RINGS = [name for name in COLOURS if name in demo_settings.TONE]
-SELECTS = [
-    *[name for name in COLOURS if name not in demo_settings.TONE],
-    *[name for name, kind in demo_settings.TOKENS.items() if kind == "keyword"],
-]
+SELECTS = [name for name, kind in demo_settings.TOKENS.items() if kind == "keyword"]
 INPUTS = ["sketch", *LENGTHS]
-CONTROLS = len(INPUTS) + len(SELECTS) + len(RINGS)
+CONTROLS = len(INPUTS) + len(SELECTS) + len(COLOURS)
 
 START = {"sketch": False, "accent": "0.7 0.12 200"}  # what the server already remembers
-PICKED_HUE = 250  # the angle this gate clicks on the accent ring
-LIGHT, CHROMA = demo_settings.TONE["accent"]
-PICKED = f"{LIGHT} {CHROMA} {PICKED_HUE}"  # what the ring should pack
-TILE = demo_settings.NEUTRALS[2]  # a neutral tile this gate clicks for bg
+PICKED_HUE = 250.0  # the angle this gate clicks on the accent disc
+PICKED_CHROMA = 0.2  # half way to the rim, so the value is exactly representable
+LIGHT = demo_settings.LIGHT["accent"]
+PICKED = f"{LIGHT} {PICKED_CHROMA:.2f} {int(PICKED_HUE)}"  # what the disc should pack
+GREY = f"{demo_settings.LIGHT['bg']} 0.00"  # a click on bg's centre: the grey axis
 
 
 def wait_for(predicate, timeout: float = 6.0):
@@ -60,6 +58,11 @@ def wait_for(predicate, timeout: float = 6.0):
             return True
         time.sleep(0.03)
     return predicate()
+
+
+def norm(triple: str) -> str:
+    """A triple the way the server writes it back (`:g` on each term), so a comparison survives normalisation."""
+    return " ".join(f"{float(term):g}" for term in triple.split())
 
 
 def root_attr(cdp, name: str):
@@ -75,7 +78,7 @@ def custom(cdp, name: str) -> str:
 def controls(cdp) -> int:
     """How many controls the page drew: inputs plus selects (a `select` is a list of tiles, not an input)."""
     return (
-        cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .select, #settings-page .hue').length")
+        cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .select, #settings-page .disc').length")
         or 0
     )
 
@@ -102,7 +105,7 @@ def set_field(cdp, name: str, value: str) -> bool:
 
 
 def click_tile(cdp, name: str, index: int):
-    """Click one tile of a token's palette — the option rows carry `as-stretch`; the last child is a layer."""
+    """Click one row of a `select` — the option rows are the box's children; a layer follows them."""
     select = SELECTS.index(name)
     return cdp.eval(
         "(() => {"
@@ -114,17 +117,22 @@ def click_tile(cdp, name: str, index: int):
     )
 
 
-def click_ring(cdp, name: str, hue: float):
-    """Click the ring at `hue`: a real MouseEvent at the point that angle names, so the widget's own maths runs."""
-    ring = RINGS.index(name)
+def click_disc(cdp, name: str, hue: float, chroma: float):
+    """Click the disc at (hue, chroma): a real MouseEvent at that point, so the widget's own maths runs.
+
+    The face is polar — the angle is the hue, the radius the chroma — and the rim is the validator's cap
+    (0.4), so `chroma / 0.4` of the radius is where that chroma sits.
+    """
+    disc = COLOURS.index(name)
     return cdp.eval(
         "(() => {"
-        f"const el = document.querySelectorAll('#settings-page .hue')[{ring}];"
+        f"const el = document.querySelectorAll('#settings-page .disc')[{disc}];"
         "if (!el) return null;"
         "const r = el.getBoundingClientRect();"
         f"const rad = ({hue} - 90) * Math.PI / 180;"
-        "const x = r.left + r.width / 2 + Math.cos(rad) * (r.width / 2 - 6);"
-        "const y = r.top + r.height / 2 + Math.sin(rad) * (r.height / 2 - 6);"
+        f"const reach = ({chroma} / 0.4) * (r.width / 2);"
+        "const x = r.left + r.width / 2 + Math.cos(rad) * reach;"
+        "const y = r.top + r.height / 2 + Math.sin(rad) * reach;"
         "el.dispatchEvent(new MouseEvent('click', {clientX: x, clientY: y, bubbles: true}));"
         "return true;"
         "})()"
@@ -169,31 +177,40 @@ def main() -> int:
                 )
             )
 
-            # 2. the ring: an angle in, the whole triple out, and nothing else moves. The angle the widget
+            # 2. the disc: a point in, the whole triple out, and nothing else moves. The angle the widget
             #    computes is the angle of the point the browser reported, so it lands within a degree of the
             #    one asked for — that is the claim, not an exact equality.
             bg_before = custom(cdp, "bg")
-            wrote = click_ring(cdp, "accent", PICKED_HUE)
-            local = wait_for(lambda: (root_attr(cdp, "accent") or "").startswith(f"{LIGHT} {CHROMA} "))
+            wrote = click_disc(cdp, "accent", PICKED_HUE, PICKED_CHROMA)
+            local = wait_for(lambda: len((root_attr(cdp, "accent") or "").split()) == 3)
             picked = root_attr(cdp, "accent") or ""
-            degrees = picked.split()[2] if len(picked.split()) == 3 else ""
-            near = degrees.isdigit() and abs(int(degrees) - PICKED_HUE) <= 1
+            parts = picked.split()
+            # A pixel is 1/64 of the radius, i.e. ~0.006 of chroma, and the browser reports whole pixels: the
+            # point lands within a couple of hundredths, not exactly on the request.
+            near = (
+                len(parts) == 3
+                and abs(int(parts[2]) - int(PICKED_HUE)) <= 1
+                and abs(float(parts[1]) - PICKED_CHROMA) <= 0.02
+            )
             checks.append(
                 (
-                    "a ring click packs the triple its attrs and its angle name",
-                    bool(wrote and local and near) and custom(cdp, "accent") == f"oklch({picked})" and custom(cdp, "bg") == bg_before,
-                    f"data-accent={picked!r} --accent={custom(cdp, 'accent')!r} asked={PICKED_HUE}",
+                    "a disc click packs the triple its light and its point name",
+                    bool(wrote and local and near)
+                    and custom(cdp, "accent") == f"oklch({norm(picked)})"  # Chromium writes the property back normalised
+                    and custom(cdp, "bg") == bg_before,
+                    f"data-accent={picked!r} --accent={custom(cdp, 'accent')!r} asked={PICKED_HUE}/{PICKED_CHROMA}",
                 )
             )
 
-            # 2b. a token without chroma has no hue to pick: its row of tiles still works
-            tiled = click_tile(cdp, "bg", demo_settings.NEUTRALS.index(TILE))
-            painted = wait_for(lambda: custom(cdp, "bg") == f"oklch({TILE})")
+            # 2b. every token uses the same disc, so a token whose default is grey gets its grey from the centre
+            greyed = click_disc(cdp, "bg", PICKED_HUE, 0.0)
+            neutral = wait_for(lambda: (root_attr(cdp, "bg") or "").split()[1:2] in (["0"], ["0.00"]))
+            grey = root_attr(cdp, "bg") or ""
             checks.append(
                 (
-                    "a neutral token is picked from its tiles",
-                    bool(tiled and painted) and root_attr(cdp, "bg") == TILE,
-                    f"data-bg={root_attr(cdp, 'bg')!r} --bg={custom(cdp, 'bg')!r}",
+                    "the centre of a disc is grey — a neutral token is reached there too",
+                    bool(greyed and neutral) and float(grey.split()[1]) == 0.0 and custom(cdp, "bg") == f"oklch({norm(grey)})",
+                    f"data-bg={grey!r} --bg={custom(cdp, 'bg')!r}",
                 )
             )
 
@@ -255,14 +272,14 @@ def main() -> int:
             )
 
             # 7. the server took the same changes (the throttle window has closed by now)
-            waited = wait_for(lambda: demo_settings.settings.state.get("accent") == picked, timeout=4.0)
+            waited = wait_for(lambda: demo_settings.settings.state.get("accent") == norm(picked), timeout=4.0)
             state = dict(demo_settings.settings.state)
             checks.append(
                 (
                     "the uplink reached the server and was merged",
                     bool(
                         waited
-                        and state.get("bg") == TILE
+                        and state.get("bg") == norm(grey)
                         and state.get("round") == "18"
                         and state.get("border-style") == "dashed"
                         and state.get("sketch") is True
@@ -275,7 +292,7 @@ def main() -> int:
             # on the *new* page, not on the old DOM that happened not to have changed yet.
             cdp.eval("window.__before_reload = true; location.reload(); true")
             fresh = wait_for(lambda: cdp.eval("window.__before_reload") is None, timeout=10.0)
-            stayed = wait_for(lambda: custom(cdp, "accent") == f"oklch({picked})", timeout=8.0)
+            stayed = wait_for(lambda: custom(cdp, "accent") == f"oklch({norm(picked)})", timeout=8.0)
             checks.append(
                 (
                     "a reload shows the stored tokens again",

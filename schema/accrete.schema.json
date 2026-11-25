@@ -181,6 +181,76 @@
       ],
       "type": "string"
     },
+    "Disc": {
+      "additionalProperties": false,
+      "description": "A disc in the `oklch` plane: a field whose angle is the hue and whose radius is the chroma. One term\n(`attrs.light`) is pinned, so what it packs is the whole `L C H` triple a colour token reads — the\npicker and the value stay one thing, and nothing downstream has to know that a disc was involved.",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Source"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The current value, in the triple spelling above."
+        },
+        "tag": {
+          "description": "The field's name inside an enclosing loom (same rule as `input`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "DiscAttr": {
+      "description": "What the disc does not show: lightness, and the usual attribute surface.",
+      "properties": {
+        "class": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "light": {
+          "description": "Lightness the disc keeps (0–1). The face is drawn at this lightness, so the disc is a slice of the\nspace, not the whole of it.",
+          "format": "double",
+          "type": "number"
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "light"
+      ],
+      "type": "object"
+    },
     "Draggable": {
       "additionalProperties": false,
       "description": "The tag of a draggable box's cargo (ADR 0034). Absent = untagged: a target that\nnames no tag takes it, a target that names one does not.",
@@ -597,82 +667,6 @@
       },
       "required": [
         "selector"
-      ],
-      "type": "object"
-    },
-    "Hue": {
-      "additionalProperties": false,
-      "description": "A hue ring: a field whose **angle** is the hue. `attrs.light` and `attrs.chroma` fix the other two\nterms, so what it packs is the whole `L C H` triple a colour token reads — the picker and the value\nstay one thing, and nothing downstream has to know that a ring was involved.",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HueAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Source"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The current value, in the triple spelling above."
-        },
-        "tag": {
-          "description": "The field's name inside an enclosing loom (same rule as `input`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "HueAttr": {
-      "description": "What the ring does not pick: the two terms it cannot show, and the usual attribute surface.",
-      "properties": {
-        "chroma": {
-          "description": "Chroma the ring keeps (0–0.4). A neutral token (chroma 0) has no hue to pick: the ring is for\nthe tokens that carry chroma, and the page says so by not using it there.",
-          "format": "double",
-          "type": "number"
-        },
-        "class": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "light": {
-          "description": "Lightness the ring keeps (0–1).",
-          "format": "double",
-          "type": "number"
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "light",
-        "chroma"
       ],
       "type": "object"
     },
@@ -1863,10 +1857,10 @@
       "type": "object"
     },
     {
-      "$ref": "#/$defs/Hue",
+      "$ref": "#/$defs/Disc",
       "properties": {
         "type": {
-          "const": "hue",
+          "const": "disc",
           "type": "string"
         }
       },
