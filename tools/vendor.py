@@ -50,6 +50,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "www" / "static" / "vendor" / "fluxen"
 PREFIX = "vendor/fluxen/"
 CORE = ("assets/core.css", "assets/custom.css")
+# The artifact also carries the renderer's own default page. It is not ours to serve — reflux has its
+# own `www/index.html` and its own boot (ADR 0046/0047) — so it is accepted and ignored, not a failure.
+NOT_OURS = ("index.html",)
 # Who publishes the bundle. No rev is recorded ahead of time: `fetch` asks for the newest release.
 RELEASE_REPO = "orbsh/fluxen"
 
@@ -159,6 +162,8 @@ def unpack(blob: bytes, rev: str) -> dict:
                 continue
             if member.name == "SHA256SUMS":
                 continue  # fluxen's own checksums; `versions.json` re-derives what it pins
+            if member.name in NOT_OURS:
+                continue
             if not (member.name.startswith("ui_leptos-") or member.name in CORE):
                 die(f"unexpected member in the bundle: {member.name}")
             target = (VENDOR / member.name).resolve()
@@ -171,8 +176,12 @@ def unpack(blob: bytes, rev: str) -> dict:
     if manifest_bytes is None:
         die("the bundle carries no manifest.json")
     shipped = json.loads(manifest_bytes)
+    entry = shipped.get("entry", {})
+    # Exactly what this bundle carries — not "whatever is lying in the vendor directory". Building the
+    # list from a glob meant the PREVIOUS hashed pair stayed in `versions.json` after an upgrade, and a
+    # stale 100 KB of js answered "which renderer is this" a second time.
     files = {}
-    for rel in [*CORE, *(p.name for p in VENDOR.glob("ui_leptos-*"))]:
+    for rel in [*CORE, *[n for n in (entry.get("js"), entry.get("wasm")) if n]]:
         p = VENDOR / rel
         if not p.exists():
             die(f"the bundle promised {rel} but did not carry it")
