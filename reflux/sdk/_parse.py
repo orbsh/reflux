@@ -24,9 +24,6 @@ from . import profile
 
 __all__ = ["parse", "dump", "drop_none", "token_attrs", "as_source", "as_sink", "as_set"]
 
-# The node types whose `sink` is a field's own channel rather than a node's exit.
-FIELD_TYPES = ("input", "select")
-
 
 @lru_cache(maxsize=None)
 def _adapter(cls: Any) -> TypeAdapter:
@@ -40,7 +37,6 @@ def parse(obj: Any, cls: Any = None) -> Any:
     demand that exact one. An unknown `type`, a missing one, or a field of the wrong shape raises —
     the boundary is where a producer's mistake should surface.
     """
-    _check_uplinks(obj)
     if _carries_landing(obj):
         # A callable sink is not a name yet, so this tree is not wire-shaped yet: it validates when
         # the app draws it, which is the first moment a name can exist (`App._name_landings`).
@@ -49,29 +45,6 @@ def parse(obj: Any, cls: Any = None) -> Any:
     if isinstance(obj, (list, tuple)):
         return [adapter.validate_python(item) for item in obj]
     return adapter.validate_python(obj)
-
-
-def _check_uplinks(node: Any) -> None:
-    """Refuse a field that can never send: a remote sink and no `tag` (ADR 0032 §2, revised 2026-11-24).
-
-    A field's uplink is its bundle's. `tag` is what makes a field a member of one, so a field with a
-    remote sink and no tag is a value nobody receives — the renderer drops that sink with a warning,
-    and a page that had one would look like it worked. The SDK says so where the field is built.
-    """
-    if isinstance(node, dict):
-        if node.get("type") in FIELD_TYPES:
-            sink, tag = node.get("sink"), node.get("tag")
-            if isinstance(sink, dict) and not tag and sink.get("scope", "remote") in ("remote", "both"):
-                where = node.get("id") or node.get("type")
-                raise ValueError(
-                    f"{node['type']} {where!r} has a remote sink and no tag: a field has no uplink of its own "
-                    f"— give it a tag and put the sink on the enclosing bundle (ADR 0032 §2)"
-                )
-        for kid in node.values():
-            _check_uplinks(kid)
-    elif isinstance(node, (list, tuple)):
-        for kid in node:
-            _check_uplinks(kid)
 
 
 def _carries_landing(node: Any) -> bool:

@@ -145,7 +145,7 @@ NODES: dict[str, dict] = {
     # and reads neither `default` nor `source` for display — measured, and the reason the profile
     # no longer offers a constant source for `input`.
     # A field's uplink is its loom's, and `tag` is what makes it a member (ADR 0032 §2, revised):
-    # a remote sink with no tag is a value nobody receives, and the SDK refuses it.
+    # `sink` is not a field's property on the wire at all, so the only way to send is a tag.
     "input": {"type": "input", "tag": "gate.input", "kind": "text"},
     # The option rows are a list plane: `options` is the wire's own field, and the renderer
     # currently reads the list off the primary `source` — so the fixture names the slot on both,

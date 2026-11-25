@@ -5,8 +5,9 @@ The timing and the payload belong to the renderer, so the gate asserts the rende
 contract — read out of `ui_leptos`, not assumed:
 
 - a field has **no uplink of its own** (ADR 0032 §2, revised 2026-11-24): a tag-less `input` sends
-  nothing on Enter, and nothing clears it — the box keeps what was typed. (A *remote* sink on such a
-  field is refused by the SDK, `_check_uplinks`, so it cannot reach the page at all.);
+  nothing on Enter, and nothing clears it — the box keeps what was typed. (`sink` is not even a
+  field's property on the wire any more, so a field cannot carry one to the page: fluxen dropped it
+  and this gate asserts the behaviour, not a refusal.);
 - a tagged `input` inside a `loom` only commits into the loom's pack — the uplink is the
   loom's, one frame carrying `{tag: value}` for every field it packs;
 - a `loom` sends when `attrs.submit` names the timing and that timing happens: here only

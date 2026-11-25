@@ -78,7 +78,7 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] 聊天页的发送组加 `reset="clear"`：发完输入框自己清空，这是 fluxen 这次给的能力，也是那个页面本来该有的样子。
 - [x] 测试与夹具：`tests/test_sdk_generated.py`（带 `tag` 的字段、拒绝无 `tag` 的 remote sink、本地落点仍合法）、`tests/types_fixture.py` 的 `input` 条目补 `tag`、`tests/test_counter.py` 的载荷改成 `{"step": "5"}`。
 - [x] 门与文档：t0/t2/t3/t4/t6/t7/t9/t10/chat/demo 全绿（t4 改成断言"无 `tag` 的字段回车什么都不发、也不清空"，t10 的 Rust 夹具按新签名与新页面同步）；README 的 SDK 段、`docs/DESIGN.md` 的 ADR 0032 段落写了这条规则，`gen_sdk.py --check` 在同步态。
-- [ ] **字段上的 `sink` 要删**（决定已落，实施在 fluxen）：`Input`/`Select` 仍带 `sink`，而 ADR 0032 §2 让它只剩两种借道用途——`type`（`widgets/input.rs` 的 `sink.type`，读侧 `source.type` 亦可）与"不进组字段的本地落点"（开关点击、过滤框击键）。决定与理由写在 fluxen `docs/decisions/0032-a-loom-packs-fields.md` §2 末段（"The field's `sink` itself is going, too"，2026-11-24），工单 scratch **#470**。本仓随之要做的只有删除：`reflux/sdk/_parse.py` 的 `_check_uplinks` 与 `tests/test_sdk_generated.py` 里那条拒绝用例、`tests/test_auth.py::TheLoginSurface`（密码框不再需要 `source=Bind(type=…)` 借道），以及各处 `h.input(tag=…, source=Bind(type=…))` 收敛成字段属性——等 fluxen 的 schema 到位再动。
+- [x] **字段上的 `sink` 已经不在 wire 上**（fluxen 侧落地，本仓只跟着删）：`Input`/`Select` 的 schema 现在只有 `source`（`tools/sync_schema.py --write` → in sync，`6b0211c8…`），本仓把为它写的守卫删了——`reflux/sdk/_parse.py` 的 `_check_uplinks` 与只被它用的 `FIELD_TYPES`，`tools/gate_t4.py` 的引言改成"字段在 wire 上没有 `sink` 这个属性，所以带不到页面上"，`tests/types_fixture.py` 的注释同改。`tests/test_auth.py::TheLoginSurface` 与各处 `Bind(type=…)` 借道早已随前几轮收敛（全仓 0 处）。手工构造的裸 dict 里再出现字段级 `sink` 不会报错了——那正是终态：渲染器记一条警告并丢掉（ADR 0032 §2）。
 
 ## 设置页（ADR 0001，2026-11-25，进行中）
 
