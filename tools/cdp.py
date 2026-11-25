@@ -355,6 +355,13 @@ def console_errors(cdp: Cdp) -> list[str]:
         details = params.get("exceptionDetails", {}) or {}
         message = (details.get("exception") or {}).get("description") or details.get("text")
         out.append(str(message))
+    # `console.error` is where a wasm panic's message goes (`console_error_panic_hook` prints it) while
+    # the exception itself is only "unreachable" — reading one without the other hides the reason.
+    for params in cdp.of("Runtime.consoleAPICalled"):
+        if params.get("type") not in ("error", "assert"):
+            continue
+        args = [a.get("value", a.get("description", "")) for a in params.get("args", [])]
+        out.append(" ".join(str(a) for a in args)[:400] or "console.error")
     for params in cdp.of("Log.entryAdded"):
         if params.get("entry", {}).get("level") == "error":
             out.append(str(params["entry"].get("text")))
