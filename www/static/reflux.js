@@ -141,6 +141,14 @@ function schedule() {
   });
 }
 
+/**
+ * How this host mounts the renderer. The codec is the host's word — the wire is ours, and a JSON
+ * uplink is the one this runtime reads — and so is the path. Neither belongs to the renderer, and
+ * neither belongs in a page's markup: a page that mounts reflux asks this module for them (ADR 0046
+ * put the same split inside fluxen: the boot decides nothing about the address).
+ */
+export const BOOT = { codec: "json", path: "/ws" };
+
 export function start() {
   if (!window.fluxen || typeof window.fluxen.send !== "function") {
     throw new Error("reflux runtime: window.fluxen.send is missing — is the renderer mounted?");

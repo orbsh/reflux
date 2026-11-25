@@ -17,12 +17,13 @@
 <body>
   <div id="main"></div>
   <script type="module">
+    // 先取 runtime：codec 与 /ws 是**宿主**的决定，写在 runtime 里（`BOOT`），不写在这一页。
+    const { BOOT, start } = await import("/static/reflux.js");
     const versions = await (await fetch("/static/vendor/fluxen/versions.json")).json();
     const vendor = "/static/vendor/fluxen/";
     const { default: init, mount } = await import(vendor + versions.entry.js);
     await init({ module_or_path: vendor + versions.entry.wasm });
-    // 上行是 JSON、渲染器腿挂在 /ws：这两个数只属于这个宿主，所以它们出现在这里，而不是页面标记里。
-    await mount(document.querySelector("#main"), { codec: "json", path: "/ws" });
+    await mount(document.querySelector("#main"), BOOT);
     // 上行句柄是渲染器**第一次渲染时**才发布的（`mount_to` 是排队的），而 runtime 只会调
     // `window.fluxen.send`：所以等它出现再交班。等不到就点名报错，别留一张静默的空白页。
     await new Promise((resolve, reject) => {
@@ -37,7 +38,6 @@
       tick();
     });
     // 渲染器起来了，再交班给 runtime：它只会调 window.fluxen.send
-    const { start } = await import("/static/reflux.js");
     start();
   </script>
 </body>
