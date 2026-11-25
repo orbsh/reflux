@@ -25,7 +25,7 @@ business, per fluxen's `scripts/ui_dist.py` header):
     www/static/vendor/fluxen/versions.json
     www/static/vendor/fluxen/ui_leptos-<hash>.js
     www/static/vendor/fluxen/ui_leptos-<hash>_bg.wasm
-    www/static/vendor/fluxen/assets/main.css
+    www/static/vendor/fluxen/assets/core.css
     www/static/vendor/fluxen/assets/custom.css
 """
 
@@ -48,7 +48,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "www" / "static" / "vendor" / "fluxen"
 PIN = ROOT / "vendor" / "pin.json"
 PREFIX = "vendor/fluxen/"
-CORE = ("assets/main.css", "assets/custom.css")
+CORE = ("assets/core.css", "assets/custom.css")
 
 
 def die(msg: str) -> NoReturn:

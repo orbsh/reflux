@@ -2,9 +2,9 @@
   "renderer": "fluxen",
   "source": "orbsh/fluxen",
   "releases": "orbsh/reflux",
-  "rev": "cf242e6",
-  "tag": "renderer-cf242e6",
-  "asset": "fluxen-renderer-cf242e6.tar.gz",
-  "asset_url": "https://github.com/orbsh/reflux/releases/download/renderer-cf242e6/fluxen-renderer-cf242e6.tar.gz",
+  "rev": "92f0a7f",
+  "tag": "renderer-92f0a7f",
+  "asset": "fluxen-renderer-92f0a7f.tar.gz",
+  "asset_url": "https://github.com/orbsh/reflux/releases/download/renderer-92f0a7f/fluxen-renderer-92f0a7f.tar.gz",
   "install": "python3 tools/vendor.py fetch"
 }
