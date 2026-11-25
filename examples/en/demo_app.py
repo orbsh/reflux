@@ -118,6 +118,10 @@ state = State()
 # The app itself. It is a module-level declaration so that a seam or a handler can be declared where
 # it is written (`@app.hooks(...)`, `@app.on(...)`) — the same sugar `@route` uses above the pages:
 # one hook is one registration, and there is no second spelling for it.
+#
+# `routes=Routes()` is not ceremony: omitting it lands on the module-level `DEFAULT` table (the one the
+# bare `@page` writes into), which two apps in one process would share. This line says "this app has
+# its own".
 app = App(routes=Routes())
 
 
