@@ -49,7 +49,6 @@ import json
 from pathlib import Path
 
 from reflux.app import App, Context, gated
-from reflux.auth import Auth
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
 from reflux.server import Request, Response
@@ -116,6 +115,13 @@ class State:
 state = State()
 
 
+# The app itself. It is a module-level declaration so that a seam or a handler can be declared where
+# it is written (`@app.hooks(...)`, `@app.on(...)`) — the same sugar `@route` uses above the pages:
+# one hook is one registration, and there is no second spelling for it.
+app = App(routes=Routes())
+
+
+@app.hooks("shell")
 def shell(ctx: Context) -> Accrete:
     """The frame every page is drawn into: a header, and the `routes` reader.
 
@@ -154,8 +160,9 @@ def shell(ctx: Context) -> Accrete:
     )
 
 
+@app.hooks("login.request")
 def demo_view(ctx, state):
-    """The demo's own login surface — the `view` seam, with the field names its page also uses."""
+    """The demo's own login surface — the `login.request` seam, with the field names its page also uses."""
     lines = [h.text("Demo sign-in", variant="heading-1")]
     if state == "refused":
         lines.append(h.text("Wrong username or password", variant="muted"))
@@ -172,22 +179,21 @@ def demo_view(ctx, state):
     )
 
 
+@app.hooks("login")
 def demo_verify(ctx, credentials, mode):
     """The demo's verifier: one account, in memory, and the framework does the rest.
 
     This is the entire authentication a deployment writes — `mode` is `login` or `signup`, so an
     app that creates accounts decides that here. The password is checked and dropped; nothing in
     this module stores it, logs it, or draws it.
+
+    The return is the verdict: `(True, user_id, info)` lets them in, `(False, reason)` refuses.
+    `info` is the app's own (none here); the framework only hands it back as `ctx.session`.
     """
     del ctx, mode  # the demo has no roles and no second kind of account
     if credentials.get("user") == "ada" and credentials.get("pass") == "pw":
-        return "user-ada"
-    return None
-
-
-# The app itself. It is a module-level declaration so that a handler can be declared where it is
-# written (`@app.on(...)` above it) — the same sugar `@route` uses above the pages.
-app = App(routes=Routes(), auth=Auth(verify=demo_verify, view=demo_view), shell=shell)
+        return (True, "user-ada", None)
+    return (False, "Wrong username or password")
 
 # The app's own table, typed: `@app.on(slots.name.change)` completes, and a name that is not in
 # `DemoSlots` is an error rather than a handler nothing ever sends to. `ctx.slot` is this table with

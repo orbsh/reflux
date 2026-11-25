@@ -27,7 +27,7 @@ boundary refuses them and `dests.announce` is how they are raised.
 A page is a node, or the ops of that turn (which is how a view also seeds the slots it reads). By
 default the route table answers; an app with a single page sets `app.page` instead of declaring
 routes. Every app has a **shell** — the frame around every page, its navigation and its header — and
-declares its own with `App(shell=…)`: a reader of the `routes` slot where pages belong. The first
+declares its own with `@app.hooks("shell")`: a reader of the `routes` slot where pages belong. The first
 frame then carries `create(shell)` plus the page in that slot, and a later page turn replaces only
 the slot. An app that declares none gets the default one, a single full-screen `routes`: one way for
 a page to reach the client, not a second shape for the app with nothing around its page.
@@ -578,7 +578,6 @@ class App:
         dead_after: float = 30.0,
         handler_timeout: float = 30.0,
         outbox: int = 256,
-        shell: Callable[[Context], Any] | None = None,
         auth: Auth | None = None,
     ) -> None:
         # One page tree, served at the origin root; its assets come from `root/static` under
@@ -597,7 +596,9 @@ class App:
         # shell(ctx) -> the frame around every page (nav, header, and a reader of ROUTES_SLOT).
         # A page turn replaces that one slot; an app that declares none gets `default_shell`, so
         # there is no second shape for the app with nothing around its page.
-        self.shell: Callable[[Context], Any] = shell if shell is not None else default_shell
+        # The frame around every page. `@app.hooks("shell")` replaces it; absent, `default_shell`.
+        # There is no constructor spelling: a seam is a seam (ADR-level rule — one table, one way in).
+        self.shell: Callable[[Context], Any] = default_shell
         # Live devices, keyed by the channel itself: reclaiming one is a matter of identity, so
         # nothing can remove a device that is not its own.
         # What the deployment wants to build and close around serving: a `ClientSession`, a pool, a
@@ -925,6 +926,10 @@ class App:
             self._hooks[name] = (handler, event)
             if name == "login":
                 self._enable_auth()
+            elif name == "shell":
+                # Rendering reads `self.shell`, so the seam has to land there too — a name in `_hooks`
+                # that nothing consults is the kind of seam that looks registered and never runs.
+                self.shell = handler
             return handler
 
         return register

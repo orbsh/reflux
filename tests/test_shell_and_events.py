@@ -37,7 +37,9 @@ def app_with_shell(*paths: str, page=None) -> App:
     table = Routes()
     for path in paths:
         table.add(path, page or page_for)
-    return App(routes=table, shell=shell)
+    app = App(routes=table)
+    app.hooks("shell")(shell)
+    return app
 
 
 def ops(device: FakeDevice, index: int = -1) -> list[dict]:

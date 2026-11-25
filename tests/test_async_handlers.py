@@ -133,7 +133,8 @@ class TestAwaitableHandlers(unittest.TestCase):
             await asyncio.sleep(0)
             return h.text("shell")
 
-        app = App(shell=shell)
+        app = App()
+        app.hooks("shell")(shell)
 
         @app.page
         def page(ctx, path: str):

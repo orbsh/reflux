@@ -39,7 +39,6 @@ import json
 from pathlib import Path
 
 from reflux.app import App, Context, gated
-from reflux.auth import Auth
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.routes import Routes
 from reflux.server import Request, Response
@@ -103,6 +102,12 @@ class State:
 state = State()
 
 
+# 应用本体。写成模块级声明，是为了接缝与处理器都可以写在它们所在的地方（`@app.hooks(...)`、
+# `@app.on(...)`）—— 与 `@route` 用在页面上方是同一套糖：一个钩子就是一次注册，没有第二种拼写。
+app = App(routes=Routes())
+
+
+@app.hooks("shell")
 def shell(ctx: Context) -> Accrete:
     """每一页都画在里面的那个 frame：一个页头，和 `routes` 这个读槽。
 
@@ -140,8 +145,9 @@ def shell(ctx: Context) -> Accrete:
     )
 
 
+@app.hooks("login.request")
 def demo_view(ctx, state):
-    """演示自己的登录面 —— `view` 这个接缝，字段名与它的页面用的是同一套。
+    """演示自己的登录面 —— `login.request` 这个接缝，字段名与它的页面用的是同一套。
     """
     lines = [h.text("演示登录", variant="heading-1")]
     if state == "refused":
@@ -159,21 +165,20 @@ def demo_view(ctx, state):
     )
 
 
+@app.hooks("login")
 def demo_verify(ctx, credentials, mode):
     """演示的验证器：一个账号，在内存里，其余都交给框架。
 
     这就是一次部署要写的全部认证 —— `mode` 是 `login` 或 `signup`，所以创建账号的应用在这里决定这件事。
     密码被核对完就丢掉；这个模块里没有任何地方存它、记它、画它。
+
+    返回值是判决：`(True, user_id, info)` 放行，`(False, 说明)` 拒绝。`info` 是应用自己的东西（这里没有），
+    框架只把它在你需要的地方递回来（`ctx.session`）。
     """
     del ctx, mode  # 这个演示没有角色，也没有第二种账号
     if credentials.get("user") == "ada" and credentials.get("pass") == "pw":
-        return "user-ada"
-    return None
-
-
-# 应用本体。写成模块级声明，是为了处理器可以写在它所在的地方（上面的
-# `@app.on(...)`）—— 与 `@route` 用在页面上方是同一套糖。
-app = App(routes=Routes(), auth=Auth(verify=demo_verify, view=demo_view), shell=shell)
+        return (True, "user-ada", None)
+    return (False, "用户或密码不对")
 
 # 应用自己的表，带类型：`@app.on(slots.name.change)` 有补全，而不在
 # `DemoSlots` 里的名字是错误，不是一个永远没人发的处理器。`ctx.slot` 是
