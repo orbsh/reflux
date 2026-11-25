@@ -582,7 +582,7 @@ pub fn image(value: Option<&str>, desc: Option<&str>, height: Option<&str>, sele
 }
 
 /// Build a `input` node (the wire type `input`).
-pub fn input(horizontal: Option<bool>, selector: Option<&str>, source: Option<Source>, kind: Option<Value>, multiline: Option<bool>, placeholder: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
+pub fn input(horizontal: Option<bool>, selector: Option<&str>, source: Option<Source>, emit: Option<Value>, kind: Option<Value>, multiline: Option<bool>, placeholder: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = horizontal {
         put(&mut attrs, "horizontal", Value::Bool(v));
@@ -595,6 +595,9 @@ pub fn input(horizontal: Option<bool>, selector: Option<&str>, source: Option<So
     let mut node = Map::new();
     if !attrs.is_empty() {
         put(&mut node, "attrs", Value::Object(attrs));
+    }
+    if let Some(v) = emit {
+        put(&mut node, "emit", v.clone());
     }
     if let Some(v) = id {
         put(&mut node, "id", s(v));

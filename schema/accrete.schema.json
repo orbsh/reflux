@@ -147,6 +147,21 @@
       },
       "type": "object"
     },
+    "Debounce": {
+      "additionalProperties": false,
+      "description": "`{debounce: ms}` — the change reaches the loom once the field has been quiet that long, carrying the\nlast value. The right shape for a search box: the reader stops, the frame leaves.",
+      "properties": {
+        "debounce": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "debounce"
+      ],
+      "type": "object"
+    },
     "Dir": {
       "description": "The direction a `tiles`' ITEMS flow in (ADR 0035) — flex's meaning, not \"the shape of an entry\":\n`row` lays the items out left to right, `row-reverse` right to left, `col` top to bottom,\n`col-reverse` bottom to top.\n\nThe words are flex's because a frame author already knows them, down to the `-reverse` spellings\nthat reverse the ORDER without changing the axis. The default is `col`, the one place this\nvocabulary deliberately differs from flex: flex lays out inline content and starts on a line,\nwhile `tiles` lays out a list of items — and an unlabelled list is vertical.",
       "enum": [
@@ -178,6 +193,17 @@
         }
       },
       "type": "object"
+    },
+    "Emit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Debounce"
+        },
+        {
+          "$ref": "#/$defs/Throttle"
+        }
+      ],
+      "description": "How a field's change reaches the loom (ADR 0032 §8). The keystroke updates the field's own copy at\nonce — what this decides is when the *loom* hears about it, which is what `submit: [change]` turns\ninto frames. Closed, and one arm at a time: debounce and throttle answer different questions (wait\nfor quiet, or keep a cadence), and a frame asking for both is asking for a shape nobody wants.\n\nAbsent means `{debounce: 250}`: typing stays instant (the display is the field's own signal), while\na per-keystroke `[change]` submit becomes one frame per pause instead of one frame per letter —\nwithout it a `sends: 1` loom spends its only send on the first character. `{debounce: 0}` is the\nway back to \"every keystroke, at once\"."
     },
     "Entry": {
       "description": "An entry: a group of named data fields, as one item of a list — each field a child node whose\n`attrs.selector` is the field's name (ADR 0031 §4 — an entry is the item of a `tiles` that has\n`fields`).\n\nA field whose direct children are themselves entries holds a LIST of entries, which a grid draws\nas child rows under the row it belongs to. That is the whole of \"hierarchy instead of spans\": the\ndata already says which row a row belongs to, so the markup does not merge cells to say it again.\n\nAn ENTRY, not a record: `record` implies a row, and a row is a direction word. `tiles` runs its\nitems along whichever axis `dir` names (`row | row-reverse | col | col-reverse`), and on the\nhorizontal one the items flow across a row — where \"record\" (a row's worth) would name the\ncontainer, not the thing. `entry` names the thing itself: what a list holds.",
@@ -660,6 +686,17 @@
               "type": "null"
             }
           ]
+        },
+        "emit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Emit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When this field's typing reaches the loom (ADR 0032 §8). Absent = `{debounce: 250}`, which is\nwhat makes a per-keystroke `submit: [change]` bearable; `{debounce: 0}` is a frame per letter.\nTiming, not addressing: `source`/`tag` say where the value lives, this says when it is heard."
         },
         "id": {
           "type": [
@@ -1399,6 +1436,21 @@
           "type": "string"
         }
       ]
+    },
+    "Throttle": {
+      "additionalProperties": false,
+      "description": "`{throttle: ms}` — the first change goes at once and the rest coalesce to at most one per window,\nthe window's last value landing at its end. The right shape for a live preview that must keep\nmoving while the reader types, without a frame per letter.",
+      "properties": {
+        "throttle": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "throttle"
+      ],
+      "type": "object"
     },
     "Tiles": {
       "description": "One container for a slot's items, cut into blocks (ADR 0031 §4): `rack` and `pages` were this\nnode with different steppers. `children` is the layout a tile is drawn with — a selector picks\none template, the rest of the list is the default (the mechanism `rack.item` used to carry).",

@@ -300,6 +300,22 @@ class ProfileTest(unittest.TestCase):
         with self.assertRaises(pydantic.ValidationError):
             sdk.text(source=sdk.Source(dest="chan"))
 
+    def test_a_field_says_how_often_it_is_heard(self):
+        # ADR 0032 §8: one window, one way — `debounce` or `throttle`, never both, and absent means the
+        # reader's 250 ms default (the wire does not spell it out).
+        field = sdk.input(tag="q", emit=sdk.Emit(sdk.Debounce(debounce=300)))
+        self.assertEqual(sdk.dump(field)["emit"], {"debounce": 300})
+        self.assertEqual(
+            sdk.dump(sdk.input(tag="q", emit=sdk.Emit(sdk.Throttle(throttle=50))))["emit"],
+            {"throttle": 50},
+        )
+        self.assertNotIn("emit", sdk.dump(sdk.input(tag="q")))
+        # The same window in both shapes is not a shape: the model refuses it, and so does the schema.
+        with self.assertRaises(pydantic.ValidationError):
+            sdk.input(tag="q", emit={"debounce": 1, "throttle": 2})
+        with self.assertRaises(pydantic.ValidationError):
+            sdk.input(tag="q", emit={"debounce": -1})
+
     def test_children_come_through(self):
         node = sdk.frame(sdk.text("a"), sdk.text("b"))
         self.assertEqual([n["type"] for n in sdk.dump(node)["children"]], ["text", "text"])

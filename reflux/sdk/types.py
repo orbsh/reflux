@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -39,6 +39,13 @@ class ClassAttr(BaseModel):
         description="The container's own layout direction (same field as FrameAttr; ADR 0010 defect fix:\npreviously only Case knew about horizontal, so the col class of select/rack could not be\noverridden by its own attrs — the parent case's horizontal only governed the parent div).",
     )
     selector: str | None = None
+
+
+class Debounce(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    debounce: conint(ge=0)
 
 
 class Dir(Enum):
@@ -234,6 +241,13 @@ class Theme(RootModel[Theme1 | Literal['dark']]):
     )
 
 
+class Throttle(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    throttle: conint(ge=0)
+
+
 class Window(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -276,6 +290,13 @@ class Canvas(BaseModel):
         description='The address of the ES module on the CDN (exports the mount/update/resize/unmount contract).',
     )
     type: Literal['canvas'] = 'canvas'
+
+
+class Emit(RootModel[Debounce | Throttle]):
+    root: Debounce | Throttle = Field(
+        ...,
+        description='How a field\'s change reaches the loom (ADR 0032 §8). The keystroke updates the field\'s own copy at\nonce — what this decides is when the *loom* hears about it, which is what `submit: [change]` turns\ninto frames. Closed, and one arm at a time: debounce and throttle answer different questions (wait\nfor quiet, or keep a cadence), and a frame asking for both is asking for a shape nobody wants.\n\nAbsent means `{debounce: 250}`: typing stays instant (the display is the field\'s own signal), while\na per-keystroke `[change]` submit becomes one frame per pause instead of one frame per letter —\nwithout it a `sends: 1` loom spends its only send on the first character. `{debounce: 0}` is the\nway back to "every keystroke, at once".',
+    )
 
 
 class ForceGraphStyle(BaseModel):
@@ -351,6 +372,10 @@ class Input(BaseModel):
         extra='forbid',
     )
     attrs: ClassAttr | None = None
+    emit: Emit | None = Field(
+        None,
+        description="When this field's typing reaches the loom (ADR 0032 §8). Absent = `{debounce: 250}`, which is\nwhat makes a per-keystroke `submit: [change]` bearable; `{debounce: 0}` is a frame per letter.\nTiming, not addressing: `source`/`tag` say where the value lives, this says when it is heard.",
+    )
     id: str | None = None
     kind: JsType | None = Field(
         None,
@@ -562,6 +587,7 @@ Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Pat
 Accept.model_rebuild()
 ButtonAttr.model_rebuild()
 ClassAttr.model_rebuild()
+Debounce.model_rebuild()
 Draggable.model_rebuild()
 FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
@@ -574,6 +600,7 @@ Stamp.model_rebuild()
 Step1.model_rebuild()
 Step2.model_rebuild()
 TextAttr.model_rebuild()
+Throttle.model_rebuild()
 Window.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()

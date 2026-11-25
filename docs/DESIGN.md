@@ -84,7 +84,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - **`attrs` 是每类型的白名单**（accrete 那份的形状），取值是枚举或受限值域；reflux 的 profile 在它上面选与设默认。生产端见不到自由 class 字符串——变体的闭集合由 profile 落成 class 令牌；accrete 的线上是允许 class 的，收窄落在 profile 与 SDK 上（见「组件词表」）。
 - **`source` 与 `sink` 是组件与事件流之间的两个方向**：线上各是一条 `Bind`（`{default, path, scope, slot, type}`）——`source` 是值进来的地方（`slot` 指向一个数据槽，`path` 从槽内节点里取子值，`type` 是 js-kind），`sink` 是值出去的地方（上行的落点）；`scope` 说这份值在哪一边作主（`remote` 在会话那一侧、`local` 在页面的值平面、`both` 本地赋值再镜像上去，缺省 `remote`）；没有 `slot` 的 `Bind` 是字面量，`default` 就是值。I4 的落点就在这一行：**要什么状态，组件随事件自己带上来**——`payload` 那张「这次上行带哪几件本地态」的声明表随旧规格退场，送什么由组件的实现定。
   - `source` 怎么用由组件语义定：叶把它当自己的值画出来（`text` 的文字、`image` 的 src……），输入从 js-kind 的默认值起手（槽值它不读，见「组件词表」），容器把槽值当子节点挂（一轮数组＝列表槽，单个节点＝片段）。槽还没写过时回退到默认值，所以「先出结构、再补数据」和「一帧里都发」都成立。
-  - **上行的时机是渲染器的**，不再是生产端能声明的契约：`input`（含 `multiline`）在**回车**时上行（`ui_leptos` 全仓没有失焦监听），空值不发；`select` 在一次选项点击时发；`loom` 在它 `attrs.submit` 点名的那几种时机上发（`button` 是其中一种，`enter` 是另一种），一次带上它打包的全部字段；`canvas` 模块从 `host.send` 发，`forcegraph` 走 `node-click`。代价写明：生产端想知道某个事件什么时候响，只能去读渲染器的实现——「时机是契约的一部分」这条让位给「组件是现成的」。
+  - **上行由 `loom` 的 `attrs.submit` 点名**：`button`／`enter`／`change` 三种时机，一次带上它打包的全部字段——字段自己没有出口（ADR 0039 §2）。`select` 的一次选项点击就是一次 `change`；`canvas` 模块从 `host.send` 发，`forcegraph` 走 `node-click`。生产端能声明的部分在字段上：`input.emit`（`{debounce: ms}`／`{throttle: ms}`，缺省 250ms 静默）说的是**一次击键多快被 loom 听见**，因此 `submit: [change]` 一秒钟能发几帧由它定；缺省值让"打字即发"变成"停顿即发"，`{debounce: 0}` 是回到每键一帧的写法。Enter 与按钮不等窗口：一次发送先取消挂起的窗口，再打包屏幕上的值。
 - **上行帧是 `{dest, id, data}`**：`id` 取认领该上行落点的那个节点自己的 id（不是祖先）——行的身份要上行，就把行的 id 给行里那个交互节点；`data` 是组件随事件送上来的那份本地态（送什么由组件定，`payload` 那张声明表已退场）。
 - **不需要 id 也能更新**：数据的地址是槽名，不是节点名。id 只为身份存在（行身份、跨结构变动的存活）。
 

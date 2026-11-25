@@ -193,6 +193,7 @@ def input(
     horizontal: bool | None = None,
     selector: str | None = None,
     source: Any = None,
+    emit: Emit | dict[str, Any] | None = None,
     kind: JsType | str | None = None,
     multiline: bool | None = None,
     placeholder: Any = None,
@@ -203,7 +204,7 @@ def input(
     attrs = drop_none(horizontal=horizontal, selector=selector)
     source = as_source(source, constants=False)
     placeholder = as_source(placeholder)
-    return parse(drop_none(type='input', attrs=attrs, source=source, placeholder=placeholder, id=id, kind=kind, multiline=multiline, tag=tag), Input)
+    return parse(drop_none(type='input', attrs=attrs, source=source, placeholder=placeholder, id=id, emit=emit, kind=kind, multiline=multiline, tag=tag), Input)
 
 
 def select(
