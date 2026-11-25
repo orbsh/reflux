@@ -19,6 +19,22 @@ from reflux.sdk import h
 from tests.fakes import FakeDevice, run_sync
 
 
+def with_login(verify: Any) -> App:
+    """An app whose `login` seam is `verify(ctx, credentials, mode) -> user id | None`.
+
+    The old `Auth(verify=…)` shape, said in the current one: a seam returns a verdict tuple, so the
+    adapter is where the two spellings meet and nothing else in this file has to change.
+    """
+
+    def login(ctx: Any, credentials: dict, mode: str) -> tuple:
+        user = verify(ctx, credentials, mode)
+        return (True, user, {}) if user else (False, "登录失败")
+
+    app = App()
+    app.hooks("login")(login)
+    return app
+
+
 class Scripted:
     """One connection with a script, close enough to a channel for `App.handle`."""
 
@@ -132,7 +148,7 @@ class TestAwaitableHandlers(unittest.TestCase):
             await asyncio.sleep(0)
             return "user-ada" if credentials.get("password") == "pw" else None
 
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         channel = Scripted(
             {"dest": "reflux:login", "data": {"username": "ada", "password": "pw"}}
         )

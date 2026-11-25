@@ -70,7 +70,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs
 
 from . import ingest, wire
-from .auth import Auth, Tokens, credentials_of
+from .auth import DEFAULT_IDLE_WINDOW, Auth, Tokens, credentials_of
 from .channel import EVICTED, JUDGED_DEAD, WS_PATH, ChannelClosed
 from .settle import maybe
 from .dests import Registry
@@ -384,6 +384,43 @@ class _Turn:
             self._ctx.device.emit(*buffered)
 
 
+def _legacy(verify: Callable) -> Callable:
+    """`Auth(verify=…)` lowered into the `login` seam — one table at runtime, two spellings at the edge.
+
+    The short form answers `user id | None`; the seam answers a verdict tuple and carries `info`. The
+    adapter is the whole of the difference, and it exists so a deployment that wrote the old shape is
+    not asked to rewrite itself the day the seam grew a return value.
+    """
+
+    async def login(ctx: Any, credentials: dict, mode: str) -> tuple:
+        from .settle import maybe as _maybe
+
+        user = await _maybe(verify, ctx, credentials, mode)
+        return (True, str(user), {}) if user else (False, "登录失败")
+
+    return login
+
+
+def _verdict(answer: Any, device: str, log: list[str]) -> tuple[bool, Any]:
+    """Read a `login` seam's answer: `(True, user_id, info)` or `(False, reason)`.
+
+    Anything else is a written mistake, and the framework says so instead of guessing what was meant:
+    `None`, a bare id, a mismatched tuple — all of them are refusals with the framework's own words,
+    because a page showing "the app returned a string" is worse than a page showing nothing.
+    """
+    if isinstance(answer, tuple) and len(answer) >= 2:
+        ok = answer[0]
+        if ok is True:
+            user = str(answer[1])
+            info = answer[2] if len(answer) > 2 and isinstance(answer[2], dict) else {}
+            return True, (user, info)
+        if ok is False:
+            reason = answer[1]
+            return False, (reason if isinstance(reason, str) else str(reason)) or "登录失败"
+    log.append(f"login hook for {device} returned {answer!r}; expected (True, user, info) or (False, reason)")
+    return False, "登录失败（处理器返回的形状不对，见日志）"
+
+
 @dataclass
 class Context:
     """One delivery — and the room around it: this app, the device it was addressed to, its frame.
@@ -419,6 +456,26 @@ class Context:
     def data(self) -> dict:
         """The bag the business hangs on this connection. The framework still never reads it."""
         return self.device.data
+
+    @property
+    def user(self) -> str | None:
+        """The account this delivery acts as — `None` on an anonymous connection.
+
+        The framework's one fact: `login` returned it, the registry keeps it, and every handler with
+        `auth=True` may rely on it being there (the gate refused the delivery otherwise).
+        """
+        user = self.device.data.get("user")
+        return user or None
+
+    @property
+    def session(self) -> dict:
+        """The app's own facts about that account — the `info` half of the login tuple, untouched.
+
+        Absent for an anonymous delivery. The framework stores whatever the app returned and hands
+        back the same dict; it never reads a key of it, and never invents one.
+        """
+        user = self.user
+        return self.app.sessions.get(user, {}) if user else {}
 
     # --- what it can say, and where ---
     @property
@@ -582,6 +639,15 @@ class App:
         self.tokens = (
             Tokens(idle_window=auth.idle_window, store=auth.store) if auth is not None else None
         )
+        # The extension points the app takes over, and the facts it keeps about an account. `hooks`
+        # name a seam ("login", "login.request", "shell"); a handler registered for one replaces the
+        # framework's default, and a second argument renames the event the seam answers on.
+        self._hooks: dict[str, tuple[Callable, str | None]] = {}
+        self.sessions: dict[str, dict] = {}
+        if auth is not None and getattr(auth, "verify", None) is not None:
+            # The short form lands in the same table the decorator writes to, so there is one seam at
+            # runtime no matter which spelling a deployment used.
+            self._hooks["login"] = (_legacy(auth.verify), None)
         if auth is not None:
             self.dests.builtin(LOGIN, self._login)
             self.dests.builtin(SIGNUP, self._signup)
@@ -624,6 +690,23 @@ class App:
         device.data["user"] = user
         device.data["token"] = token
 
+    def _open_auth(self, device: Device, state: str, note: str = "") -> None:
+        """Draw the login surface into the reserved slot, with the refusal's words when there are some."""
+        if self.tokens is None:  # no login seam: there is no surface to open
+            return
+        ctx = self.context(device)
+        from .auth import default_view
+
+        view = self.hook("login.request")
+        if view is None and self.auth is not None:
+            view = self.auth.screen
+        if view is None:
+            view = default_view
+        surface = view(ctx, state)
+        ctx.slot(AUTH_SLOT).set(
+            h.frame(surface, h.text(note, variant="muted")) if note else surface
+        )
+
     # --- authentication: the three verbs the venue owns ------------------------------------
 
     async def _login(self, ctx: Context, frame: dict) -> None:
@@ -635,28 +718,39 @@ class App:
         await self._attempt(ctx, frame, "signup")
 
     async def _attempt(self, ctx: Context, frame: dict, mode: str) -> None:
+        """Run the app's `login` seam: prove the credential, bind the device, hand back the answer.
+
+        The seam returns a tuple whose FIRST element is the verdict — `(True, user_id, info)` or
+        `(False, reason)`. Anything else is the app's mistake, not a refusal: the framework says so in
+        the log and answers with its own sentence rather than passing a malformed value off as one.
+        """
         device = ctx.device
-        if self.auth is None or self.tokens is None:
+        handler = self.hook("login")
+        if handler is None or self.tokens is None:
             return
         credentials = credentials_of(frame)
         try:
-            user = await maybe(self.auth.verify, ctx, credentials, mode)
+            answer = await maybe(handler, ctx, credentials, mode)
         except asyncio.CancelledError:
             raise
         except Exception:
             # A deployment's verifier is a deployment's risk: a raise is a refusal here, and the
             # device survives it (the same rule every handler follows). The log carries the why.
-            self.dests.log.append(f"auth verify raised for {device.id}:\n{traceback.format_exc()}")
-            user = None
-        if not user:
-            self._open_auth(device, "refused")
+            self.dests.log.append(f"login hook raised for {device.id}:\n{traceback.format_exc()}")
+            answer = (False, "登录时出错，请稍后再试")
+        ok, rest = _verdict(answer, device.id, self.dests.log)
+        if not ok:
+            self._open_auth(device, "refused", note=rest)
             return
+        user, info = rest
         previous = device.data.get("token")
         if isinstance(previous, str):
             self.tokens.drop(previous)  # a login on this connection rotates its credential
-        token = self.tokens.mint(str(user))
-        device.data["user"] = str(user)
+        token = self.tokens.mint(user)
+        device.data["user"] = user
         device.data["token"] = token
+        if info:
+            self.sessions[user] = info
         # The token goes out as a marker the runtime keeps; the line says who is now bound. Then the
         # page is drawn again, because a page may answer differently for a user than for a visitor.
         ctx.slot(AUTH_SLOT).set(
@@ -669,7 +763,7 @@ class App:
     async def _logout(self, ctx: Context, frame: dict) -> None:
         """Forget the credential: the row goes, the connection unbinds, the surface comes back."""
         device = ctx.device
-        if self.auth is None:
+        if self.tokens is None:
             return
         token = device.data.pop("token", None)
         if self.tokens is not None and isinstance(token, str):
@@ -690,7 +784,7 @@ class App:
         reaches the application — the app cannot tell that someone tried, which is why the framework
         opens the login surface itself rather than asking the app to.
         """
-        if self.auth is None:
+        if self.tokens is None:  # no login seam, no door: nothing can be gated into existence
             return False
         name = frame.get("dest")
         if not isinstance(name, str):
@@ -707,13 +801,6 @@ class App:
         )
         self._open_auth(device, "login")
         return True
-
-    def _open_auth(self, device: Device, state: str) -> None:
-        """Draw the login surface into the reserved slot: the app's view, or the framework's own."""
-        if self.auth is None:
-            return
-        ctx = self.context(device)
-        ctx.slot(AUTH_SLOT).set(self.auth.screen(ctx, state))
 
     async def _on_nav(self, ctx: Context, frame: dict) -> None:
         """The page asked for another path — back or forward: the only navigation this wire has.
@@ -813,6 +900,60 @@ class App:
             name = name.name
         self.views[name] = render
 
+    def hooks(self, name: str, event: str | None = None) -> Callable[[Callable], Callable]:
+        """Take over one of the framework's seams: `@app.hooks("login")`.
+
+        The seams are the places where the framework would otherwise decide for the deployment:
+
+        - `"login"` — prove a credential. Called as `(ctx, credentials, mode)` where `mode` is
+          `"login"` or `"signup"` (one seam, and the mode is what lets a deployment create an account
+          on the same call it checks one); it returns
+          `(True, user_id, info)` on success or `(False, reason)` on refusal. `info` is the app's own
+          and the framework only hands it back (`ctx.session`); `reason` is shown to the person.
+        - `"login.request"` — the surface the login seam is drawn in, `(ctx, state) -> node`. Absent,
+          the framework draws its own two-field screen.
+        - `"shell"` — the frame around every page, `(ctx) -> node`. Absent, `default_shell`.
+
+        The second argument is the event's name on the wire: `@app.hooks("login", "登录事件")` makes
+        the page's uplink `{"dest": "登录事件"}`. The seam keeps its own name either way — a
+        deployment renames what the page says, never what the framework asks for.
+        """
+
+        def register(handler: Callable) -> Callable:
+            if not callable(handler):
+                raise TypeError(f"hooks({name!r}): handler must be callable")
+            self._hooks[name] = (handler, event)
+            if name == "login":
+                self._enable_auth()
+            return handler
+
+        return register
+
+    def hook(self, name: str) -> Callable | None:
+        """The handler registered for a seam, if the app registered one."""
+        found = self._hooks.get(name)
+        return found[0] if found else None
+
+    def hook_event(self, name: str) -> str:
+        """The wire name a seam answers on: the app's rename, else the seam's own name."""
+        found = self._hooks.get(name)
+        return (found[1] or name) if found else name
+
+    def _enable_auth(self) -> None:
+        """A `login` seam is what turns authentication on; `auth=Auth(...)` only carries settings.
+
+        Called where the seam is registered (decorators run after `App(...)`), which is also why the
+        verbs are registered here rather than in `__init__`: an app with no `login` seam has no door,
+        not a locked one — a frame naming `login` is refused as unregistered.
+        """
+        if self.tokens is None:
+            self.tokens = Tokens(
+                idle_window=self.auth.idle_window if self.auth is not None else DEFAULT_IDLE_WINDOW,
+                store=self.auth.store if self.auth is not None else None,
+            )
+        for verb, handler in ((LOGIN, self._login), (SIGNUP, self._signup), (LOGOUT, self._logout)):
+            self.dests.builtin(verb, handler)
+
     def view_for(self, name: str) -> Callable[[Any], Any] | None:
         """How this slot's values become nodes, if the app was told (`Slot.view`); None otherwise."""
         return self.views.get(name)
@@ -854,6 +995,11 @@ class App:
             drawn = page_of(ctx, await maybe(self._single, ctx, device.path), "the single page")
         else:
             match = self.routes.match(device.path)
+            if match is not None and match.meta.get("auth") and not device.data.get("user"):
+                # The page is the app's, so it still draws — it is context, not a secret. The surface
+                # opens beside it, which is where a person needs it; a page that must not be seen at
+                # all is the app's own 404 to write.
+                self._open_auth(device, "login")
             drawn = None
             if match is not None:
                 ctx = self.context(device, match=match)

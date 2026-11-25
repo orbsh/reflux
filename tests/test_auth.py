@@ -25,6 +25,22 @@ from tests.fakes import run_sync
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, SIGNUP
 
 
+def with_login(verify: Any) -> App:
+    """An app whose `login` seam is `verify(ctx, credentials, mode) -> user id | None`.
+
+    The old `Auth(verify=…)` shape, said in the current one: a seam returns a verdict tuple, so the
+    adapter is where the two spellings meet and nothing else in this file has to change.
+    """
+
+    def login(ctx: Any, credentials: dict, mode: str) -> tuple:
+        user = verify(ctx, credentials, mode)
+        return (True, user, {}) if user else (False, "登录失败")
+
+    app = App()
+    app.hooks("login")(login)
+    return app
+
+
 class Scripted:
     """A connection with a script: yields its frames, then ends (so `handle` returns).
 
@@ -88,7 +104,7 @@ def verify(ctx, credentials, mode):
 
 class TestTheGate(unittest.TestCase):
     def test_an_anonymous_gated_event_never_reaches_its_handler(self) -> None:
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         called: list[dict] = []
 
         def handler(ctx, frame):
@@ -110,7 +126,7 @@ class TestTheGate(unittest.TestCase):
         self.assertIn("auth-form", ids(surface[-1]["data"]))
 
     def test_the_same_event_lands_once_a_login_bound_the_connection(self) -> None:
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         seen: list[dict] = []
         app.on("vault.open", lambda ctx, frame: seen.append(ctx.data), auth=True)
         channel = Scripted(
@@ -128,7 +144,7 @@ class TestTheGate(unittest.TestCase):
         self.assertTrue(any("reflux:token" in ids(op.get("data")) for op in drawn))
 
     def test_a_wrong_password_draws_the_surface_and_binds_nothing(self) -> None:
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         app.on("vault.open", lambda ctx, frame: None, auth=True)
         channel = Scripted(
             {"dest": LOGIN, "data": {"username": "ada", "password": "nope"}},
@@ -161,7 +177,7 @@ class TestTheGate(unittest.TestCase):
 
 class TestTheToken(unittest.TestCase):
     def test_a_token_carries_the_same_user_onto_a_new_connection(self) -> None:
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         who: list = []
 
         def on_connect(ctx, frame):
@@ -178,7 +194,7 @@ class TestTheToken(unittest.TestCase):
         self.assertEqual(who, ["user-ada"], "hello adopts the token before anything is drawn")
 
     def test_a_revoked_token_leaves_the_next_connection_anonymous(self) -> None:
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         who: list = []
         app.on("connect", lambda ctx, frame: who.append(ctx.data.get("user")))
 
@@ -203,7 +219,7 @@ class TestTheToken(unittest.TestCase):
         self.assertEqual(len(table), 0, "and looking it up is what drops it")
 
     def test_a_login_on_the_same_connection_rotates_its_token(self) -> None:
-        app = App(auth=Auth(verify=verify))
+        app = with_login(verify)
         channel = Scripted(
             {"dest": LOGIN, "data": {"username": "ada", "password": "pw"}},
             {"dest": LOGIN, "data": {"username": "ada", "password": "pw"}},
@@ -214,7 +230,7 @@ class TestTheToken(unittest.TestCase):
 
 class TestTheLog(unittest.TestCase):
     def test_the_log_keeps_no_password_and_no_token(self) -> None:
-        app = App(auth=Auth(verify=lambda ctx, creds, mode: "user-ada"))
+        app = with_login(lambda ctx, creds, mode: "user-ada")
         channel = Scripted(
             {"dest": SIGNUP, "data": {"username": "ada", "password": "hunter2"}},
         )
