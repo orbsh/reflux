@@ -270,8 +270,8 @@ def browser_phase() -> list[tuple[str, bool, str]]:
         cdp.eval("document.querySelector('input').focus()")
         typed = "浏览器里发的一句话"
         cdp.type_text(typed)
-        # Submit with the button, not with Enter: a bundle sends on a click when its `submit` names
-        # `button` (the composer is one `bundle` with a typed field and that press), and the click is
+        # Submit with the button, not with Enter: a loom sends on a click when its `submit` names
+        # `button` (the composer is one `loom` with a typed field and that press), and the click is
         # the only timing this gate can drive without a keyboard race.
         cdp.click_js(
             "[...document.querySelectorAll('.button')].filter(el => (el.innerText || '').trim() === '发送')[0]"

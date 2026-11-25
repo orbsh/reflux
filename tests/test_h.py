@@ -73,11 +73,11 @@ class AClosureInsideData(unittest.TestCase):
 
         @app.page("/", title="t")
         def home(ctx, match):
-            # The landing rides the bundle: a press is the bundle's send, not the button's.
+            # The landing rides the loom: a press is the loom's send, not the button's.
             ctx.page(
                 h.node(
                     ("frame", {"id": "r"}, [
-                        ("bundle", {"sink": hit, "submit": ["button"], "id": "g"},
+                        ("loom", {"sink": hit, "submit": ["button"], "id": "g"},
                          [("button", {"id": "b"}, "press")]),
                     ])
                 )

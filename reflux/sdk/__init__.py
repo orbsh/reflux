@@ -1,6 +1,6 @@
 """reflux's Python SDK: accrete's wire types, generated from the schema, plus reflux's profile.
 
-    from reflux.sdk import frame, text, input, bundle, JsType, parse, dump
+    from reflux.sdk import frame, text, input, loom, JsType, parse, dump
     from reflux.sdk import h                 # the same builders, under the front-end name
     from reflux.sdk import markers
 

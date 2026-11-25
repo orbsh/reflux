@@ -255,7 +255,7 @@ if __name__ == "__main__":
     unittest.main()
 
 class TheLoginSurface(unittest.TestCase):
-    """A field has no exit of its own (ADR 0032 §2, revised): its exit is the bundle's.
+    """A field has no exit of its own (ADR 0032 §2, revised): its exit is the loom's.
 
     The password field still has to say what it is — a `password` input, not a text one — and that
     is the field's own `kind` (ADR 0032 §2, revised 2026-11-24): a field has one type, and it is

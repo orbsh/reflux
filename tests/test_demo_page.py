@@ -229,7 +229,7 @@ class Script(DemoCase):
         nodes = ops(frames, "set", "demo.review_form")
         self.assertEqual(len(nodes), 1)
         form = nodes[0]["data"]
-        self.assertEqual((form["type"], form["sink"]["dest"], form["attrs"]["submit"]), ("bundle", "demo.review", ["enter", "button"]))
+        self.assertEqual((form["type"], form["sink"]["dest"], form["attrs"]["submit"]), ("loom", "demo.review", ["enter", "button"]))
         table = [node for node in walk(form) if node.get("type") == "tiles"][0]
         self.assertEqual([field["key"] for field in table["attrs"]["fields"]], ["score", "name", "dept", "avg", "note"])
         self.assertEqual(table["attrs"]["header"]["selector"], "review-head")

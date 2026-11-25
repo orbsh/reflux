@@ -123,7 +123,7 @@ def page(ctx: Context, match) -> None:
             h.text(source=slots.status, variant="muted", id="status"),
             h.tiles(source=slots.messages, id="messages"),
             h.frame(
-                h.bundle(
+                h.loom(
                     h.input(tag="text", id="composer"),
                     h.button("Send"),
                     sink=slots.chat.send,
@@ -131,7 +131,7 @@ def page(ctx: Context, match) -> None:
                     reset="clear",
                     id="send",
                 ),
-                h.bundle(
+                h.loom(
                     h.button("Stop"),
                     sink=slots.chat.stop,
                     submit="button",

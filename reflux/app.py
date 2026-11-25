@@ -123,7 +123,7 @@ def gated(fn: Callable) -> Landing:
 # upgrade instead of a request). The difference is what lets `mount("/x")` be a decorator.
 _UNSET = object()
 
-# The page tree: `reflux/www` when reflux came from a wheel (the build copies it in, renderer bundle
+# The page tree: `reflux/www` when reflux came from a wheel (the build copies it in, renderer loom
 # and all), `www/` at the repository root in a checkout or an editable install. Same files either way.
 PAGE_ROOT = Path(__file__).resolve().parent / "www"
 if not PAGE_ROOT.is_dir():
@@ -805,11 +805,11 @@ class App:
         if not isinstance(tree, (dict, list)):
             return tree, False
         seen: dict[str, int] = {}
-        by_function: dict[int, str] = {}  # one closure, one name: a bundle and its button are one
+        by_function: dict[int, str] = {}  # one closure, one name: a loom and its button are one
         named: list[bool] = []  # a one-element box: the walk is recursive, the flag is the draw's
 
         def name_of(fn: Any) -> str:
-            # The same closure bound twice in one draw is one landing point: a bundle carries the
+            # The same closure bound twice in one draw is one landing point: a loom carries the
             # sink its button sends with, and both are the page saying the same thing. A *different*
             # closure gets its own name, which is what makes a per-row handler possible.
             if id(fn) in by_function:

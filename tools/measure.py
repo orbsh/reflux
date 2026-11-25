@@ -90,7 +90,7 @@ def section_bytes() -> None:
         ),
         ("remove row (`remove`)", wire.draw(wire.remove("rows", "row-1"))),
         (
-            "bundle submit (`set`)",
+            "loom submit (`set`)",
             wire.draw(wire.set("submitted", h.text('已提交 {"pass": "secret", "user": "ada"}'))),
         ),
         ("page turn (`create` + 2 seeded rows)", seed_frame()),
@@ -200,7 +200,7 @@ def section_paint() -> None:
                 dcls.append(float(dcl))
 
     rows = [
-        ["pinned renderer bundle", f"{renderer:,} B", "js + wasm + 2 css, from versions.json"],
+        ["pinned renderer loom", f"{renderer:,} B", "js + wasm + 2 css, from versions.json"],
         ["reflux's own assets", f"{own:,} B", "reflux.css + reflux.js"],
         [
             "document start → drawn tree (median of 3)",

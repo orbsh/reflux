@@ -23,7 +23,7 @@
     "             named by its child's `attrs.selector`, and a `tiles` header/field by theirs. That is",
     "             why `selector` is a builder keyword \u2014 the wire would otherwise have no way to say a",
     "             field's name. `class` stays hidden: the token lane is the only path to a class.",
-    "submit:      a bundle's timing (ADR 0032) is a plain attribute, not a channel: `enter|button|change`,",
+    "submit:      a loom's timing (ADR 0032) is a plain attribute, not a channel: `enter|button|change`,",
     "             a bare string or a list on the wire, absent = [enter]. The builder takes either spelling.",
     "tokens:      enum value -> class token, filled in when the styling layer lands (M1). Until then the",
     "             builders offer no class strings at all \u2014 the producer cannot reach a free class."
@@ -92,7 +92,7 @@
         "default": false
       }
     },
-    "bundle": {
+    "loom": {
       "expose": true,
       "positional": "children",
       "children": true,

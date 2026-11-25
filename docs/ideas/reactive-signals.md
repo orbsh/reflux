@@ -162,7 +162,7 @@ def register(app: App) -> None:
         return h.frame(
             ui.text(lambda: str(count.value), variant="heading-1"),
                 ui.text(lambda: f"全服 {global_total.value}", variant="muted"),
-                h.bundle(h.button("+", sink=lambda _: bump(+1)), sink=lambda _: bump(+1), submit=["button"]),
+                h.loom(h.button("+", sink=lambda _: bump(+1)), sink=lambda _: bump(+1), submit=["button"]),
                 # 行 id 由适配器生成并交给渲染函数，`remove` 才命得中（提案原文的 `render_item(item)`
                 # 拿不到 id，这是要改的一处签名）
             ui.list_tiles(history, lambda row, row_id: h.text(row, id=row_id)),

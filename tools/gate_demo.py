@@ -268,7 +268,7 @@ def socket_phase() -> list[tuple[str, bool, str]]:
                 )
             )
 
-            # 10 — the review: a table whose rows come from a slot, and a form a bundle can pack.
+            # 10 — the review: a table whose rows come from a slot, and a form a loom can pack.
             formed = ops(frames, "set", "demo.review_form")
             form = formed[0]["data"] if formed else {}
             table = next((n for n in nodes(form) if n.get("type") == "tiles"), {})

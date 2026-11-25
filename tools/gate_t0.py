@@ -9,7 +9,7 @@ rather than in a browser someone has to read.
 
     python3 tools/gate_t0.py
 
-Needs no fluxen checkout once the bundle is installed (`python3 tools/vendor.py fetch`): it lives,
+Needs no fluxen checkout once the loom is installed (`python3 tools/vendor.py fetch`): it lives,
 gitignored, under `www/static/vendor/`. Exit code 0 = gate passed.
 """
 

@@ -22,7 +22,7 @@ writing pages through strings would buy a string and cost a signature — hence 
 from __future__ import annotations
 
 from .builders import (
-    bundle,
+    loom,
     button,
     canvas,
     entry,
@@ -40,7 +40,7 @@ from .builders import (
 from .node import node
 
 __all__ = [
-    "bundle",
+    "loom",
     "button",
     "canvas",
     "entry",

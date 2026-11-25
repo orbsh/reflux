@@ -7,7 +7,7 @@
 //! and compares bytes; nothing here talks to a server, because producing the frame is the SDK's
 //! whole job.
 //!
-//! The vocabulary is ADR 0031/0032/0039's: a form is a `bundle` (fields tagged, timing in
+//! The vocabulary is ADR 0031/0032/0039's: a form is a `loom` (fields tagged, timing in
 //! `attrs.submit`, the exit on `sink`), a list/grid is `tiles`, and each direction has its own
 //! address — a `Source` in, a `Sink` out — with `scope` naming where it is authoritative
 //! (`remote` unless a node reads the page's own vals plane). A field's parse and element type are
@@ -16,7 +16,7 @@
 use reflux_sdk::landings::Landings;
 use reflux_sdk::markers;
 use reflux_sdk::types::{
-    bundle, button, frame, input, text, tiles, FrameVariant, JsType, Sink, Source, TextVariant,
+    loom, button, frame, input, text, tiles, FrameVariant, JsType, Sink, Source, TextVariant,
 };
 use reflux_sdk::wire::{append, create, draw, remove, set};
 use serde_json::{json, Value};
@@ -60,15 +60,15 @@ fn local_slot(slot: &str, path: &str) -> Source {
     }
 }
 
-/// The button of a one-button bundle: its label is a `source`, and a press submits the bundle, which
+/// The button of a one-button loom: its label is a `source`, and a press submits the loom, which
 /// holds the exit (ADR 0039 §2a — a button has no `sink` of its own).
 fn press(label: &str) -> Value {
     button(Some(label), None, None, None, None)
 }
 
-/// A one-button bundle — the vocabulary's only clickable, and the demo's way between pages.
-fn nav_bundle(label: &str, event: &str) -> Value {
-    bundle(
+/// A one-button loom — the vocabulary's only clickable, and the demo's way between pages.
+fn nav_loom(label: &str, event: &str) -> Value {
+    loom(
         &[press(label)],
         None,  // reset,
         None,  // selector,
@@ -96,12 +96,12 @@ fn card(children: &[Value], id: &str) -> Value {
     )
 }
 
-/// One row: a draggable frame (the cargo) inside the bundle whose submit carries the row id up.
+/// One row: a draggable frame (the cargo) inside the loom whose submit carries the row id up.
 ///
 /// The cargo frame names itself `<id>-cargo`: a drop reports the dragged node's own id, and the
-/// bundle already owns `<id>` — one id per tree, on both sides of the wire (ADR 0034).
+/// loom already owns `<id>` — one id per tree, on both sides of the wire (ADR 0034).
 ///
-/// Both children say how the row is divided: a bundle is a flex row whose items all grow, so the
+/// Both children say how the row is divided: a loom is a flex row whose items all grow, so the
 /// cargo takes the width and the ✕ keeps its own size, centred in the height it does not fill.
 fn row_node(id: &str, value: &str) -> Value {
     let remove = remote_sink("row.remove");
@@ -134,7 +134,7 @@ fn row_node(id: &str, value: &str) -> Value {
             None,
         ),
     ];
-    bundle(
+    loom(
         &children,
         None,  // reset,
         None,  // selector,
@@ -164,7 +164,7 @@ fn home() -> Value {
                 None,
                 Some(TextVariant::Muted),
             ),
-            bundle(
+            loom(
                 &[input(
                     None,
                     None,
@@ -198,7 +198,7 @@ fn home() -> Value {
                 None,
                 Some(TextVariant::Muted),
             ),
-            bundle(
+            loom(
                 &[press("加一行")],
                 None,  // reset,
                 None,  // selector,
@@ -237,8 +237,8 @@ fn home() -> Value {
                 None,
                 Some(TextVariant::Muted),
             ),
-            // The credential bundle speaks the framework's verb: this app never sees the password.
-            bundle(
+            // The credential loom speaks the framework's verb: this app never sees the password.
+            loom(
                 &[
                     frame(
                         &[
@@ -292,7 +292,7 @@ fn home() -> Value {
                 Some("auth-region"),
                 None,
             ),
-            bundle(
+            loom(
                 &[press("私密")],
                 None,  // reset,
                 None,  // selector,
@@ -302,7 +302,7 @@ fn home() -> Value {
                 None,
                 Some("vault")),
             text(None, None, None, Some(remote_slot(SECRET)), Some("secret"), None),
-            bundle(
+            loom(
                 &[press("退出")],
                 None,  // reset,
                 None,  // selector,
@@ -414,12 +414,12 @@ fn about() -> Value {
                 None,
                 None,
             ),
-            nav_bundle("回到演示", "go.home"),
+            nav_loom("回到演示", "go.home"),
         ],
     )
 }
 
-/// The demo's own login surface: a heading, the refusal line, and the credential bundle.
+/// The demo's own login surface: a heading, the refusal line, and the credential loom.
 fn login_surface() -> Value {
     frame(
         &[
@@ -439,7 +439,7 @@ fn login_surface() -> Value {
                 None,
                 Some(TextVariant::Muted),
             ),
-            bundle(
+            loom(
                 &[
                     input(
                         None,

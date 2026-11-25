@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "BundleAttr", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Bundle", "Entry", "Frame", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Window", "Wrap1", "Wrap", "Button", "Canvas", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -253,21 +253,6 @@ class Wrap(RootModel[Wrap1 | Literal['nowrap']]):
     )
 
 
-class BundleAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    reset: ResetMode | None = Field(
-        None, description='What the fields become after a send. Absent = `keep`.'
-    )
-    selector: str | None = None
-    sends: int | None = Field(
-        None,
-        description="How many sends this bundle has: absent or `-1` = unlimited, `0` = locked from the start. Each send\ntakes one; at zero the bundle's fields are disabled and it refuses to send (ADR 0032 §5).",
-    )
-    submit: SubmitSet | None = Field(
-        None, description='When to send. Absent = `[enter]`.'
-    )
-
-
 class Button(BaseModel):
     attrs: ButtonAttr | None = None
     id: str | None = None
@@ -381,9 +366,24 @@ class Input(BaseModel):
     source: Source | None = None
     tag: str | None = Field(
         None,
-        description="The field's name inside an enclosing bundle: the bundle packs this tag\nas the key, so the sink's address no longer names the field.",
+        description="The field's name inside an enclosing loom: the loom packs this tag\nas the key, so the sink's address no longer names the field.",
     )
     type: Literal['input'] = 'input'
+
+
+class LoomAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    reset: ResetMode | None = Field(
+        None, description='What the fields become after a send. Absent = `keep`.'
+    )
+    selector: str | None = None
+    sends: int | None = Field(
+        None,
+        description="How many sends this loom has: absent or `-1` = unlimited, `0` = locked from the start. Each send\ntakes one; at zero the loom's fields are disabled and it refuses to send (ADR 0032 §5).",
+    )
+    submit: SubmitSet | None = Field(
+        None, description='When to send. Absent = `[enter]`.'
+    )
 
 
 class PanelAttr(BaseModel):
@@ -394,7 +394,7 @@ class PanelAttr(BaseModel):
     )
     dismiss: bool | None = Field(
         None,
-        description='Closes on a click outside the body — the mask for `viewport`, "anywhere else" for the rest.\nA panel without it can only be closed by its trigger (a bundle that must not lose its work).',
+        description='Closes on a click outside the body — the mask for `viewport`, "anywhere else" for the rest.\nA panel without it can only be closed by its trigger (a loom that must not lose its work).',
     )
     place: PanelPlace | None = Field(
         None, description='Where it sits. Absent = `inline`.'
@@ -474,18 +474,6 @@ class ForceGraph(BaseModel):
     type: Literal['forcegraph'] = 'forcegraph'
 
 
-class Bundle(BaseModel):
-    attrs: BundleAttr | None = None
-    children: list[Accrete] | None = None
-    id: str | None = None
-    sink: Sink | None = None
-    tag: str | None = Field(
-        None,
-        description="The key this bundle contributes to its parent's packed object — the same `tag` rule a field follows,\nbecause a nested bundle is an input of the enclosing one. Only read when the bundle sits inside another\nbundle; with no `tag` it packs nothing into its parent (`id` is identity, `dest` is where it sends, and\nneither is a name — ADR 0032 §4).",
-    )
-    type: Literal['bundle'] = 'bundle'
-
-
 class Entry(BaseModel):
     attrs: ClassAttr | None = None
     children: list[Accrete] | None = Field(
@@ -511,6 +499,18 @@ class Frame(BaseModel):
     type: Literal['frame'] = 'frame'
 
 
+class Loom(BaseModel):
+    attrs: LoomAttr | None = None
+    children: list[Accrete] | None = None
+    id: str | None = None
+    sink: Sink | None = None
+    tag: str | None = Field(
+        None,
+        description="The key this loom contributes to its parent's packed object — the same `tag` rule a field follows,\nbecause a nested loom is an input of the enclosing one. Only read when the loom sits inside another\nloom; with no `tag` it packs nothing into its parent (`id` is identity, `dest` is where it sends, and\nneither is a name — ADR 0032 §4).",
+    )
+    type: Literal['loom'] = 'loom'
+
+
 class Panel(BaseModel):
     attrs: PanelAttr | None = None
     children: list[Accrete] | None = None
@@ -532,7 +532,7 @@ class Select(BaseModel):
     source: Source | None = None
     tag: str | None = Field(
         None,
-        description="The field's name inside an enclosing bundle (same rule as `input`).",
+        description="The field's name inside an enclosing loom (same rule as `input`).",
     )
     type: Literal['select'] = 'select'
 
@@ -555,7 +555,7 @@ class Tiles(BaseModel):
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Bundle | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Text | Stamp], Field(discriminator='type')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Text | Stamp], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
@@ -575,20 +575,20 @@ Step1.model_rebuild()
 Step2.model_rebuild()
 TextAttr.model_rebuild()
 Window.model_rebuild()
-BundleAttr.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()
 ForceGraphStyle.model_rebuild()
 Image.model_rebuild()
 Input.model_rebuild()
+LoomAttr.model_rebuild()
 PanelAttr.model_rebuild()
 Path.model_rebuild()
 Text.model_rebuild()
 TilesAttr.model_rebuild()
 ForceGraph.model_rebuild()
-Bundle.model_rebuild()
 Entry.model_rebuild()
 Frame.model_rebuild()
+Loom.model_rebuild()
 Panel.model_rebuild()
 Select.model_rebuild()
 Svg.model_rebuild()

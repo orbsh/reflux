@@ -134,14 +134,14 @@ class UnionTest(unittest.TestCase):
         }
         for name, entry in writes.items():
             with self.subTest(write=name):
-                node = sdk.parse({"type": "bundle", "sink": entry})
+                node = sdk.parse({"type": "loom", "sink": entry})
                 self.assertEqual(sdk.dump(node)["sink"], {**entry, "scope": entry.get("scope", "remote")})
         # The two directions do not borrow each other's words.
         for bad in (
             {"type": "input", "source": {"dest": "s"}},
             {"type": "input", "source": {"kind": "source"}},
-            {"type": "bundle", "sink": {"slot": "s"}},
-            {"type": "bundle", "sink": {"dest": "s", "default": "x"}},
+            {"type": "loom", "sink": {"slot": "s"}},
+            {"type": "loom", "sink": {"dest": "s", "default": "x"}},
         ):
             with self.subTest(node=bad):
                 with self.assertRaises(pydantic.ValidationError):
@@ -236,7 +236,7 @@ class ProfileTest(unittest.TestCase):
 
     def test_each_direction_reaches_the_wire_where_it_belongs(self):
         # A field has one type and no exit of its own (ADR 0032 §2, revised 2026-11-24): the value
-        # it holds is named by `tag`, its exit is the bundle's, and its kind is `kind`.
+        # it holds is named by `tag`, its exit is the loom's, and its kind is `kind`.
         self.assertEqual(sdk.dump(sdk.input(tag="name", source=Slot("prefill")))["source"],
                          {"scope": "remote", "slot": "prefill"})
         typed = sdk.dump(sdk.input(tag="password", kind=sdk.JsType.password))
@@ -244,27 +244,27 @@ class ProfileTest(unittest.TestCase):
         self.assertNotIn("sink", typed)
         with self.assertRaises(TypeError):
             sdk.input(tag="name", sink="save")  # a field has no sink to give
-        # The write belongs to the bundle: the one node that owns an exit for its fields and its
+        # The write belongs to the loom: the one node that owns an exit for its fields and its
         # button. A button is not a party to the send (ADR 0039 §2a), so it refuses one.
         with self.assertRaises(TypeError):
             sdk.button("提交", sink="submit")  # a button has no exit of its own
-        self.assertEqual(sdk.dump(sdk.bundle(sink="compose"))["sink"],
+        self.assertEqual(sdk.dump(sdk.loom(sink="compose"))["sink"],
                          {"dest": "compose", "scope": "remote"})
-        # A local landing is the bundle's too: one draw, one write, the reset still applies.
-        local = sdk.dump(sdk.bundle(sink=sdk.Sink(dest="__CONFIG__", scope="local", path="/")))
+        # A local landing is the loom's too: one draw, one write, the reset still applies.
+        local = sdk.dump(sdk.loom(sink=sdk.Sink(dest="__CONFIG__", scope="local", path="/")))
         self.assertEqual(local["sink"], {"dest": "__CONFIG__", "path": "/", "scope": "local"})
         self.assertEqual(sdk.dump(sdk.select(options=Slot("rows")))["options"],
                          {"scope": "remote", "slot": "rows"})
         self.assertEqual(sdk.dump(sdk.input(placeholder="写点什么"))["placeholder"],
                          {"default": "写点什么", "scope": "remote"})
         # A channel a type does not accept is not a keyword of its builder — refused where it is built.
-        for call in (lambda: sdk.text(sink="x"), lambda: sdk.bundle(source="x"), lambda: sdk.tiles(sink="x")):
+        for call in (lambda: sdk.text(sink="x"), lambda: sdk.loom(source="x"), lambda: sdk.tiles(sink="x")):
             with self.assertRaises(TypeError):
                 call()
 
-    def test_a_bundle_packs_its_fields(self):
-        """ADR 0032: fields are named by `tag`, the bundle owns the sink, `submit` is its timing."""
-        node = sdk.bundle(
+    def test_a_loom_packs_its_fields(self):
+        """ADR 0032: fields are named by `tag`, the loom owns the sink, `submit` is its timing."""
+        node = sdk.loom(
             sdk.input(tag="name"),
             sdk.input(tag="body", multiline=True),
             sink="compose",
@@ -275,8 +275,8 @@ class ProfileTest(unittest.TestCase):
                          [("name", None), ("body", True)])
         self.assertNotIn("attrs", wire)  # absent `submit` means the wire default, `[enter]`
         # A bare string and a one-item list are the same set; both reach the wire as a list.
-        self.assertEqual(sdk.dump(sdk.bundle(submit="change"))["attrs"], {"submit": ["change"]})
-        self.assertEqual(sdk.dump(sdk.bundle(submit=["enter", "button"]))["attrs"],
+        self.assertEqual(sdk.dump(sdk.loom(submit="change"))["attrs"], {"submit": ["change"]})
+        self.assertEqual(sdk.dump(sdk.loom(submit=["enter", "button"]))["attrs"],
                          {"submit": ["enter", "button"]})
         # A field's own value is a read (placeholder), and it has no write to carry.
         field = sdk.dump(sdk.input(tag="note", placeholder="写点什么"))

@@ -9,7 +9,7 @@ draws them all at once.
 How "each type drew" is measured: most components put a **role class** on their element (`frame`,
 `tiles`, `entry`, `case`, `text`, `select`, …), read off the renderer. `panel` is asserted by
 behaviour instead — an `inline` panel is a fold: it starts collapsed and its body appears on a
-click — and `button` is asserted where it renders, inside its `bundle`.
+click — and `button` is asserted where it renders, inside its `loom`.
 
 The asset-backed type stays out on purpose (`canvas` mounts an ES module): its capability is a
 deployment artifact, not vocabulary. A stub module would prove the stub.
@@ -42,7 +42,7 @@ PANEL = "t3-panel"  # the fixture's id: an inline panel is only observable by cl
 ROLE: dict[str, str] = {
     "frame": ".frame",
     "forcegraph": ".fg-host",
-    "bundle": ".case",
+    "loom": ".case",
     "svg": "svg",
     "path": "path",
     "tiles": ".tiles",
@@ -64,7 +64,7 @@ PROBE = """(() => {
     src: q('img') && q('img').getAttribute('src'),
     d: q('.path') && q('.path').getAttribute('d'),
     input: q('input') && q('input').value,
-    in_bundle: all('.case input, .case textarea').length,
+    in_loom: all('.case input, .case textarea').length,
     options: all('.select > div').map((d) => d.innerText.trim()),
     selected: all('.select .selected').map((d) => d.innerText.trim()),
     head: all('.tiles-hcell').map((c) => c.innerText.trim()),
@@ -93,11 +93,11 @@ PROBE = """(() => {
 
 
 def tree() -> dict:
-    """Every drawable type as one case's children; the button rides inside its bundle (see fixture)."""
+    """Every drawable type as one case's children; the button rides inside its loom (see fixture)."""
     kids = [
         node
         for tag, node in NODES.items()
-        if tag not in ASSET_BACKED and tag != "button"  # `button` is the bundle's child
+        if tag not in ASSET_BACKED and tag != "button"  # `button` is the loom's child
     ]
     return {"type": "frame", "children": [*kids, {"type": "frame", "children": [tokens()]}]}
 
@@ -189,9 +189,9 @@ def main() -> int:
 
         checks.append(
             (
-                "a bundle registers itself — its submit button renders, with its fields",
-                seen.get("buttons") == 1 and seen.get("in_bundle") == 2,
-                f"buttons={seen.get('buttons')} fields={seen.get('in_bundle')}",
+                "a loom registers itself — its submit button renders, with its fields",
+                seen.get("buttons") == 1 and seen.get("in_loom") == 2,
+                f"buttons={seen.get('buttons')} fields={seen.get('in_loom')}",
             )
         )
         checks.append(("an entry draws its named fields", "entry-field" in body, f"entry={'entry-field' in body}"))

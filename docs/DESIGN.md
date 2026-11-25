@@ -14,7 +14,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 ## 定位
 
 - **用宿主语言写 UI**：开发者在自己的语言里写组件树、绑定与事件处理器。Python 起步；任何能发 JSON 的语言都能接——SDK 由 accrete 的类型导出的 schema 生成（见 I5）。
-- **组件是粗粒度的**：线上传的是 `input`、`tiles`、`bundle`、`entry` 这类有语义的组件，不是 `div`/`span`。组件语义、元素映射、可访问性、本地行为（输入缓冲、展开、选中、校验）在渲染器里写一次；**哪些类型进应用面、哪个属性值是默认**由 reflux 的 profile 定——profile 是 accrete 那 15 个根变体上的逐项选择（见「组件词表」）：应用面取其中 14 项，唯一不进的是 `stamp`。
+- **组件是粗粒度的**：线上传的是 `input`、`tiles`、`loom`、`entry` 这类有语义的组件，不是 `div`/`span`。组件语义、元素映射、可访问性、本地行为（输入缓冲、展开、选中、校验）在渲染器里写一次；**哪些类型进应用面、哪个属性值是默认**由 reflux 的 profile 定——profile 是 accrete 那 15 个根变体上的逐项选择（见「组件词表」）：应用面取其中 14 项，唯一不进的是 `stamp`。
 - **消费方零工具链**：资产是静态的（钉版本的 wasm 包加框架那一小段 runtime），消费方不用 npm、不用打包器、不用 wasm 工具链、没有构建步骤、运行时也不依赖 CDN。构建那一步只在维护者这边发生，一次。
 - **服务端不画界面**：没有「服务端重渲染 + 全树 diff」这条默认路径（为什么否掉见「Why Not」）。服务端发的是**结构与数据**，界面由渲染器按组件语义自己画。
 
@@ -84,7 +84,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - **`attrs` 是每类型的白名单**（accrete 那份的形状），取值是枚举或受限值域；reflux 的 profile 在它上面选与设默认。生产端见不到自由 class 字符串——变体的闭集合由 profile 落成 class 令牌；accrete 的线上是允许 class 的，收窄落在 profile 与 SDK 上（见「组件词表」）。
 - **`source` 与 `sink` 是组件与事件流之间的两个方向**：线上各是一条 `Bind`（`{default, path, scope, slot, type}`）——`source` 是值进来的地方（`slot` 指向一个数据槽，`path` 从槽内节点里取子值，`type` 是 js-kind），`sink` 是值出去的地方（上行的落点）；`scope` 说这份值在哪一边作主（`remote` 在会话那一侧、`local` 在页面的值平面、`both` 本地赋值再镜像上去，缺省 `remote`）；没有 `slot` 的 `Bind` 是字面量，`default` 就是值。I4 的落点就在这一行：**要什么状态，组件随事件自己带上来**——`payload` 那张「这次上行带哪几件本地态」的声明表随旧规格退场，送什么由组件的实现定。
   - `source` 怎么用由组件语义定：叶把它当自己的值画出来（`text` 的文字、`image` 的 src……），输入从 js-kind 的默认值起手（槽值它不读，见「组件词表」），容器把槽值当子节点挂（一轮数组＝列表槽，单个节点＝片段）。槽还没写过时回退到默认值，所以「先出结构、再补数据」和「一帧里都发」都成立。
-  - **上行的时机是渲染器的**，不再是生产端能声明的契约：`input`（含 `multiline`）在**回车**时上行（`ui_leptos` 全仓没有失焦监听），空值不发；`select` 在一次选项点击时发；`bundle` 在它 `attrs.submit` 点名的那几种时机上发（`button` 是其中一种，`enter` 是另一种），一次带上它打包的全部字段；`canvas` 模块从 `host.send` 发，`forcegraph` 走 `node-click`。代价写明：生产端想知道某个事件什么时候响，只能去读渲染器的实现——「时机是契约的一部分」这条让位给「组件是现成的」。
+  - **上行的时机是渲染器的**，不再是生产端能声明的契约：`input`（含 `multiline`）在**回车**时上行（`ui_leptos` 全仓没有失焦监听），空值不发；`select` 在一次选项点击时发；`loom` 在它 `attrs.submit` 点名的那几种时机上发（`button` 是其中一种，`enter` 是另一种），一次带上它打包的全部字段；`canvas` 模块从 `host.send` 发，`forcegraph` 走 `node-click`。代价写明：生产端想知道某个事件什么时候响，只能去读渲染器的实现——「时机是契约的一部分」这条让位给「组件是现成的」。
 - **上行帧是 `{dest, id, data}`**：`id` 取认领该上行落点的那个节点自己的 id（不是祖先）——行的身份要上行，就把行的 id 给行里那个交互节点；`data` 是组件随事件送上来的那份本地态（送什么由组件定，`payload` 那张声明表已退场）。
 - **不需要 id 也能更新**：数据的地址是槽名，不是节点名。id 只为身份存在（行身份、跨结构变动的存活）。
 
@@ -158,17 +158,17 @@ profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（
 
 **令牌这一层落地的形状（2026-10-20）**：`profile.json` 的 `tokens` 是 `类型 → {变体名 → class}`（今天是 `text` 的 `heading-1/2/3`、`code`、`muted`、`danger`，与 `frame` 的 `card`）。生成器给这些类型加一个 `variant=` 关键字（值必须是那张表里的名字，错字当场报出整张表），由 `_parse.token_attrs` 低成 `attrs.class`；`reflux/sdk/closed.py` 因此把 `class` 从「一律隐藏」改成「只在这些类型上、且每个元素都必须在该类型的令牌里」——`selector` 不是隐藏项：它是 `entry` 的字段名（`tiles` 的表头与字段也按它寻址），藏起来网格就画不出来。样式在 `www/static/reflux.css` 的 `@layer reflux` 里（`core.css` 先声明了 `tokens, reset, components, utilities, custom` 五个层，新层名排在 `custom` 之后 → 层内最强；unlayered 会盖掉渲染器**所有**层，不可控）。令牌族按需长：加一个名字＝改 profile、重出 SDK、写一条 CSS，三处各一行。
 
-属性侧的几处落空是**量出来的**，不是口味（见本节末尾的清单）；其中一条最容易被当成故障：`input` 只从 `source` 的 `default` 起手（不订阅槽，输入缓冲之后自己持有），所以 profile 不给它裸值形式的 `source`；字段名走 `tag`，只有 `input`／`select`（与嵌套的 `bundle`）读它——别的类型上写 `tag` 是死键。
+属性侧的几处落空是**量出来的**，不是口味（见本节末尾的清单）；其中一条最容易被当成故障：`input` 只从 `source` 的 `default` 起手（不订阅槽，输入缓冲之后自己持有），所以 profile 不给它裸值形式的 `source`；字段名走 `tag`，只有 `input`／`select`（与嵌套的 `loom`）读它——别的类型上写 `tag` 是死键。
 **`scope: local` 与它的 `path`**：`scope` 是 `Bind` 上的一个字段（ADR 0031 §1），`local` 读的是**客户端槽**（vals 平面），而那个槽里装的是页内 emit 写下的 Outflow 形状包装，要显示载荷本身就得再往里一层——`path` 因此也是 `Bind` 的随行键（`slot` 与 `path` 本来就在同一个 `Bind` 里）。写法是 `text(source=Bind(slot="chan", scope="local", path="/data"))`；`scope` 在任一通道上都用这同一个 `Bind` 字段，没有第二个关键字。`gate_t2` 的 vals 平面那条检查因此从手写 dict 换成了这个构造器——它证明的从「渲染器接受这个形状」变成「SDK 能造出这个形状、渲染器也接受」。
 
-退场前那 21 项（`spec/components.json`）与它不是包含关系：同名 8 项——form / rack / input / textarea / select / button / image / text（前三个今天已经并进这条线：`bundle`、`tiles`、`input(multiline=True)`，不再同名）；另外 13 项是 reflux 自己的词，逐个落成：
+退场前那 21 项（`spec/components.json`）与它不是包含关系：同名 8 项——form / rack / input / textarea / select / button / image / text（前三个今天已经并进这条线：`loom`、`tiles`、`input(multiline=True)`，不再同名）；另外 13 项是 reflux 自己的词，逐个落成：
 
 | 我们这一项 | 落点 |
 |---|---|
 | stack | `frame`（默认竖排；`attrs.horizontal` 决定要不要 `col` 类） |
 | row | `frame` + `attrs.horizontal` |
 | card | `frame` + class 令牌（`tone` 三个值是令牌） |
-| field | 不是类型：字段是 `bundle` 的子节点，按自己的 `tag` 打包；标签与提示是同级 `text` |
+| field | 不是类型：字段是 `loom` 的子节点，按自己的 `tag` 打包；标签与提示是同级 `text` |
 | option | 不是类型：`select` 的选项来自它绑的列表槽的行，行 `id` 即键 |
 | checkbox | `input` + `type = bool`（渲染器据此给 `type="checkbox"`） |
 | switch | 同 checkbox，只差 class 令牌；`label` 降成同级 `text`，`disabled` 那边没有字段、只有 class |
@@ -177,26 +177,26 @@ profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（
 | code | `text` + `attrs.format = "md"`：GFM 出围栏代码块，样式在 `core.css` 的 `pre`/`code` |
 | empty | 表达得出来，但落点要核：`frame` 的空槽分支是现成的相反规则（槽非空渲染那个节点、空渲染 `children`），不过它看的是 data 平面，列表空不空它看不见 |
 | progress | 不进词表：纯展示、无交互，自绘部件走 `canvas` 的模块通道 |
-| link | **退场，不补替代**（2026-10-17 裁决）：accrete 没有锚点类型，渲染器也从不导航；词表里能上行事件的只有 `input`／`select` 与 `bundle` 的 `submit`（`textarea` 是 `input(multiline=True)`）。所以 link 这个元素没有了，锚点语义（中键或修饰键新开标签、悬停看地址、右键复制链接）也没有。「点一下就把事件送上去」还剩一扇门——canvas 的模块通道（模块拿到 `host.send`，与 `bundle` 的提交同一条上行腿），代价是应用自己写那个 ES 模块。页内导航怎么做见「客户端 runtime」 |
+| link | **退场，不补替代**（2026-10-17 裁决）：accrete 没有锚点类型，渲染器也从不导航；词表里能上行事件的只有 `input`／`select` 与 `loom` 的 `submit`（`textarea` 是 `input(multiline=True)`）。所以 link 这个元素没有了，锚点语义（中键或修饰键新开标签、悬停看地址、右键复制链接）也没有。「点一下就把事件送上去」还剩一扇门——canvas 的模块通道（模块拿到 `host.send`，与 `loom` 的提交同一条上行腿），代价是应用自己写那个 ES 模块。页内导航怎么做见「客户端 runtime」 |
 
-同名那 8 项里还有两处不能按名字对：`button` 只在它最近的、`submit` 点名了 `button` 的 `bundle` 里画出来（它就是那个组的确认键，自己不带 `sink`、**没有出口**，ADR 0039 §2a）；`input` 的类型来自 `kind`（`JsType`），不在属性上。
+同名那 8 项里还有两处不能按名字对：`button` 只在它最近的、`submit` 点名了 `button` 的 `loom` 里画出来（它就是那个组的确认键，自己不带 `sink`、**没有出口**，ADR 0039 §2a）；`input` 的类型来自 `kind`（`JsType`），不在属性上。
 
 accrete 那侧比应用面宽的其余根变体——版面容器与栅格（`frame`：`style` 是内联样式面，`dir`／`wrap` 定轴向与折行）、内容区（`panel`：`fold`／`popup`／`layer` 是它 `place` × `state` 上的格子）、模块宿主（`canvas`；`chart`／`editor`／`diagram` 曾经的名字现在都是它的实例）、网格与条目（`tiles` 的 `fields` + `entry`，表头是 `header.layers` 行的格子，`window` 是一次窗口的大小）、SVG——是 fluxen 自己的语义面，现在都进了应用面。两个新面同样进来了：拖拽的两端都长在 `frame` 上（ADR 0034：`draggable` 让这个框带着自己的子树当货物，`accept` + `sink` 让它当落点，一次 drop 只送上货物的 `{id, tag}`——货物本身不旅行），`forcegraph` 是原生关系图（ADR 0029：渲染与布局都在 wasm 里，所以它没有 `url`、没有模块契约，`style` 是类型化词表而不是 `canvas` 的 `options` 动态袋；因为它没有角色 class 也没有 DOM id，T3 只能证明它挂出了一个尺寸非零的画布）。现在不暴露的只剩 `stamp`（`tmpl` 的替换节点；它只在展开期有意义，展开后渲染器画一个空槽）。
 
 每个类型声明四件事，前两件在类型里，后两件在 profile 里：
 
 - **本地态**：它内部维护什么（输入缓冲、是否展开、当前选中、滚动位置）——渲染器的。
-- **绑定**：读哪个槽（`source`）、写到哪个落点（`sink`）、上行时带哪些本地态（`bundle` 按 `tag` 打的包）——形状来自 accrete 的 `Bind`。
+- **绑定**：读哪个槽（`source`）、写到哪个落点（`sink`）、上行时带哪些本地态（`loom` 按 `tag` 打的包）——形状来自 accrete 的 `Bind`。
 - **上行时机**：在哪类事件上上行——渲染器与 profile 一起定。
 - **属性**：类型自己的白名单（闭枚举、受限值域）；变体的闭集合收在 profile 里、落成 class 令牌。
 
-属性侧有几处是这次裁决认下的落空（逐项核过 accrete 的属性空间）：`disabled`（input／select／button／bundle）在那边没有字段，只有 class；`input` 的 `type` 里 email／search 没有对应（`JsType` 只有 bool／number／text／password／button／submit）；多行字段的高度、`bundle` 的提交按钮文案、`tiles` 的 density／empty_text／follow 同样没有字段；`image.fit`、`text.wrap`、`text`／`button`／`badge` 的 size／tone／variant 都走 class 令牌。这些不构成加词表的理由——要么是外观（令牌），要么是渲染器的行为细节；真装不下的在落 profile 时逐条列出来。**还有一处落空不是属性而是机制**：我们的 `payload`（组件声明这次上行要带哪几件本地态）在那边没有位置——送什么由组件自己定（输入送它的值、`bundle` 送它打的包），所以构造器不提供这个参数。
+属性侧有几处是这次裁决认下的落空（逐项核过 accrete 的属性空间）：`disabled`（input／select／button／loom）在那边没有字段，只有 class；`input` 的 `type` 里 email／search 没有对应（`JsType` 只有 bool／number／text／password／button／submit）；多行字段的高度、`loom` 的提交按钮文案、`tiles` 的 density／empty_text／follow 同样没有字段；`image.fit`、`text.wrap`、`text`／`button`／`badge` 的 size／tone／variant 都走 class 令牌。这些不构成加词表的理由——要么是外观（令牌），要么是渲染器的行为细节；真装不下的在落 profile 时逐条列出来。**还有一处落空不是属性而是机制**：我们的 `payload`（组件声明这次上行要带哪几件本地态）在那边没有位置——送什么由组件自己定（输入送它的值、`loom` 送它打的包），所以构造器不提供这个参数。
 
 **M1.6 量出来的四处**（都改了 profile 或写进门的断言，不再靠「属性表应该这样」）：
 
 - `input` 只读 `type`（js-kind）与 `sink`，`source` 只取它的 `default`：槽里的值它**不订阅**（没有 `default` 时从 kind 的默认值起手，清空也回到那里），profile 因此只收 `Bind`／`Slot`，不收裸值。
-- 字段名是 `tag`：`bundle` 按它打包（`input`／`select`，以及嵌套 `bundle` 的 `tag` 或 `id`）；没写 `tag` 的节点走自己的 `sink`，不进包。
-- `bundle` 送上来的包是 `{tag: value}`——值就是值，没有包装层（旧的 `{data, payload}` 条目随信封与 `payload` 一起退场）。
+- 字段名是 `tag`：`loom` 按它打包（`input`／`select`，以及嵌套 `loom` 的 `tag` 或 `id`）；没写 `tag` 的节点走自己的 `sink`，不进包。
+- `loom` 送上来的包是 `{tag: value}`——值就是值，没有包装层（旧的 `{data, payload}` 条目随信封与 `payload` 一起退场）。
 - 一个类型要外部部署件才画得出：`canvas`（`url` 指向一个 ES module；accrete 早先的 `chart`／`editor`／`diagram` 现在都是它的实例）。它的「能画」属于部署件而不是词表，所以 T3′ 不画它；另外 `image` 只有在**带了 attrs** 时才渲染 `<img>`，否则是一个空 div——这是渲染器的条件，不是泄漏。
 
 **词表的厚度就是交互逻辑的表达力。** 这个模型的复杂度不在服务端，在这里：应用里凡是「依赖状态的界面行为」，只有两个去处——落进某个组件的声明式语义（本地态 + 事件 + 变体），或者走一次事件上行交给生产者。所以加组件时的判据是「有哪类交互逻辑现在无处表达」，不是「界面还缺哪种元素」。
@@ -358,7 +358,7 @@ def only(ctx, path):
 def shell(ctx):
     return h.frame(
         h.text("示例站点", variant="heading-1"),
-        h.bundle(h.button("首页"), sink=ctx.slot.go.home, submit=["button"]),
+        h.loom(h.button("首页"), sink=ctx.slot.go.home, submit=["button"]),
         h.frame(source=ctx.slot.routes, id="routes"),   # 页面就画在这里
     )
 ```
@@ -453,7 +453,7 @@ def on_disconnect(device, frame):
 | 未注册的落点 | 拒收、计数、记日志；绝不动态派发 | 服务端（注册表在生产者侧） |
 | 上行帧发往 `connect` / `location` / `disconnect` | 整帧拒收、计数、记日志——宿主事件没有线上地址，客户端不能伪造「我连上了」或「我去过 /x」 | 服务端（入站校验） |
 | 上行帧的键集或 `id` 形状不合法（未知字段、`id` 不是非空字符串、缺 `data`） | 整帧拒收、计数、记日志（设备／路径／原因）；注册表根本看不到它，设备保留 | 服务端（入站校验） |
-| 事件载荷缺少声明的字段 | **不适用**：送什么由组件自己定（输入送它的值、`bundle` 送它打的包），我们不声明也不校验 | — |
+| 事件载荷缺少声明的字段 | **不适用**：送什么由组件自己定（输入送它的值、`loom` 送它打的包），我们不声明也不校验 | — |
 | 处理器抛异常 | 带落点与 traceback 记日志；设备保留；客户端停在最后一次成功应用的状态 | 服务端 |
 | 生产者侧非法结构（属性不合法、一段数组里行 id 重复） | 发送之前就报错——在边界上大声，绝不把缺陷静默带到客户端；同一帧里给同一个列表槽追加同一个行 id 也在这里整帧拒收（渲染器只会丢掉第二条并 `warn`，那是半个回合）；同一个列表槽里 `append` 一个已有的行 id，渲染器也会拒（`warn`）；跨帧的行身份冲突只有应用认识那份列表，归应用 | SDK（大声）＋ 服务端（入站）＋ 渲染器（`warn`）＋ 应用 |
 | 慢客户端 | 出帧队列**在入队时**有界（`App(outbox=256)`）；溢出丢中间帧（留首帧与最新）、标记设备陈旧、计数；应用的 flusher 在队列排空且陈旧时用一帧 `create` 重同步 | 服务端 |
@@ -492,7 +492,7 @@ def on_disconnect(device, frame):
 **计数器页**（`examples/zh/demo_counter.py`，2026-11-24）：前面几页各讲一件事，这一页不讲内容——一个数、三个按钮、一个步长输入、一小段有上限的历史——所以它写出来的每一行都只是 API 的用法：路由的装饰器写在模块自己的 `register(app)` 里（页面模块不能 import 应用），三个按钮与输入框是闭包落点，历史用列表槽的 `append`/`remove`（超上限删最早一条），值挂在 `ctx.data` 上所以两个标签页各数各的。它是"新读者从哪里开始"的答案。
 
 **两种落点，一条界线**（2026-11-24）：一个上行帧在 wire 上只带一个名字（`dest`），所以"谁回答它"有两种写法，而它们的分界不是风格，是**名字是否需要先于一次绘制存在**。
-- **闭包**（持有出口的那个节点上的 `sink=add_row`，或 `sink=gated(save)`——按钮所在的 `bundle` 是最常见的一处）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{字段: {data}}`），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
+- **闭包**（持有出口的那个节点上的 `sink=add_row`，或 `sink=gated(save)`——按钮所在的 `loom` 是最常见的一处）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{字段: {data}}`），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
 - **名字**（`@app.on(slot)`）：必须先于任何绘制存在的那几类——一个槽有多个来源（同页被工作线程和用户同时写的状态行、走查页被拖拽落点和编辑器回传同时写的 `echo`）、身份不在页面里的（一行一个 id，名字归行持有）、框架自己的动词（`reflux:login`）、跨页或全局的事件。
 门（`auth`）跟落点走：`gated(fn)` 说的是"这个落点只给绑了用户的设备"，声明地点因此在写出落点的那一行，而不是在处理器上。闭包落点不在 `dests` 表里，所以 `cli dests` 看不到它们；检查改成了绘制时的不变量——**画出来的每个 sink 名都必须在绘制它的那台设备上解析得到**（`tests/test_cli_events.py` 用 `FakeDevice` 画一次页面再核）。`tests/test_landings.py` 钉住机制本身：命名、按函数身份去重、按连接隔离、换页换表、`gated` 先于闭包运行、两套落点同页共存。 Rust SDK 跟着给了同一个形状（`sdks/rust/src/landings.rs` 的 `Landings`：`bind(name, closure)` 返回名字、`bind_gated` 带上门、同一个名字两次仍是一个落点）—— 差别只在名字要由调用方写出来，因为 Rust 运行时没有函数名；`gate_t10` 的页面用例通过它取名字，两侧帧仍然逐字节相等。
 
@@ -553,7 +553,7 @@ def on_disconnect(device, frame):
 - 路由要不要中间件与数据 loader？触发：同一段鉴权或取数逻辑在三个以上视图里重复出现。
 - 组件本地态要不要跨路由存活？触发：真实应用里出现「切走再回来表单没了」的抱怨，而组件只在事件边界把它那一份带上来。
 - 规格要不要版本协商（hello 里带 SDK 版本，壳按版本选行为）？触发：出现第一个已部署的旧 SDK。
-- 上行的时机要不要按**实例**声明？触发：真出现一个需要逐键上行的检索输入；届时给 `input` 加一个时机枚举（现在时机按组件类型写在渲染器里，`bundle` 只有 `attrs.submit` 那几个值）。
+- 上行的时机要不要按**实例**声明？触发：真出现一个需要逐键上行的检索输入；届时给 `input` 加一个时机枚举（现在时机按组件类型写在渲染器里，`loom` 只有 `attrs.submit` 那几个值）。
 - 输入框要不要清除控件？触发：真有清除需求。叶级替换元素驮不了 chrome——要做就得给 `input` 一个统一外壳，那是一次形状变更而不是加一个属性；规格里的 `input.clearable` 已在 T4 按这条收窄掉（「壳无法兑现的属性是规格缺陷」，不是实现里的 TODO）。
 - `move` 值不值得进词表？触发：200 行以上列表的重排代价实测（T11）。
 - 组件表长到多大就不再对生成器可学？不是阻塞项；重审 I3 的触发是一张不再能放在一屏里的表。
@@ -575,9 +575,9 @@ def on_disconnect(device, frame):
 - **T6——导航。**（已落地）壳侧链接拦截（带修饰键/中键/`external`/跨源四类放行）、`popstate`、history 写入、hello 带路径；生产者侧 `reflux:nav` → 匹配 → `create`，应用侧 `@app.page`（不带参数即单页钩子），匹配不到回内置 404（有 `{rest:path}` 就用它）；伺服进程把无扩展名、无对应文件的页面路径交给壳（深链与刷新成立的前提）。门槛：点链接与前进后退各一次，地址栏／界面／服务端路由三者一致；未知路径走 404 结构；冷启动直接打开 `/blog/x` 落在该页。**目标形态里没有锚点**（见「客户端 runtime」）：M1 把这条门改写成「路径标记 → 地址栏镜像 + 后退前进 + 深链 + 404」，四类放行随锚点退场。
 - **T7——设备与心跳。**（已落地）设备即连接：连接打开即登记、断线即回收；心跳线程按默认 10s 发协议层 ping、30s 没有入站活动即判死并回收（关 socket 让阻塞的读线程退出）；计数 issued / reclaimed / dead，看现在的设备用 `App.live()`。门槛：一次刷新后表里只剩一个设备（旧连接被回收）；客户端不发 FIN 就消失时判死并回收、表归零，且那条算 `dead` 而不是 `reclaimed`。没有 token 这一层——「跨连接复用」随「设备即连接」一起作废，「伪造 token」那条门槛随之退休。
 - **T8——故障注入。** 坏帧（未知 action、未知路径、未知组件、未注册事件名、超大批次、重复行 id、慢客户端、地址栏与路径标记不一致）各自产生「失败模式」里规定的行为，且设备存活。
-- **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@page`；处理器签名 `handler(ctx, frame)`；出帧走每设备单队列（顺序由构造保证）。demo 应用（`examples/zh/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删（`tiles` + `append`/`remove`，行身份随行 `bundle` 的 id 上行）、`bundle` 一次提交（`login` 带全部字段）、三条路由（`/`、`/about` 与走查 `/demo`）。
-  门槛（`python3 tools/gate_t9.py`，15 条）：参考应用真画出来并种好列表 · 输入的回声 · 一次 bundle 提交加一行 · 行自己的 bundle 按身份删掉它 · 一行拖进归档落点后由落点那一帧把行带走（`frame` 的 `draggable`／`accept` 在参考应用里的用处）· **匿名点 gated 落点开登录面而不是到处理器** · **登录的 bundle 走场馆的动词并绑定这条连接** · **同一个落点随后落地** · **刷新（新连接）仍是同一个用户——token 的证明** · **退出撤销，下一次 gated 点击重新问** · 导航是**一次提交 + 标记镜像**（点「关于」→ 结构与地址栏一起变 `/about`）· 反方向同一机制 · 浏览器后退是一帧 `reflux:nav`（`data` 只有 path）· 未注册路径画内置 404 且地址栏停在原地 · 零 console error。
-  这一轮实测到的两件事（都不改框架）：**空字段的 `bundle` 照样发帧**（「加一行」的 `bundle` 只有一个 button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 `bundle`，这里补上；**内置 404 第一次有门**（M1.7 之前它是壳的形状，画不出来，`gate_t6` 因此刻意没有这条）。
+- **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@page`；处理器签名 `handler(ctx, frame)`；出帧走每设备单队列（顺序由构造保证）。demo 应用（`examples/zh/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删（`tiles` + `append`/`remove`，行身份随行 `loom` 的 id 上行）、`loom` 一次提交（`login` 带全部字段）、三条路由（`/`、`/about` 与走查 `/demo`）。
+  门槛（`python3 tools/gate_t9.py`，15 条）：参考应用真画出来并种好列表 · 输入的回声 · 一次 loom 提交加一行 · 行自己的 loom 按身份删掉它 · 一行拖进归档落点后由落点那一帧把行带走（`frame` 的 `draggable`／`accept` 在参考应用里的用处）· **匿名点 gated 落点开登录面而不是到处理器** · **登录的 loom 走场馆的动词并绑定这条连接** · **同一个落点随后落地** · **刷新（新连接）仍是同一个用户——token 的证明** · **退出撤销，下一次 gated 点击重新问** · 导航是**一次提交 + 标记镜像**（点「关于」→ 结构与地址栏一起变 `/about`）· 反方向同一机制 · 浏览器后退是一帧 `reflux:nav`（`data` 只有 path）· 未注册路径画内置 404 且地址栏停在原地 · 零 console error。
+  这一轮实测到的两件事（都不改框架）：**空字段的 `loom` 照样发帧**（「加一行」的 `loom` 只有一个 button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 `loom`，这里补上；**内置 404 第一次有门**（M1.7 之前它是壳的形状，画不出来，`gate_t6` 因此刻意没有这条）。
   标记糖在 T10 之后落了（第二个消费者到齐才落的，见 T10 段的最后一段）：`reflux/sdk/markers.py` 与 `sdks/rust/src/markers.rs` 手写同一件事——`path_marker()`／`title_marker()`／`page(path, title, *children)`，把两个保留 id 放在页面的最前面。三份手写副本（参考应用、`gate_t6`、Rust 的帧转储）收敛到它；`gate_t6` 只留它自己的两个旋钮（`label=`、`markers=False`）。
   **为什么手写、不进词表**：`reflux:` 前缀属于 `reflux/protocol.py`，是框架对自己 runtime 的约定；accrete 不认识 `path`、`title` 这两个词，词表也不该认识——把它放进 vocabulary，就是让词表开始承载 reflux 自己的策略，正是「词表不往外长」的反面。**否掉的另外两个形状**：把 `page` 提到构造器那一层——它不是线上的 `type`，会和 14 个构造器挤进同一个命名空间，而那个命名空间的规矩是「一个 type 一个名字」；留三份手写副本——两份一样还可以说「名字还没逼出来」，三份一样就只是重复。`PAGE_ID = "page-root"` 是默认不是规则：没有东西读它，它是生产者给自己根节点起的名字。
   证据分两层：`gate_t10` 的翻页与关于页两帧跨语言逐字节相等（2 918 B / 796 B）——两语言的糖一致；`gate_t9` 在真浏览器里证明这两个标记**确实移动地址栏**——糖为了的那件事真的发生。
@@ -609,4 +609,4 @@ def on_disconnect(device, frame):
 
 ## 词汇
 
-规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`source`／`sink`（accrete 的两条通道，各有自己的地址：`Source{slot, default, scope, path}` 读、`Sink{dest, scope, path}` 写，ADR 0039；`scope` 是闭集 `remote`／`local`／`both`，见「组件形状」）、`tag`（bundle 里一个字段的名字）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的七个操作：`create` / `set` / `append` / `remove` / `patch` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`ctx`（一次投递的上下文：`app`、`device`、那一帧（或那次 `match`）——处理器拿到的是它；`ctx.emit` 说话、`ctx.slot` 拿槽、`ctx.turn()` 把几次写合成一帧、`ctx.page(*content)` 画页面（手动路径；`@app.page` 那条路是返回）、`ctx.devices()` 看这场、`ctx.go`／`ctx.draw()` 动页面）、`Slot`／`Slots`（一条具名数据槽的对象：名字＋`set`／`append`／`patch`／`remove` 四个动词；`ctx.slot` 是这一档槽的表）、`device`（一台设备＝一条连接；持地址、`data` 与推送目标，不是用户——`ctx.device` 拿到它）、`data`（`device.data`，业务挂在连接上的东西，框架不读）、`emit`（`device.emit(*ops)` 把 accrete 的操作作为一帧送出；`draw` 是造帧的那个函数，不送）、`uplink`／上行 `dest`（控件往上送的那一帧的落点，处理器的注册键）、`handler`（处理器）、`frame`（上行帧 `{dest, id?, data}`）、`channel`（一条 WS 连接）、`挂载表`／`mounts`（`App.mounts`：路径 → 路由，socket 也是其中一条，`CHANNEL` 那一项）、`Request`／`Response`（挂载的路由拿到与答回的只读形状）、`app`（页面钩子＋挂载表＋上行落点注册表）、`wire`（出帧层：accrete 的七个操作，一帧就是这些操作的数组）、`SDK` 的构造器（`reflux/sdk/builders.py`）、`外框`／`shell`（`App(shell=…)` 给的那一层：标题、导航、和那个 `routes` 读槽；没给时是框架的默认外框——撑满视口的 `routes`，所以页面一律写进槽）、`routes` 槽（`protocol.ROUTES_SLOT`，页面的家；读取器由外框声明——应用写的，或默认外框那一个）、`宿主事件`（`connect`／`location`／`disconnect`——注册与别的名字一样，但没有线上地址，客户端发不进来）。`spec`、`fire`／`payload`、`ui`／`ops`、以及 `Message`（`ev`／`sender`／`created`——它现在是**宿主**的信封，不在线上）是退场形态的词——只在历史节与 Why Not 里出现。别处不再另造同义词。
+规格层的词：`component`（粗组件）、`attrs`（每组件白名单）、`source`／`sink`（accrete 的两条通道，各有自己的地址：`Source{slot, default, scope, path}` 读、`Sink{dest, scope, path}` 写，ADR 0039；`scope` 是闭集 `remote`／`local`／`both`，见「组件形状」）、`tag`（loom 里一个字段的名字）、`slot`（单项槽、列表槽、vals 平面）、`action`（accrete 的七个操作：`create` / `set` / `append` / `remove` / `patch` / `tmpl` / `empty`；我们的四个是退场形态的词）、`path`、`id`、`route`（一条声明：路径 pattern、处理器、layout、元数据）、`match`（一次匹配：具体路径、参数、它来自哪条 route）、`page`（一条路径上的结构：路由解析出来的，或应用自己给的）、保留前缀 `reflux:`（`reflux:hello`／`reflux:nav`，以及两个保留 id `reflux:path`／`reflux:title`——runtime 从树里读那两个标记）、`SDK`、`schema`（accrete 的类型导出的那一份，词表的对外形态）。产物侧的词：`渲染器`（fluxen 的渲染运行时，那个包）、`客户端 runtime`（框架自己那一小段：握手、URL 与标题的镜像）、`profile`（reflux 在 accrete 词表上的选择、默认与令牌）、`variant`／`令牌`（profile 声明的变体名与它落成的 `attrs.class`；生产端只写名字）、`入站校验`（服务端那一道：`reflux/ingest.py`，出帧与入站两个门；闭集的词汇在 `reflux/sdk/closed.py`，从生成的模型读）、`ctx`（一次投递的上下文：`app`、`device`、那一帧（或那次 `match`）——处理器拿到的是它；`ctx.emit` 说话、`ctx.slot` 拿槽、`ctx.turn()` 把几次写合成一帧、`ctx.page(*content)` 画页面（手动路径；`@app.page` 那条路是返回）、`ctx.devices()` 看这场、`ctx.go`／`ctx.draw()` 动页面）、`Slot`／`Slots`（一条具名数据槽的对象：名字＋`set`／`append`／`patch`／`remove` 四个动词；`ctx.slot` 是这一档槽的表）、`device`（一台设备＝一条连接；持地址、`data` 与推送目标，不是用户——`ctx.device` 拿到它）、`data`（`device.data`，业务挂在连接上的东西，框架不读）、`emit`（`device.emit(*ops)` 把 accrete 的操作作为一帧送出；`draw` 是造帧的那个函数，不送）、`uplink`／上行 `dest`（控件往上送的那一帧的落点，处理器的注册键）、`handler`（处理器）、`frame`（上行帧 `{dest, id?, data}`）、`channel`（一条 WS 连接）、`挂载表`／`mounts`（`App.mounts`：路径 → 路由，socket 也是其中一条，`CHANNEL` 那一项）、`Request`／`Response`（挂载的路由拿到与答回的只读形状）、`app`（页面钩子＋挂载表＋上行落点注册表）、`wire`（出帧层：accrete 的七个操作，一帧就是这些操作的数组）、`SDK` 的构造器（`reflux/sdk/builders.py`）、`外框`／`shell`（`App(shell=…)` 给的那一层：标题、导航、和那个 `routes` 读槽；没给时是框架的默认外框——撑满视口的 `routes`，所以页面一律写进槽）、`routes` 槽（`protocol.ROUTES_SLOT`，页面的家；读取器由外框声明——应用写的，或默认外框那一个）、`宿主事件`（`connect`／`location`／`disconnect`——注册与别的名字一样，但没有线上地址，客户端发不进来）。`spec`、`fire`／`payload`、`ui`／`ops`、以及 `Message`（`ev`／`sender`／`created`——它现在是**宿主**的信封，不在线上）是退场形态的词——只在历史节与 Why Not 里出现。别处不再另造同义词。

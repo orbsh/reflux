@@ -7,8 +7,8 @@
 - `/` —— **词表**，摆成卡片。一个 `input` 在回车时把缓冲上行，一个 `text` 读处理器写进去的那个槽（回声）；
   行住在槽里、由 `tiles` 显示，每行的删除按钮把自己的身份抬上去；一行还可以当货物 —— 它的 frame 是
   `draggable`，把它拖到落点 frame 上就上行 `{id, tag}`，即被拖 frame 自己的 id，于是归档处理器能解析出手势
-  永远给不出的东西（拖拽本身什么都不报告：只有落点报告）；一个 `bundle` 携带它打包的每个字段
-  （`{tag: value, …}`，ADR 0032）—— 那是 LOGIN 这个 bundle，因为凭据是框架的事：出口是 `reflux:login`，
+  永远给不出的东西（拖拽本身什么都不报告：只有落点报告）；一个 `loom` 携带它打包的每个字段
+  （`{tag: value, …}`，ADR 0032）—— 那是 LOGIN 这个 loom，因为凭据是框架的事：出口是 `reflux:login`，
   应用只写 `verify` 与 `view`，密码在这里从来没被读过。它后面，`vault.secret` 声明为 `auth=True`，所以匿名
   点击打开登录面而到不了处理器，而同一个点击登录之后就落地（`退出` 是出去的走法）。
 - `/about` —— 第二条路由，地址栏、深链、前进后退或导航都能到。
@@ -22,9 +22,9 @@
 
 两条关于这套词表的事实决定了代码的形状，两样都由门量着：
 
-- **一个 `button` 住在 `bundle` 里**（`gate_t3_next`）：渲染器就把它挂在那里，而一次按下发送的是 bundle 的
-  `submit`（`submit=["button"]`）。所以"加一行""删一行""去另一页"都是一个按钮的 bundle，而 frame 的 `id`
-  就是 bundle 自己的 id —— 一行的身份就是靠它上去又回来的。
+- **一个 `button` 住在 `loom` 里**（`gate_t3_next`）：渲染器就把它挂在那里，而一次按下发送的是 loom 的
+  `submit`（`submit=["button"]`）。所以"加一行""删一行""去另一页"都是一个按钮的 loom，而 frame 的 `id`
+  就是 loom 自己的 id —— 一行的身份就是靠它上去又回来的。
 - **accrete 没有带 URL 的类型**，所以没有可点的锚、也没有可拦截的东西：一次换页是生产者答回一帧新结构加一个
   新的路径标记（下面的 `go.home` / `go.about` / `go.demo`）。runtime 把这个标记镜像进地址栏。
 
@@ -54,28 +54,28 @@ from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, Dem
 CARD = {"grid-auto-rows": "auto", "gap": "10px", "align-content": "start"}
 
 
-def nav_bundle(label: str, dest: Slot) -> Accrete:
-    """一个按钮的 bundle —— 词表里唯一的可点击物，也是演示里页与页之间的走法。
+def nav_loom(label: str, dest: Slot) -> Accrete:
+    """一个按钮的 loom —— 词表里唯一的可点击物，也是演示里页与页之间的走法。
 
-    按下就是 bundle 自己的提交：`submit=["button"]` 把这次点击命名为时机，出口也归 bundle 持有，
+    按下就是 loom 自己的提交：`submit=["button"]` 把这次点击命名为时机，出口也归 loom 持有，
     所以按钮只说"发这一组"（ADR 0032 §3）。
     """
-    return h.bundle(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
+    return h.loom(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict) -> Accrete:
-    """一行：一个 bundle（删掉它的那个 ✕）套着一个可拖的 frame（货物）。
+    """一行：一个 loom（删掉它的那个 ✕）套着一个可拖的 frame（货物）。
 
-    一行有两条出路，用两种机制是故意的：按钮是按 bundle 的 id 上行，拖拽则一声不响，直到落点说出
-    它去了哪（ADR 0034：货物就是被拖的子树，落点报告被拖节点自己的 id）。所以这一行的 bundle 保留
+    一行有两条出路，用两种机制是故意的：按钮是按 loom 的 id 上行，拖拽则一声不响，直到落点说出
+    它去了哪（ADR 0034：货物就是被拖的子树，落点报告被拖节点自己的 id）。所以这一行的 loom 保留
     `<行 id>` —— `remove` 寻址的就是它 —— 而货物 frame 给自己取名 `<行 id>-cargo`，因为"一棵树里
     一个 id"是 wire 的规矩，落点也没有别的字段能携带身份。
 
-    两个 frame 说明这一行怎么分：bundle 是一行 flex，条目都长，于是货物拿走宽度（`flex: 1 1 auto`），
+    两个 frame 说明这一行怎么分：loom 是一行 flex，条目都长，于是货物拿走宽度（`flex: 1 1 auto`），
     而 ✕ 保持自己的尺寸，并在它没占满的高度里居中。
     """
     # `remove` 在槽上是动词，所以这个名字要用下标写。
-    return h.bundle(
+    return h.loom(
         h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
         h.frame(h.button("删"),
@@ -105,18 +105,18 @@ state = State()
 def shell(ctx: Context) -> Accrete:
     """每一页都画在里面的那个 frame：一个页头，和 `routes` 这个读槽。
 
-    页头说明你在哪里，并带着五个导航 bundle；翻页只替换那个槽，所以导航在每次翻页后都还在。读槽是
+    页头说明你在哪里，并带着五个导航 loom；翻页只替换那个槽，所以导航在每次翻页后都还在。读槽是
     `min-height: 0`，因为 grid 条目的自动最小尺寸就是它的内容 —— 不写这一条，这一行会随页面一起长高，
     外壳的 `1fr` 就只是个愿望。读槽会滚动，所以一页可以比窗口更高。
     """
     return h.frame(
         h.frame(
             h.text("reflux 参考应用", variant="heading-3"),
-            nav_bundle("演示", GO_HOME),
-            nav_bundle("关于", GO_ABOUT),
-            nav_bundle("走查", GO_DEMO),
-            nav_bundle("对话", GO_CHAT),
-            nav_bundle("计数器", GO_COUNTER),
+            nav_loom("演示", GO_HOME),
+            nav_loom("关于", GO_ABOUT),
+            nav_loom("走查", GO_DEMO),
+            nav_loom("对话", GO_CHAT),
+            nav_loom("计数器", GO_COUNTER),
             grid={"grid-template-columns": "1fr auto auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
@@ -143,7 +143,7 @@ def demo_view(ctx, state):
         lines.append(h.text("用户或密码不对", variant="muted"))
     return h.frame(
         *lines,
-        h.bundle(
+        h.loom(
             h.input(tag="user", id="auth-user"),
             h.input(tag="pass", kind=JsType.password, id="auth-pass"),
             h.button("确认登录"),
@@ -182,7 +182,7 @@ def home_page(ctx, match):
 
     页面根是一列 flex，自己没有间隙，所以分法由页面自己说：横跨两列的标题，左边一列（回声、列表、
     拖拽），右边一列（框架的凭据动词），再加一条同样横跨的脚注。每张卡片是带 `card` 变体的 `frame`，
-    间隙写在它自己身上 —— bundle 是一行 flex，会把字段贴边排开，那是表单的样子，不是页面的样子。
+    间隙写在它自己身上 —— loom 是一行 flex，会把字段贴边排开，那是表单的样子，不是页面的样子。
 
     翻页就是 `return` 那个节点，别的什么都不做：运行时读的两个标记（`reflux:path`、`reflux:title`）
     由框架按声明写好，放在它前面。
@@ -241,7 +241,7 @@ def home_page(ctx, match):
                         "字段自己的 `tag` 就是键。",
                         variant="muted",
                     ),
-                    h.bundle(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
+                    h.loom(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
                     h.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
@@ -253,7 +253,7 @@ def home_page(ctx, match):
                         "行的身份在 id 上：✕ 按 id 删，拖过落点也按 id 归档 —— 手势本身什么都不说，只有落点说话。",
                         variant="muted",
                     ),
-                    h.bundle(h.button("加一行"), sink=add_row,
+                    h.loom(h.button("加一行"), sink=add_row,
                              submit=["button"], id="add-row"),
                     h.tiles(source=slots.rows, id="rows"),
                     # 落点说出它的事件和它收什么；`accept` 是一个 tag（或 any），所以别的 tag 的
@@ -282,9 +282,9 @@ def home_page(ctx, match):
                     "这张表单说的是框架的动词 `reflux:login`：应用只写 verify 和 view，密码它从来读不到。",
                     variant="muted",
                 ),
-                # 两个字段竖着排在按钮旁边：bundle 是一行 flex，所以这一列是它里面的一个
-                # frame，而那次按下仍是它所属 bundle 的子节点。
-                h.bundle(
+                # 两个字段竖着排在按钮旁边：loom 是一行 flex，所以这一列是它里面的一个
+                # frame，而那次按下仍是它所属 loom 的子节点。
+                h.loom(
                     h.frame(
                         h.input(tag="user", id="f-user"),
                         h.input(tag="pass", kind=JsType.password, id="f-pass"),
@@ -302,10 +302,10 @@ def home_page(ctx, match):
                 ),
                 h.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # 在一句声明后面：访客在这里的点击永远到不了处理器。
-                h.bundle(h.button("私密"),
+                h.loom(h.button("私密"),
                          sink=gated(reveal), submit=["button"], id="vault"),
                 h.text(source=slots.secret, id="secret"),
-                h.bundle(h.button("退出"), sink=slots(LOGOUT),
+                h.loom(h.button("退出"), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
                 variant="card",
@@ -337,7 +337,7 @@ def about_page(ctx, match):
     return (
         h.text("关于", variant="heading-1"),
         h.text("这个示例应用只用 SDK 写出来：回声、列表、表单，加三条路由 —— /、/about 和走查。"),
-        nav_bundle("回到演示", GO_HOME),
+        nav_loom("回到演示", GO_HOME),
     )
 
 

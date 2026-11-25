@@ -5,10 +5,10 @@ asserts this table is exactly that set, so adding a type to the profile without 
 fails there rather than quietly shrinking what the gate draws.
 
 The spelling is ADR 0031/0032/0034/0035/0039's, not the retired one: a read is a `Source` (slot,
-scope, path, default), a write a `Sink` (dest, scope, path), a `bundle` packs its fields (each field
-named by its own `tag`, the exit on the bundle's `sink`, the timing in `attrs.submit`), and a
+scope, path, default), a write a `Sink` (dest, scope, path), a `loom` packs its fields (each field
+named by its own `tag`, the exit on the loom's `sink`, the timing in `attrs.submit`), and a
 multi-line field is `input` with `multiline`. The types that used to be separate are folded: `fold`/`popup`/`layer`/
-`float`/`portal` are one `panel` (`place` + `state`), `form` is `bundle`, `textarea` is
+`float`/`portal` are one `panel` (`place` + `state`), `form` is `loom`, `textarea` is
 `input.multiline`, `group`/`grab`/`dock` are one `frame` (`style` / `draggable` / `accept` + `sink`),
 and a row of a grid is `entry`.
 
@@ -35,12 +35,12 @@ def text(value: str, **rest: Any) -> dict:
 
 
 def field(tag: str, **rest: Any) -> dict:
-    """A bundled field: `tag` is the key the enclosing bundle packs it under; the exit is the bundle's."""
+    """A loomd field: `tag` is the key the enclosing loom packs it under; the exit is the loom's."""
     return {"type": "input", "tag": tag, **rest}
 
 # A button's label is its `source`, its uplink its `sink` (ADR 0032 dropped the `submit` kind). It
-# lives inside a `bundle` — that is the only place the renderer mounts one.
-# A button reads its label and sends nothing itself: a press submits the enclosing bundle, which
+# lives inside a `loom` — that is the only place the renderer mounts one.
+# A button reads its label and sends nothing itself: a press submits the enclosing loom, which
 # holds the exit (ADR 0039 §2a).
 BUTTON: dict = {"type": "button", "source": {"default": "提交"}}
 
@@ -88,13 +88,13 @@ NODES: dict[str, dict] = {
         "attrs": {"place": "inline", "replace_header": True},
         "children": [text("panel-header"), text("panel-body")],
     },
-    # ADR 0032: the bundle packs its fields into one object and owns the exit (`sink`) and the
+    # ADR 0032: the loom packs its fields into one object and owns the exit (`sink`) and the
     # timing (`attrs.submit`); each field's name is its own `tag`, never the sink's address. Its
     # button is the press the `submit: [button]` names — a button renders nowhere else.
-    "bundle": {
-        "type": "bundle",
+    "loom": {
+        "type": "loom",
         "attrs": {"submit": ["enter", "button"]},
-        "sink": {"dest": "gate.bundle"},
+        "sink": {"dest": "gate.loom"},
         "children": [
             field("name"),
             field("body", multiline=True, placeholder={"default": "写点什么"}),
@@ -144,7 +144,7 @@ NODES: dict[str, dict] = {
     # No `source` prefill: the renderer starts an input from its js-kind's default ("" for text)
     # and reads neither `default` nor `source` for display — measured, and the reason the profile
     # no longer offers a constant source for `input`.
-    # A field's uplink is its bundle's, and `tag` is what makes it a member (ADR 0032 §2, revised):
+    # A field's uplink is its loom's, and `tag` is what makes it a member (ADR 0032 §2, revised):
     # a remote sink with no tag is a value nobody receives, and the SDK refuses it.
     "input": {"type": "input", "tag": "gate.input", "kind": "text"},
     # The option rows are a list plane: `options` is the wire's own field, and the renderer

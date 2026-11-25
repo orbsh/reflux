@@ -260,10 +260,10 @@ RAIL = {
 def control(label: str) -> Accrete:
     """浮动按钮，四种状态之一：播放 → 暂停 → 继续 → 重播。
 
-    这个按钮是 bundle 的确认键（它有 sink，时机由 bundle 命名），标签由状态给 —— 所以整个节点
+    这个按钮是 loom 的确认键（它有 sink，时机由 loom 命名），标签由状态给 —— 所以整个节点
     走一个槽，而不是画进页面里。
     """
-    return h.bundle(
+    return h.loom(
         h.button(label),
         sink=TOGGLE,
         submit="button",
@@ -418,14 +418,14 @@ def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str
 
 
 def review_form(s: Demo) -> Accrete:
-    """表（行从槽里来）与表单（bundle 能打包的那些字段）。
+    """表（行从槽里来）与表单（loom 能打包的那些字段）。
 
-    两半都在这里，因为它们合不成一个：`bundle` 靠遍历自己的静态子节点认领字段（`hooks.rs`、`collect`），
+    两半都在这里，因为它们合不成一个：`loom` 靠遍历自己的静态子节点认领字段（`hooks.rs`、`collect`），
     而一行从槽里来，就不在它的字段里。所以表是读数，它下面那三个输入是表单 —— 一次提交带
     `{zw, cj, sy}`，每行一个值，不管那一行那格是什么类型。
     """
-    return h.bundle(
-        # 一个竖盒子：bundle 是一行 flex，子节点并排会把散文挤成一列单词（实测）——
+    return h.loom(
+        # 一个竖盒子：loom 是一行 flex，子节点并排会把散文挤成一列单词（实测）——
         # 里面的排法是页面的事。
         h.frame(
             h.text(

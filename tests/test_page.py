@@ -1,4 +1,4 @@
-"""The page: its pinned bundle, and the mounts that serve it.
+"""The page: its pinned loom, and the mounts that serve it.
 
 Two failure modes this catches before a browser sees them:
   1. a vendored renderer file was swapped or rebuilt without refreshing versions.json (or the

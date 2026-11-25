@@ -39,7 +39,7 @@ python3 tools/gate_ingest.py                     # 12 条：两道门、整帧�
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
 python3 tools/gate_t3.py                         # 16 条：整树画词表 + 令牌的 computed style
-python3 tools/gate_t4.py                         # 10 条：输入/bundle 上行、落点与 id 认领（真按键、真点击）
+python3 tools/gate_t4.py                         # 10 条：输入/loom 上行、落点与 id 认领（真按键、真点击）
 python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历史 / 后退 / 深链 / 无标记
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
@@ -51,7 +51,7 @@ python3 -m examples.chat.walkthrough --auto   # 示例的快速演示（自己�
 python3 -m reflux.cli routes examples.zh.demo_app       # 路由表（import 的副作用）
 python3 -m reflux.cli dests examples.zh.demo_app:make_app   # 上行落点注册表（名字 / builtin|app / 来源）
 python3 tools/serve.py --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
-python3 -m examples.zh.demo_app --port 0              # 起参考应用（回声／列表／bundle／两条路由）
+python3 -m examples.zh.demo_app --port 0              # 起参考应用（回声／列表／loom／两条路由）
 python3 tools/measure.py                         # 四段测量：帧字节 / DOM 变更 / 首屏 / 服务端 CPU（约一分钟）
 python3 tools/measure.py --only bytes,cpu        #   只跑其中两段
 ```
@@ -92,10 +92,10 @@ README 里明说的「不做」，要做等于另开一轮。
 - **生产者侧两条规则在 `wire`**：一帧超过 `MAX_OPS_PER_FRAME` 拒建、一棵树里同一个 id 出现两次拒建
   （`reflux/protocol.py` 是那两个协议数字的唯一来源）。服务端那道门独立复核，两条都要留。
 - **上行的时机是渲染器的**：`input`（含 `multiline`）在 **Enter**（全仓没有 blur），空值不上行；`tag` 只被 `input`
-  读（回车提交进 bundle，bundle 的 `submit` 一次发出全部字段）；帧的 `id` = 发射节点自身，空 id 无键。写门之前先读
+  读（回车提交进 loom，loom 的 `submit` 一次发出全部字段）；帧的 `id` = 发射节点自身，空 id 无键。写门之前先读
   `ui_leptos`。
-- **`button` 只在 `bundle` 里渲染**，且一次点击就是一帧 bundle submit——所以「点一下做事」的组件一律包一层 bundle，
-  行身份靠 bundle 自己的 id 上行（`demo_app.row_node`）。
+- **`button` 只在 `loom` 里渲染**，且一次点击就是一帧 loom submit——所以「点一下做事」的组件一律包一层 loom，
+  行身份靠 loom 自己的 id 上行（`demo_app.row_node`）。
 - **两个标记必须是 `frame`**：`text` 只把 id 塞进 class 列表，`frame` 还把它落到 DOM 的 `id` 属性上
   （`placeholder` 并进来时带过来的行为，ADR 0027）；`tiles`/`panel`/`canvas` 虽然也 `.id()`，
   但各自带语义，标记不该借用。gate 里按 id-as-class 取节点的那几处（`text`）照旧。
@@ -139,7 +139,7 @@ reflux/sdk/_parse.py           手写：parse／dump 边界（dump 补 by_alias�
 reflux/sdk/markers.py          手写：两个保留 id 与 page()（`reflux:path`／`reflux:title`），不进词表
 reflux/app.py                  根挂载 + /static/ + /ws + 注册表 + 一页钩子；draw_page 走 wire
 reflux/server.py               伺服：挂载表（前缀 → 目录）、无缓存、深链交 index.html、/ws 升级
-examples/zh/demo_app.py             参考应用：回声／列表增删／拖拽归档／bundle 一次提交／两条路由（T9 的种子）
+examples/zh/demo_app.py             参考应用：回声／列表增删／拖拽归档／loom 一次提交／两条路由（T9 的种子）
 tools/serve.py                 只伺服 www/，不声明页面
 examples/chat/app.py           示例应用：一页对话 + 流式 worker + 单飞/停止/应用层两道门
 examples/chat/model.py         模型缝：Scripted（离线确定性）／OpenAI（SSE，未对真端点验证）

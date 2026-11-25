@@ -7,9 +7,9 @@ contract — read out of `ui_leptos`, not assumed:
 - a field has **no uplink of its own** (ADR 0032 §2, revised 2026-11-24): a tag-less `input` sends
   nothing on Enter, and nothing clears it — the box keeps what was typed. (A *remote* sink on such a
   field is refused by the SDK, `_check_uplinks`, so it cannot reach the page at all.);
-- a tagged `input` inside a `bundle` only commits into the bundle's pack — the uplink is the
-  bundle's, one frame carrying `{tag: value}` for every field it packs;
-- a `bundle` sends when `attrs.submit` names the timing and that timing happens: here only
+- a tagged `input` inside a `loom` only commits into the loom's pack — the uplink is the
+  loom's, one frame carrying `{tag: value}` for every field it packs;
+- a `loom` sends when `attrs.submit` names the timing and that timing happens: here only
   `button`, so a press inside it is the one submit (`enter` would make the field's Enter send);
 - the frame's `id` is the **emitting node's** own id, and an empty id is no id at all (the key is
   absent, it is not null);
@@ -40,7 +40,7 @@ SEEN: list[dict] = []
 
 
 def field(name: str, *, id: str) -> dict:
-    """An input whose typed value lands in the enclosing bundle under `name` (`tag` names it)."""
+    """An input whose typed value lands in the enclosing loom under `name` (`tag` names it)."""
     return {"type": "input", "id": id, "tag": name}
 
 
@@ -53,9 +53,9 @@ def tree() -> Any:
         {"type": "input", "id": "name-in"},
         # 1: the same, with no id — and just as silent.
         {"type": "input"},
-        # 2: a bundle: two tagged fields and the press that packs them. `submit: [button]` says a
+        # 2: a loom: two tagged fields and the press that packs them. `submit: [button]` says a
         # press is the only timing — Enter in a field commits, it does not uplink.
-        h.bundle(
+        h.loom(
             field("who", id="who-in"),
             field("n", id="n-in"),
             h.button("送"),
@@ -141,7 +141,7 @@ def main() -> int:
             print("the fixture never drew: expected four inputs")
             return 1
 
-        # 1 — Enter in a tag-less field sends nothing: its uplink is the bundle's, and it has none.
+        # 1 — Enter in a tag-less field sends nothing: its uplink is the loom's, and it has none.
         focus(cdp, 0)
         cdp.type_text("hello")
         press_enter(cdp)
@@ -154,7 +154,7 @@ def main() -> int:
             )
         )
 
-        # 2 — and nothing clears it: clearing is the bundle's `reset`, not a rule of the widget.
+        # 2 — and nothing clears it: clearing is the loom's `reset`, not a rule of the widget.
         kept = cdp.eval("document.querySelectorAll('input')[0].value")
         checks.append(("the box keeps what was typed", kept == "hello", f"value={kept!r}"))
 
@@ -171,7 +171,7 @@ def main() -> int:
             )
         )
 
-        # 4 — a packed field commits, it does not uplink; the bundle owns the frame.
+        # 4 — a packed field commits, it does not uplink; the loom owns the frame.
         before = len(SEEN)
         focus(cdp, 2)
         cdp.type_text("ada")
@@ -181,15 +181,15 @@ def main() -> int:
         press_enter(cdp)
         time.sleep(0.4)
         silent = len(SEEN) == before
-        checks.append(("a bundle field's Enter commits without uplinking", silent, f"frames +{len(SEEN) - before}"))
+        checks.append(("a loom field's Enter commits without uplinking", silent, f"frames +{len(SEEN) - before}"))
 
         # 5 — the button's press is the one frame, carrying every field it packs.
-        cdp.click(".button")  # a bundle draws as a div; the button carries the role class
+        cdp.click(".button")  # a loom draws as a div; the button carries the role class
         wait_for(lambda: len(SEEN) == before + 1)
         submit = SEEN[-1] if len(SEEN) > before else {}
         checks.append(
             (
-                "a bundle sends once, with every tagged field and its own id",
+                "a loom sends once, with every tagged field and its own id",
                 submit
                 == {
                     "dest": "gate.form",
@@ -213,11 +213,11 @@ def main() -> int:
 
         # 7 — a second press is a second submit, not a stuck state.
         before = len(SEEN)
-        cdp.click(".button")  # a bundle draws as a div; the button carries the role class
+        cdp.click(".button")  # a loom draws as a div; the button carries the role class
         wait_for(lambda: len(SEEN) == before + 1)
         checks.append(
             (
-                "the bundle sends again on the next press",
+                "the loom sends again on the next press",
                 len(SEEN) == before + 1,
                 f"frames +{len(SEEN) - before}",
             )

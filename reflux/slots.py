@@ -22,7 +22,7 @@ data plane. Using one as a `sink=` is the same name used as an address, which is
     slots: ChatSlots = ctx.slot          # type: ignore[assignment]
     slots.status.set(b.text("就绪"))      # one frame
     b.text(source=slots.status)          # a node reads a slot
-    b.bundle(b.button("发送", sink=slots.chat.send), sink=slots.chat.send, submit="button")
+    b.loom(b.button("发送", sink=slots.chat.send), sink=slots.chat.send, submit="button")
                                          # and speaks to an event — same view, nested
 
 `ctx.slot("chat/status")`, `ctx.slot["status"]` and `ctx.slot.status` are one slot. Paths go out as
@@ -186,7 +186,7 @@ class Slots:
         self._ctx = ctx
 
     def __call__(self, path: str) -> Slot:
-        """Declare a name: `ctx.slot("chat/status")` — or the sink a bundle exits through."""
+        """Declare a name: `ctx.slot("chat/status")` — or the sink a loom exits through."""
         return self._make(path)
 
     def __getitem__(self, name: str) -> Slot:

@@ -138,11 +138,11 @@ def register(app: Any) -> None:
                 h.text(source=slots.count, id="counter-slot"),
                 h.text(source=slots.hint, id="counter-hint-slot"),
                 h.frame(
-                    # 一个 `button` 住在 `bundle` 里，按下的时机由 bundle 的 `submit` 命名 —— 所以每次
-                    # 按下都是一个 bundle 的提交，而不是按钮自己会说话（ADR 0032 §3）。
-                    h.bundle(h.button("−"), sink=down, submit=["button"], id="counter-down"),
-                    h.bundle(h.button("＋"), sink=up, submit=["button"], id="counter-up"),
-                    h.bundle(h.button("归零"), sink=reset, submit=["button"], id="counter-reset"),
+                    # 一个 `button` 住在 `loom` 里，按下的时机由 loom 的 `submit` 命名 —— 所以每次
+                    # 按下都是一个 loom 的提交，而不是按钮自己会说话（ADR 0032 §3）。
+                    h.loom(h.button("−"), sink=down, submit=["button"], id="counter-down"),
+                    h.loom(h.button("＋"), sink=up, submit=["button"], id="counter-up"),
+                    h.loom(h.button("归零"), sink=reset, submit=["button"], id="counter-reset"),
                     horizontal=True,
                     grid={"grid-template-columns": "max-content max-content max-content", "gap": "8px",
                           "justify-content": "start"},
@@ -151,7 +151,7 @@ def register(app: Any) -> None:
                 h.frame(
                     h.text("步长", variant="muted"),
                     # 输入框的出口是它所在的组：`tag` 是它打包时的键，`submit` 决定何时发。
-                    h.bundle(
+                    h.loom(
                         h.input(tag="step", placeholder="1–10，回车生效", id="counter-step"),
                         sink=set_step,
                         submit=["enter"],

@@ -7,7 +7,7 @@ from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
 
-__all__ = ["bundle", "button", "canvas", "entry", "forcegraph", "frame", "image", "input", "panel", "path", "select", "svg", "text", "tiles"]
+__all__ = ["button", "canvas", "entry", "forcegraph", "frame", "image", "input", "loom", "panel", "path", "select", "svg", "text", "tiles"]
 
 def frame(
     *children: Accrete,
@@ -86,7 +86,7 @@ def panel(
     return parse(drop_none(type='panel', attrs=attrs, source=source, id=id, children=list(children) or None), Panel)
 
 
-def bundle(
+def loom(
     *children: Accrete,
     reset: ResetMode | str | None = None,
     selector: str | None = None,
@@ -95,11 +95,11 @@ def bundle(
     sink: Any = None,
     tag: str | None = None,
     id: str | None = None,
-) -> Bundle:
-    """Build a `bundle` node (the wire type `bundle`)."""
+) -> Loom:
+    """Build a `loom` node (the wire type `loom`)."""
     attrs = drop_none(reset=reset, selector=selector, sends=sends, submit=as_set(submit))
     sink = as_sink(sink)
-    return parse(drop_none(type='bundle', attrs=attrs, sink=sink, id=id, children=list(children) or None, tag=tag), Bundle)
+    return parse(drop_none(type='loom', attrs=attrs, sink=sink, id=id, children=list(children) or None, tag=tag), Loom)
 
 
 def svg(

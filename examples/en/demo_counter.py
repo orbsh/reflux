@@ -120,7 +120,7 @@ def register(app: Any) -> None:
             record(ctx, "reset")
 
         def set_step(value: object) -> None:
-            # A bundle submits the object it packed ({field: value}), and the value is a string — so this
+            # A loom submits the object it packed ({field: value}), and the value is a string — so this
             # both parses it and refuses it.
             raw = value.get("step") if isinstance(value, dict) else None
             text = raw.strip() if isinstance(raw, str) else ""
@@ -144,11 +144,11 @@ def register(app: Any) -> None:
                 h.text(source=slots.count, id="counter-slot"),
                 h.text(source=slots.hint, id="counter-hint-slot"),
                 h.frame(
-                    # A `button` lives inside a `bundle`, and the bundle's `submit` names the press —
-                    # so each press is a bundle's submit, not a button that speaks on its own (ADR 0032 §3).
-                    h.bundle(h.button("−"), sink=down, submit=["button"], id="counter-down"),
-                    h.bundle(h.button("＋"), sink=up, submit=["button"], id="counter-up"),
-                    h.bundle(h.button("Reset"), sink=reset, submit=["button"], id="counter-reset"),
+                    # A `button` lives inside a `loom`, and the loom's `submit` names the press —
+                    # so each press is a loom's submit, not a button that speaks on its own (ADR 0032 §3).
+                    h.loom(h.button("−"), sink=down, submit=["button"], id="counter-down"),
+                    h.loom(h.button("＋"), sink=up, submit=["button"], id="counter-up"),
+                    h.loom(h.button("Reset"), sink=reset, submit=["button"], id="counter-reset"),
                     horizontal=True,
                     grid={"grid-template-columns": "max-content max-content max-content", "gap": "8px",
                           "justify-content": "start"},
@@ -157,7 +157,7 @@ def register(app: Any) -> None:
                 h.frame(
                     h.text("Step", variant="muted"),
                     # A field's exit is the group it sits in: `tag` is the key it packs under, `submit` the timing.
-                    h.bundle(
+                    h.loom(
                         h.input(tag="step", placeholder="1–10, Enter to apply", id="counter-step"),
                         sink=set_step,
                         submit=["enter"],

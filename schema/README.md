@@ -16,8 +16,8 @@
   children, each named by its `attrs.selector`, and a field whose children are entries is a nested
   list drawn as child rows — there is no colspan/rowspan). How much of the slot is on stage is
   `window: {size: N}` (was `stage: all | one`); what advances it is `step: {timer: ms}` or `{slot: name}`
-- vocabulary, before it: ADR 0032 retired `form` and `textarea` — `bundle` packs fields into one object
-  (fields are named by their `tag`, the exit is the bundle's `sink`, the timing its `attrs.submit`), and
+- vocabulary, before it: ADR 0032 retired `form` and `textarea` — `loom` packs fields into one object
+  (fields are named by their `tag`, the exit is the loom's `sink`, the timing its `attrs.submit`), and
   a multi-line text area is `input` with `multiline: true`
 - the export is deterministic: two exports of the same tree hash equal (measured), so a drift gate compares bytes
 

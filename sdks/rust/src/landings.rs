@@ -40,7 +40,7 @@ impl Landings {
 
     /// Bind a handler and return the name a sink takes: `landings.bind("echo", |value| …)`.
     ///
-    /// Binding the same name twice is one landing point (a bundle carries the sink its button sends
+    /// Binding the same name twice is one landing point (a loom carries the sink its button sends
     /// with); a second *different* handler under the same name gets `#2`, the same rule the Python
     /// side follows for a second closure with the same function name.
     pub fn bind<F>(&mut self, name: &str, handler: F) -> String

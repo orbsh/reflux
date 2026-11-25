@@ -262,11 +262,11 @@ RAIL = {
 def control(label: str) -> Accrete:
     """The floating button, in one of its four states: play → pause → resume → replay.
 
-    The button is a bundle's confirm key (it has a sink and the bundle names the timing), and the
+    The button is a loom's confirm key (it has a sink and the loom names the timing), and the
     label is the state's — which is why this whole node rides a slot instead of being drawn into
     the page.
     """
-    return h.bundle(
+    return h.loom(
         h.button(label),
         sink=TOGGLE,
         submit="button",
@@ -424,15 +424,15 @@ def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str
 
 
 def review_form(s: Demo) -> Accrete:
-    """The table (rows arrive through a slot) and the form (fields a bundle can pack).
+    """The table (rows arrive through a slot) and the form (fields a loom can pack).
 
-    Both halves are here because they cannot be one: `bundle` claims a field by walking its own
+    Both halves are here because they cannot be one: `loom` claims a field by walking its own
     static children (`hooks.rs`, `collect`), so a row that arrives through a slot is not one of its
     fields. The table is therefore the read-out and the three inputs below it are the form — a
     submit carries `{zw, cj, sy}`, one value per row, whichever kind that row's cell is.
     """
-    return h.bundle(
-        # One vertical box: a bundle is a flex row, so its children side by side squeeze the prose
+    return h.loom(
+        # One vertical box: a loom is a flex row, so its children side by side squeeze the prose
         # into a column of single words (measured) — the layout inside is the page's to say.
         h.frame(
             h.text(

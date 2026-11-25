@@ -103,12 +103,12 @@ class TheAddressesInNodes(unittest.TestCase):
         self.assertEqual(h.text(source=self.ctx.slot["status"]).source.slot, "status")
 
     def test_a_sink_handle_reaches_the_wire_as_its_name(self) -> None:
-        node = h.bundle(h.button("send"), sink=self.ctx.slot("chat.send"))
+        node = h.loom(h.button("send"), sink=self.ctx.slot("chat.send"))
         self.assertEqual(node.sink.dest, "chat.send")
 
     def test_a_bare_value_is_a_constant_on_a_read_and_a_name_on_a_write(self) -> None:
         self.assertEqual(dump(h.text(source="status"))["source"], {"default": "status", "scope": "remote"})
-        self.assertEqual(dump(h.bundle(sink="chat.send"))["sink"], {"dest": "chat.send", "scope": "remote"})
+        self.assertEqual(dump(h.loom(sink="chat.send"))["sink"], {"dest": "chat.send", "scope": "remote"})
 
     def test_a_read_with_no_constant_refuses_a_bare_string(self) -> None:
         # A `tiles` has no `default` in the profile: a bare value there is neither a constant nor a

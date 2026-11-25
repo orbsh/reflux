@@ -113,7 +113,7 @@ class Tokens:
 def credentials_of(frame: Any) -> dict[str, Any]:
     """The frame's payload as `{name: value}`, whichever way it was written.
 
-    A bundle sends the flat object it packed — `{tag: value, …}` (ADR 0032), no per-field wrapper.
+    A loom sends the flat object it packed — `{tag: value, …}` (ADR 0032), no per-field wrapper.
     A frame from an older renderer still carries `{"data": value, "payload": null}` on each entry,
     and that is unwrapped here so the difference never reaches `verify`.
     """
@@ -140,12 +140,12 @@ def default_view(ctx: Any, state: str) -> Accrete:
     lines: list[Accrete] = [h.text("登录", variant="heading-1")]
     if state == "refused":
         lines.append(h.text("用户名或密码不对", variant="muted"))
-    # A bundle owns the exit (`sink`) and the timing (`submit`, ADR 0032); each field is named by
+    # A loom owns the exit (`sink`) and the timing (`submit`, ADR 0032); each field is named by
     # its own `tag`, and each field says what it is with `kind` (ADR 0039: a field's type is the
     # field's, not a channel's — a tagged field has no address of its own to hang it on).
     return h.frame(
         *lines,
-        h.bundle(
+        h.loom(
             h.input(tag="username", id="auth-user"),
             h.input(tag="password", kind=JsType.password, id="auth-pass"),
             h.button("继续"),

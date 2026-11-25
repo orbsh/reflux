@@ -9,7 +9,7 @@ framework's built-in 404, and authentication end to end (a gated landing point, 
 verb, a token that survives a RELOAD, and a logout that revokes).
 
 Navigation is asserted as the **mirror**, not as an anchor: accrete has no URL-bearing type, so the
-demo moves between pages with a one-button bundle, and the producer answers with a new structure
+demo moves between pages with a one-button loom, and the producer answers with a new structure
 that carries a new `reflux:path` marker; the address bar follows because the runtime mirrors that
 marker (`gate_t6` pins the runtime, this gate uses it).
 
@@ -58,7 +58,7 @@ def seen(cdp: Cdp, text: str) -> bool:
 
 
 def rows(cdp: Cdp) -> int:
-    """The buttons inside the list slot — one per row (each row is a one-button bundle)."""
+    """The buttons inside the list slot — one per row (each row is a one-button loom)."""
     return cdp.eval("document.querySelectorAll('#rows .button').length") or 0
 
 
@@ -143,17 +143,17 @@ def main() -> int:
         echoed = wait_for(lambda: seen(cdp, "hello"))
         checks.append(("an input's Enter reaches the slot it wrote", bool(echoed), f"echo={'hello' in body(cdp)}"))
 
-        # 2 — one bundle submit adds a row (the add bundle's button is the page's own).
+        # 2 — one loom submit adds a row (the add loom's button is the page's own).
         click_label(cdp, "加一行")
         added = wait_for(lambda: rows(cdp) == 3)
-        checks.append(("a one-button bundle adds a row", bool(added), f"rows={rows(cdp)}"))
+        checks.append(("a one-button loom adds a row", bool(added), f"rows={rows(cdp)}"))
 
-        # 3 — a row's own bundle removes that row, by the identity it carried up.
+        # 3 — a row's own loom removes that row, by the identity it carried up.
         click_label(cdp, "删", nth=0)
         removed = wait_for(lambda: rows(cdp) == 2 and "第一行" not in body(cdp))
         checks.append(
             (
-                "a row's bundle removes it by identity",
+                "a row's loom removes it by identity",
                 bool(removed),
                 f"rows={rows(cdp)} first_row={'第一行' in body(cdp)}",
             )
@@ -185,7 +185,7 @@ def main() -> int:
             )
         )
 
-        # 6 — the login bundle is the framework's VERB: every field arrives packed and the answer is a
+        # 6 — the login loom is the framework's VERB: every field arrives packed and the answer is a
         #     token plus the signed-in line, drawn into the `auth` region.
         type_into(cdp, 1, "ada")
         type_into(cdp, 2, "pw")
@@ -193,7 +193,7 @@ def main() -> int:
         signed_in = wait_for(lambda: "已登录 user-ada" in body(cdp))
         checks.append(
             (
-                "the login bundle reaches the venue's verb and binds the connection",
+                "the login loom reaches the venue's verb and binds the connection",
                 bool(signed_in),
                 f"signed_in={'已登录 user-ada' in body(cdp)}",
             )

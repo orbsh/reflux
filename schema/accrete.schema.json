@@ -22,90 +22,6 @@
       ],
       "type": "string"
     },
-    "Bundle": {
-      "description": "A bundle packs a group of fields into one object and sends it (ADR 0032).\nIt owns the exit for its fields (`sink`), when they leave (`attrs.submit`), what they become\nafterwards (`attrs.reset`) and how many times they may (`attrs.sends`) — the field itself owns\nnothing but its value. `id` marks this submission (the instance), not the fields: fields are\nnamed by their own `tag`.",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/BundleAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "children": {
-          "items": {
-            "$ref": "#"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sink": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Sink"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "tag": {
-          "description": "The key this bundle contributes to its parent's packed object — the same `tag` rule a field follows,\nbecause a nested bundle is an input of the enclosing one. Only read when the bundle sits inside another\nbundle; with no `tag` it packs nothing into its parent (`id` is identity, `dest` is where it sends, and\nneither is a name — ADR 0032 §4).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "BundleAttr": {
-      "properties": {
-        "class": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "reset": {
-          "$ref": "#/$defs/ResetMode",
-          "description": "What the fields become after a send. Absent = `keep`."
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sends": {
-          "description": "How many sends this bundle has: absent or `-1` = unlimited, `0` = locked from the start. Each send\ntakes one; at zero the bundle's fields are disabled and it refuses to send (ADR 0032 §5).",
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "submit": {
-          "$ref": "#/$defs/SubmitSet",
-          "description": "When to send. Absent = `[enter]`."
-        }
-      },
-      "type": "object"
-    },
     "Button": {
       "properties": {
         "attrs": {
@@ -788,7 +704,7 @@
           ]
         },
         "tag": {
-          "description": "The field's name inside an enclosing bundle: the bundle packs this tag\nas the key, so the sink's address no longer names the field.",
+          "description": "The field's name inside an enclosing loom: the loom packs this tag\nas the key, so the sink's address no longer names the field.",
           "type": [
             "string",
             "null"
@@ -828,6 +744,90 @@
           "type": "string"
         }
       ]
+    },
+    "Loom": {
+      "description": "A loom packs a group of fields into one object and sends it (ADR 0032).\nIt owns the exit for its fields (`sink`), when they leave (`attrs.submit`), what they become\nafterwards (`attrs.reset`) and how many times they may (`attrs.sends`) — the field itself owns\nnothing but its value. `id` marks this submission (the instance), not the fields: fields are\nnamed by their own `tag`.",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoomAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "children": {
+          "items": {
+            "$ref": "#"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sink"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tag": {
+          "description": "The key this loom contributes to its parent's packed object — the same `tag` rule a field follows,\nbecause a nested loom is an input of the enclosing one. Only read when the loom sits inside another\nloom; with no `tag` it packs nothing into its parent (`id` is identity, `dest` is where it sends, and\nneither is a name — ADR 0032 §4).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "LoomAttr": {
+      "properties": {
+        "class": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "reset": {
+          "$ref": "#/$defs/ResetMode",
+          "description": "What the fields become after a send. Absent = `keep`."
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sends": {
+          "description": "How many sends this loom has: absent or `-1` = unlimited, `0` = locked from the start. Each send\ntakes one; at zero the loom's fields are disabled and it refuses to send (ADR 0032 §5).",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "submit": {
+          "$ref": "#/$defs/SubmitSet",
+          "description": "When to send. Absent = `[enter]`."
+        }
+      },
+      "type": "object"
     },
     "Panel": {
       "description": "A panel: one \"appear/disappear content area\". `attrs.place` says where it goes (inline / hugging the trigger / hugging the viewport),\n`attrs.state` says who decides it appears (local toggle / following the bound slot). The four cells on these two axes are the old\n`fold`, `popup`, `layer`, plus the one cell they did not cover — hugging the viewport + local toggle (the drawer).\n\n`children[0]` is the trigger, `children[1]` is the floating content (with `state: bound` the trigger may be omitted: the panel's\nappearance is decided by the slot, nobody has to click). With no content nothing is drawn at all — omitting a child is a frame error.",
@@ -957,7 +957,7 @@
           "description": "`viewport` only: which edge the body hugs. Absent = `L` — the left edge of the viewport\n(`Direction` is the same enum `popup` positions with)."
         },
         "dismiss": {
-          "description": "Closes on a click outside the body — the mask for `viewport`, \"anywhere else\" for the rest.\nA panel without it can only be closed by its trigger (a bundle that must not lose its work).",
+          "description": "Closes on a click outside the body — the mask for `viewport`, \"anywhere else\" for the rest.\nA panel without it can only be closed by its trigger (a loom that must not lose its work).",
           "type": [
             "boolean",
             "null"
@@ -1061,7 +1061,7 @@
       "type": "object"
     },
     "ResetMode": {
-      "description": "What a bundle's fields become after it sends (ADR 0032 §4). One word, three exclusive values:\n`keep` (absent — what a field always did), `clear` (the empty value of its own shape) and\n`default` (the value `source.default` gave it at build time).",
+      "description": "What a loom's fields become after it sends (ADR 0032 §4). One word, three exclusive values:\n`keep` (absent — what a field always did), `clear` (the empty value of its own shape) and\n`default` (the value `source.default` gave it at build time).",
       "enum": [
         "keep",
         "clear",
@@ -1128,7 +1128,7 @@
           ]
         },
         "tag": {
-          "description": "The field's name inside an enclosing bundle (same rule as `input`).",
+          "description": "The field's name inside an enclosing loom (same rule as `input`).",
           "type": [
             "string",
             "null"
@@ -1265,7 +1265,7 @@
       "description": "What advances the stage (ADR 0031 §4). Exactly two answers, because there are exactly two ways\nan item gets there: a clock this node owns, or a slot the world writes. Omitted = no stepping."
     },
     "SubmitMode": {
-      "description": "When a bundle sends (ADR 0032). The modes combine, so the attribute is a\nset: `[enter, button]` is a chat box, `[change]` packs as the user types.\nThis is timing — a different axis from `scope`, which says where a value\nlands.",
+      "description": "When a loom sends (ADR 0032). The modes combine, so the attribute is a\nset: `[enter, button]` is a chat box, `[change]` packs as the user types.\nThis is timing — a different axis from `scope`, which says where a value\nlands.",
       "enum": [
         "enter",
         "button",
@@ -1616,10 +1616,10 @@
       "type": "object"
     },
     {
-      "$ref": "#/$defs/Bundle",
+      "$ref": "#/$defs/Loom",
       "properties": {
         "type": {
-          "const": "bundle",
+          "const": "loom",
           "type": "string"
         }
       },

@@ -145,14 +145,14 @@ class TestTheNode(unittest.TestCase):
         )
         refused(
             self,
-            frame(hand("create", {"type": "bundle", "sink": {"dest": "s", "payload": ["a"]}})),
+            frame(hand("create", {"type": "loom", "sink": {"dest": "s", "payload": ["a"]}})),
             "'payload' is not a field of a sink",
         )
         # The two directions do not borrow each other's words: a write has no `slot` and a read has
         # no `dest`, which is the whole point of splitting the one `Bind` (ADR 0039).
         refused(
             self,
-            frame(hand("create", {"type": "bundle", "sink": {"slot": "s"}})),
+            frame(hand("create", {"type": "loom", "sink": {"slot": "s"}})),
             "'slot' is not a field of a sink (dest/path/scope)",
         )
         refused(

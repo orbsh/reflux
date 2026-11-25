@@ -9,8 +9,8 @@ Four pages, a shell around them, and one page per shape an application is made o
   button carrying its own identity up, and a row also carries cargo — its frame is `draggable`, so
   dragging it onto the landing frame uplinks `{id, tag}`, the dragged frame's own id, so the archive
   handler resolves what the gesture never could (the drag itself reports nothing: only the landing
-  point does); and one `bundle` carries every field it packs (`{tag: value, …}`, ADR 0032) — the
-  LOGIN bundle, because credentials are the framework's business: the exit is `reflux:login`, the
+  point does); and one `loom` carries every field it packs (`{tag: value, …}`, ADR 0032) — the
+  LOGIN loom, because credentials are the framework's business: the exit is `reflux:login`, the
   app writes only `verify` and `view`, and no password is ever read here. Behind it, `vault.secret`
   is declared `auth=True`, so an anonymous click opens the login surface instead of reaching the
   handler and the same click lands once signed in (`Log out` is the way back out).
@@ -29,9 +29,9 @@ scrolling it.
 
 Two facts about this vocabulary shape the code, and both are measured by the gates:
 
-- **A `button` lives inside a `bundle`** (`gate_t3_next`): that is where the renderer mounts it, and
-  a bundle's `submit` is what a press sends (`submit=["button"]`). So "add a row", "remove a row" and
-  "go to another page" are one-button bundles, and the frame's `id` is the bundle's own id — which is
+- **A `button` lives inside a `loom`** (`gate_t3_next`): that is where the renderer mounts it, and
+  a loom's `submit` is what a press sends (`submit=["button"]`). So "add a row", "remove a row" and
+  "go to another page" are one-button looms, and the frame's `id` is the loom's own id — which is
   how a row's identity rides up and back.
 - **accrete has no URL-bearing type**, so there is no anchor to click and nothing to intercept: a
   page change is the producer answering with a new structure plus the new path marker (`go.home` /
@@ -64,30 +64,30 @@ from .demo_slots import GO, GO_ABOUT, GO_CHAT, GO_COUNTER, GO_DEMO, GO_HOME, Dem
 CARD = {"grid-auto-rows": "auto", "gap": "10px", "align-content": "start"}
 
 
-def nav_bundle(label: str, dest: Slot) -> Accrete:
-    """A one-button bundle — the vocabulary's only clickable, and the demo's way between pages.
+def nav_loom(label: str, dest: Slot) -> Accrete:
+    """A one-button loom — the vocabulary's only clickable, and the demo's way between pages.
 
-    The press is the bundle's own submit: `submit=["button"]` names the click as the timing, and the
-    bundle holds the exit, so the button only says "send this group" (ADR 0032 §3).
+    The press is the loom's own submit: `submit=["button"]` names the click as the timing, and the
+    loom holds the exit, so the button only says "send this group" (ADR 0032 §3).
     """
-    return h.bundle(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
+    return h.loom(h.button(label), sink=dest, submit=["button"], id=f"nav-{dest.name}")
 
 
 def row_node(row: dict) -> Accrete:
-    """One row: a bundle (the ✕ that removes it) around a draggable frame (the cargo).
+    """One row: a loom (the ✕ that removes it) around a draggable frame (the cargo).
 
     The two ways out of a row are different mechanisms on purpose: the button is an uplink on the
-    bundle's id, a drag is silent until a landing point says where it went (ADR 0034: the cargo is
-    the dragged subtree, and a drop reports the dragged node's own id). So the row's bundle keeps
+    loom's id, a drag is silent until a landing point says where it went (ADR 0034: the cargo is
+    the dragged subtree, and a drop reports the dragged node's own id). So the row's loom keeps
     `<row id>` — that is what `remove` addresses — and the cargo frame names itself `<row id>-cargo`,
     because one id per tree is the wire's rule and the drop has no other field to carry identity in.
 
-    The two frames say how the row is divided: a bundle is a flex row whose items all grow, so the
+    The two frames say how the row is divided: a loom is a flex row whose items all grow, so the
     cargo takes the width (`flex: 1 1 auto`) and the ✕ keeps its own size and centres itself in the
     height it does not fill.
     """
     # `remove` is a verb on a slot, so this name is written with the subscript.
-    return h.bundle(
+    return h.loom(
         h.frame(h.text(row["text"]), draggable={"tag": "row"}, style={"flex": "1 1 auto"},
                 id=f"{row['id']}-cargo"),
         h.frame(h.button("Remove"),
@@ -118,7 +118,7 @@ state = State()
 def shell(ctx: Context) -> Accrete:
     """The frame every page is drawn into: a header, and the `routes` reader.
 
-    The header says where you are and carries the three nav bundles; a page turn replaces only the
+    The header says where you are and carries the three nav looms; a page turn replaces only the
     slot, so the nav survives every turn. The reader is `min-height: 0` because a grid item's
     automatic minimum is its content — without it this row grows with the page and the shell's `1fr`
     is only a wish. The reader scrolls, so a page may be taller than the window.
@@ -126,11 +126,11 @@ def shell(ctx: Context) -> Accrete:
     return h.frame(
         h.frame(
             h.text("reflux reference app", variant="heading-3"),
-            nav_bundle("Demo", GO_HOME),
-            nav_bundle("About", GO_ABOUT),
-            nav_bundle("Walkthrough", GO_DEMO),
-            nav_bundle("Chat", GO_CHAT),
-            nav_bundle("Counter", GO_COUNTER),
+            nav_loom("Demo", GO_HOME),
+            nav_loom("About", GO_ABOUT),
+            nav_loom("Walkthrough", GO_DEMO),
+            nav_loom("Chat", GO_CHAT),
+            nav_loom("Counter", GO_COUNTER),
             grid={"grid-template-columns": "1fr auto auto auto auto auto", "gap": "8px", "align-items": "center"},
             id="nav",
         ),
@@ -156,7 +156,7 @@ def demo_view(ctx, state):
         lines.append(h.text("Wrong username or password", variant="muted"))
     return h.frame(
         *lines,
-        h.bundle(
+        h.loom(
             h.input(tag="user", id="auth-user"),
             h.input(tag="pass", kind=JsType.password, id="auth-pass"),
             h.button("Sign in"),
@@ -197,7 +197,7 @@ def home_page(ctx, match):
     The page root is a flex column with no gap of its own, so the page says how it is divided: a
     title that spans both columns, the left column (an echo, a list, a drag) and the right one (the
     framework's credential verb), and a footnote that spans as well. Each card is a `frame` with the
-    `card` variant, and its own gap — a bundle is a flex row and would line its fields up edge to
+    `card` variant, and its own gap — a loom is a flex row and would line its fields up edge to
     edge, which is a form, not a page.
 
     A page turn is that `return` and nothing else: the two markers the runtime reads
@@ -214,7 +214,7 @@ def home_page(ctx, match):
     slots = slots_of(ctx)
 
     def echo(value: object) -> None:
-        # A bundle submits the object it packed: {field: value}. A frame comes from outside, so
+        # A loom submits the object it packed: {field: value}. A frame comes from outside, so
         # anything unrecognised becomes the empty string instead of an exception.
         text = value.get("name") if isinstance(value, dict) else None
         state.echo = text if isinstance(text, str) else ""
@@ -257,11 +257,11 @@ def home_page(ctx, match):
                 h.frame(
                     h.text("Echo", variant="heading-3"),
                     h.text(
-                        "A field's exit is the group it sits in: Enter makes the bundle send {field: value} to the "
-                        "bundle's sink, and the field's `tag` is the key.",
+                        "A field's exit is the group it sits in: Enter makes the loom send {field: value} to the "
+                        "loom's sink, and the field's `tag` is the key.",
                         variant="muted",
                     ),
-                    h.bundle(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
+                    h.loom(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
                     h.text(source=slots.echo, id="echo"),
                     grid=CARD,
                     variant="card",
@@ -273,7 +273,7 @@ def home_page(ctx, match):
                         "A row's identity is its id: ✕ removes by id, and a drop archives by id — the gesture itself says nothing; only the landing point speaks.",
                         variant="muted",
                     ),
-                    h.bundle(h.button("Add a row"), sink=add_row,
+                    h.loom(h.button("Add a row"), sink=add_row,
                              submit=["button"], id="add-row"),
                     h.tiles(source=slots.rows, id="rows"),
                     # The landing point names its event and what it accepts; `accept` is one tag
@@ -303,9 +303,9 @@ def home_page(ctx, match):
                     "This form speaks the framework's verb `reflux:login`: the app writes only verify and view, and never reads the password.",
                     variant="muted",
                 ),
-                # Two fields stacked beside the button: a bundle is a flex row, so the column is
-                # a frame inside it and the press stays a child of the bundle it belongs to.
-                h.bundle(
+                # Two fields stacked beside the button: a loom is a flex row, so the column is
+                # a frame inside it and the press stays a child of the loom it belongs to.
+                h.loom(
                     h.frame(
                         h.input(tag="user", id="f-user"),
                         h.input(tag="pass", kind=JsType.password, id="f-pass"),
@@ -323,10 +323,10 @@ def home_page(ctx, match):
                 ),
                 h.frame(source=slots(AUTH_SLOT), id="auth-region"),
                 # Behind a declaration: a click here from a visitor never reaches the handler.
-                h.bundle(h.button("Secret"),
+                h.loom(h.button("Secret"),
                          sink=gated(reveal), submit=["button"], id="vault"),
                 h.text(source=slots.secret, id="secret"),
-                h.bundle(h.button("Log out"), sink=slots(LOGOUT),
+                h.loom(h.button("Log out"), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
                 variant="card",
@@ -357,7 +357,7 @@ def about_page(ctx, match):
     return (
         h.text("About", variant="heading-1"),
         h.text("This example app is written with the SDK alone: an echo, a list, a form, and four routes — /, /about, /chat and the walkthrough."),
-        nav_bundle("Back to the demo", GO_HOME),
+        nav_loom("Back to the demo", GO_HOME),
     )
 
 

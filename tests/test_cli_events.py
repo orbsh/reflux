@@ -7,7 +7,7 @@ Offline by design: no browser, no socket, no cargo. Two jobs:
   verb is broken rather than their spelling;
 - the **check** the tests here are really for: every event a page can send has a handler. Walking the
   reference app's two pages and collecting `sink.slot` from every node catches a mistyped
-  `bundle(sink=…)` before a browser run does, and it keeps the demo honest as it grows.
+  `loom(sink=…)` before a browser run does, and it keeps the demo honest as it grows.
 
 `kind=builtin` is the framework's own names (`reflux:hello`, `reflux:nav`); everything else is `app`.
 """

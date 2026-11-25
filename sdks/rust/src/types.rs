@@ -377,8 +377,8 @@ pub fn panel(children: &[Value], direction: Option<Value>, dismiss: Option<bool>
     Value::Object(node)
 }
 
-/// Build a `bundle` node (the wire type `bundle`).
-pub fn bundle(children: &[Value], reset: Option<&str>, selector: Option<&str>, sends: Option<i64>, submit: Option<&[&str]>, sink: Option<Sink>, tag: Option<&str>, id: Option<&str>) -> Value {
+/// Build a `loom` node (the wire type `loom`).
+pub fn loom(children: &[Value], reset: Option<&str>, selector: Option<&str>, sends: Option<i64>, submit: Option<&[&str]>, sink: Option<Sink>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = reset {
         put(&mut attrs, "reset", s(v));
@@ -409,7 +409,7 @@ pub fn bundle(children: &[Value], reset: Option<&str>, selector: Option<&str>, s
     if let Some(v) = tag {
         put(&mut node, "tag", s(v));
     }
-    put(&mut node, "type", s("bundle"));
+    put(&mut node, "type", s("loom"));
     Value::Object(node)
 }
 

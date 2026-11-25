@@ -7,7 +7,7 @@ action set the renderer itself implements) and nothing about your application. Y
 nodes from that vocabulary and sends small frames: *create this structure*, *set this slot*, *append
 this row*. The page draws it, and sends back what the user did.
 
-Nothing is templated, nothing is compiled per app, and the renderer bundle never changes when your
+Nothing is templated, nothing is compiled per app, and the renderer loom never changes when your
 interface does.
 
 ## The three parts
@@ -16,7 +16,7 @@ interface does.
 |---|---|---|
 | producer | your code, Python or Rust | builds nodes + frames with a generated SDK |
 | host | `reflux/app.py` | serves the page, owns devices, routes, the uplink registry |
-| page | `www/` | static shell + `reflux.js` runtime + the pinned renderer bundle |
+| page | `www/` | static shell + `reflux.js` runtime + the pinned renderer loom |
 
 The wire between them is one dialect: accrete's eight actions, and a frame **is** the array of them —
 no envelope (the renderer decodes nothing else). `reflux/wire.py` is that layer, and it is the only
@@ -26,18 +26,18 @@ place a frame is built.
 
     pip install reflux            # or: uv add reflux
 
-The wheel is self-contained: it carries the page (`reflux/www/`) with the pinned renderer bundle
+The wheel is self-contained: it carries the page (`reflux/www/`) with the pinned renderer loom
 inside it, so a server started from an installed reflux serves pages without a network request and
 without any build step on your side.
 
     python3 -c "from examples.zh.demo_app import make_app; make_app().serve_forever(8000)"
 
-The bundle is put in **while the wheel is built** (`hatch_build.py`): it downloads the release
+The loom is put in **while the wheel is built** (`hatch_build.py`): it downloads the release
 `vendor/pin.json` names, verifies that the manifest on disk is that revision, and copies `www/` in as
 `reflux/www/`. Building a wheel therefore needs network the first time; running one never does.
 
 From a checkout, the same thing is one command and no build: `python3 tools/vendor.py fetch` puts the
-bundle at `www/static/vendor/fluxen/`, and the server serves the repository's `www/` directly.
+loom at `www/static/vendor/fluxen/`, and the server serves the repository's `www/` directly.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ bundle at `www/static/vendor/fluxen/`, and the server serves the repository's `w
 
 Everything except the SDK's type layer is standard library.
 
-## The renderer bundle
+## The renderer loom
 
 The page runs a WebAssembly renderer that belongs to another repository (fluxen), so it is **not
 committed here** — a 3 MB wasm with a content-hashed name is not something a diff can review. What is
@@ -66,7 +66,7 @@ python3 tools/vendor.py install --dist ../fluxen/examples/renderer/dist   # adop
 
 `fetch` installs four files — the JS glue, its wasm, `assets/core.css`, `assets/custom.css` — and
 writes `versions.json` with the rev plus a sha256 and size per file. The gates compare against that
-file over HTTP (`gate_t0`), so a stale or hand-edited bundle fails as a red gate rather than a page
+file over HTTP (`gate_t0`), so a stale or hand-edited loom fails as a red gate rather than a page
 that half-loads.
 
 Publishing is automatic (`.github/workflows/renderer.yml`), because the tag is the revision and so
@@ -75,9 +75,9 @@ exist yet*, by building it with `trunk build --release` and attaching
 `dist-release/fluxen-renderer-<rev>.tar.gz` plus `SHA256SUMS` to a release of this repository. A push
 whose tag is already published builds nothing — it installs the release and runs the tests against
 it. So bumping the renderer is: `build --fluxen ../fluxen` locally to run the browser gates against
-the new bundle, then commit `rev`/`tag`/`asset` in `vendor/pin.json`. CI publishes on that push;
+the new loom, then commit `rev`/`tag`/`asset` in `vendor/pin.json`. CI publishes on that push;
 `fetch` works everywhere afterwards. The module media (monaco, mermaid, 3d-force-graph, …) is not in
-the bundle — frames that name those fetch them, so it stays ~3 MB.
+the loom — frames that name those fetch them, so it stays ~3 MB.
 
 ## Try the reference app
 
@@ -86,7 +86,7 @@ python3 -m examples.zh.demo_app --port 8000
 ```
 
 Open <http://127.0.0.1:8000/>. It has one of each shape an application needs: an input that echoes,
-a list you can add to, remove from, and drag onto an archive frame, a bundle that submits several
+a list you can add to, remove from, and drag onto an archive frame, a loom that submits several
 fields at once, and a shell with a nav over three routes — `/` (that vocabulary, laid out as cards),
 `/about`, and `/demo`.
 
@@ -122,8 +122,8 @@ app = App()                       # one object; every declaration below hangs on
 def home(ctx, match):
     return h.frame(
         h.text("Hello", variant="heading-1"),
-        # a field's exit is its group: the bundle holds the sink, the field only names its key
-        h.bundle(h.input(tag="name", id="name"), sink=ctx.slot.name.change),
+        # a field's exit is its group: the loom holds the sink, the field only names its key
+        h.loom(h.input(tag="name", id="name"), sink=ctx.slot.name.change),
         h.text(source=ctx.slot.echo, id="echo"),          # a slot: the data plane's name
     )
 
@@ -151,9 +151,9 @@ What the pieces are:
   mirrors into the address bar and the tab title, then your content. It is a convention, not a wire type
   — reach for it directly only when you are assembling a page by hand.
 - **`h.*`** are the generated constructors: one per accrete type, named after the wire's own `type`
-  values. `h.text(source=…)` reads a slot and `h.bundle(…, sink=…)` speaks to a dest — both take a
+  values. `h.text(source=…)` reads a slot and `h.loom(…, sink=…)` speaks to a dest — both take a
   handle from `ctx.slot`, never a string. A field has no exit of its own: `tag` makes it a member of
-  the enclosing bundle, and the bundle owns the address (`attrs.submit` says when, `attrs.reset` what
+  the enclosing loom, and the loom owns the address (`attrs.submit` says when, `attrs.reset` what
   its fields become afterwards, `attrs.sends` how many times it may send). A handle nests: `ctx.slot.chat.send` is the name `chat.send`, so a
   page's slots and its uplinks read off the same view.
 - **`@app.on(app.slot.name.change)`** is the only way an uplink frame reaches your code — the handle
@@ -182,7 +182,7 @@ else — `app.live()` (a snapshot), `app.device(id)` (one, by the id a handler w
 `app.evict(id=… | where=…, reason=…)` (close them, through the door a disconnect already uses),
 plus the heartbeat that judges a peer dead after `dead_after` seconds of silence.
 
-Signing in is therefore not a framework event. Connect anonymously, draw a login bundle when you need
+Signing in is therefore not a framework event. Connect anonymously, draw a login loom when you need
 one (it is a downlink message like any other), register the destination it posts to, and after your
 own verification (`user = check_credentials(...)`, an external service, whatever) hang the result on
 the connection and redraw:
@@ -308,17 +308,17 @@ closure is handed the event's value and holds its slots; the framework names it 
 def home_page(ctx, match):
     slots = slots_of(ctx)
 
-    def echo(value):                      # a bundle submits its pack: {tag: value}
+    def echo(value):                      # a loom submits its pack: {tag: value}
         slots.echo.set(h.text(value.get("name", "")))
 
     def add_row(value):
         slots.rows.append(row_node(...))
 
     return h.frame(
-        h.bundle(h.input(tag="name"), sink=echo, submit=["enter"]),
-            # a button has no exit of its own: a press submits the bundle, which owns the sink, the
+        h.loom(h.input(tag="name"), sink=echo, submit=["enter"]),
+            # a button has no exit of its own: a press submits the loom, which owns the sink, the
             # payload and the id (ADR 0039 §2a)
-            h.bundle(h.button("加一行"), sink=add_row, submit=["button"]),
+            h.loom(h.button("加一行"), sink=add_row, submit=["button"]),
             h.text(source=slots.echo),
         )
     )
@@ -414,7 +414,7 @@ python3 tools/gate_ingest.py                   # the two boundaries, over a real
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
 python3 tools/gate_t3.py                       # the whole vocabulary, drawn and styled
-python3 tools/gate_t4.py                       # typing, clicking, bundle submits
+python3 tools/gate_t4.py                       # typing, clicking, loom submits
 python3 tools/gate_t6.py                       # address bar, history, deep links
 python3 tools/gate_t7.py                       # devices: reload and death
 python3 tools/gate_t8.py                       # what a bad frame does (and does not) do
@@ -434,7 +434,7 @@ The browser gates drive a real headless Chromium over CDP using only the standar
 ```
 reflux/            the host: app, devices, wire, ingest, routes, dests, cli
 reflux/sdk/        the Python SDK — generated types/builders, hand-written parse/markers
-www/               the page: index.html, reflux.js runtime, css (the renderer bundle is
+www/               the page: index.html, reflux.js runtime, css (the renderer loom is
                    installed into www/static/vendor/fluxen/ by tools/vendor.py, not committed)
 schema/ profile/   the wire's snapshot and this framework's selection over it
 sdks/rust/         the second SDK, generated from the same two files

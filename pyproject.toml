@@ -19,7 +19,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 # The page tree stays at the repository root (`www/`) while the wheel carries it as `reflux/www/` —
-# `hatch_build.py` fetches the pinned renderer bundle and copies the tree in, so an installed reflux
+# `hatch_build.py` fetches the pinned renderer loom and copies the tree in, so an installed reflux
 # serves pages without a network request and without the vendored wasm living in git.
 [tool.hatch.build.targets.wheel]
 packages = ["reflux"]
@@ -27,7 +27,7 @@ packages = ["reflux"]
 [tool.hatch.build.targets.wheel.hooks.custom]
 
 # An sdist without `www/`, `vendor/` and `tools/vendor.py` could not build a wheel: the page tree is
-# what the wheel serves and the pin + fetch script are what put the renderer bundle inside it.
+# what the wheel serves and the pin + fetch script are what put the renderer loom inside it.
 [tool.hatch.build.targets.sdist]
 include = [
     "/reflux",
