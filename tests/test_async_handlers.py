@@ -13,7 +13,7 @@ import threading
 import time
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.auth import Auth
 from reflux.sdk import h
 from tests.fakes import FakeDevice, run_sync
@@ -30,7 +30,7 @@ def with_login(verify: Any) -> App:
         user = verify(ctx, credentials, mode)
         return (True, user, {}) if user else (False, "登录失败")
 
-    app = App()
+    app = create_app()
     app.hooks("login")(login)
     return app
 
@@ -80,7 +80,7 @@ def texts(node) -> list[str]:
 
 class TestAwaitableHandlers(unittest.TestCase):
     def test_an_async_handler_is_awaited(self) -> None:
-        app = App()
+        app = create_app()
         seen: list[dict] = []
 
         @app.on("note")
@@ -92,7 +92,7 @@ class TestAwaitableHandlers(unittest.TestCase):
         self.assertEqual(seen, [{"n": 1}])
 
     def test_a_plain_handler_runs_off_the_loop(self) -> None:
-        app = App()
+        app = create_app()
         where: list[str] = []
 
         @app.on("note")
@@ -104,7 +104,7 @@ class TestAwaitableHandlers(unittest.TestCase):
         self.assertNotEqual(where[0], threading.main_thread().name)
 
     def test_an_async_closure_landing_is_awaited(self) -> None:
-        app = App()
+        app = create_app()
         seen: list = []
 
         async def land(value):
@@ -117,7 +117,7 @@ class TestAwaitableHandlers(unittest.TestCase):
         self.assertEqual(seen, [{"row": 1}])
 
     def test_an_async_page_is_awaited(self) -> None:
-        app = App()
+        app = create_app()
 
         @app.page
         async def page(ctx, path: str):
@@ -133,7 +133,7 @@ class TestAwaitableHandlers(unittest.TestCase):
             await asyncio.sleep(0)
             return h.text("shell")
 
-        app = App()
+        app = create_app()
         app.hooks("shell")(shell)
 
         @app.page
@@ -183,7 +183,7 @@ class TestTheBudget(unittest.TestCase):
 
 class TestOrdering(unittest.TestCase):
     def test_two_deliveries_on_one_device_do_not_interleave(self) -> None:
-        app = App()
+        app = create_app()
         order: list[str] = []
 
         @app.on("step")
@@ -198,7 +198,7 @@ class TestOrdering(unittest.TestCase):
         self.assertEqual(order, ["1:in", "1:out", "2:in", "2:out"])
 
     def test_one_device_waiting_does_not_hold_another(self) -> None:
-        app = App()
+        app = create_app()
         done: dict[str, float] = {}
         gate = threading.Event()
 

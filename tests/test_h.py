@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.routes import Routes
 from reflux.sdk import dump, h
 from tests.fakes import run_sync, FakeDevice
@@ -65,7 +65,7 @@ class TheRefusalsStay(unittest.TestCase):
 
 class AClosureInsideData(unittest.TestCase):
     def test_a_data_tree_can_carry_a_closure_sink(self) -> None:
-        app = App(routes=Routes())
+        app = create_app()
         calls: list = []
 
         def hit(value):

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 from tests.fakes import run_sync
 from reflux.protocol import PING_DEST, PONG_DEST
 
@@ -30,7 +30,7 @@ class Socket:
 
 class ProbeTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.app = App()
+        self.app = create_app()
         self.device = FakeDevice()
         self.socket = Socket()
         self.device.channel = self.socket  # type: ignore[attr-defined]

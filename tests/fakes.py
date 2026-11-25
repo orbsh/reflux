@@ -63,7 +63,7 @@ class FakeDevice:
 
     def go(self, url: str) -> None:
         """The real move, through the app's own splitter: the address changes, then the page is drawn."""
-        from reflux.app import split_location
+        from reflux.application import split_location
 
         self.path, self.query = split_location(url)
         self.draw()

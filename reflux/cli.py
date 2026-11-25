@@ -34,8 +34,8 @@ import importlib
 import sys
 from typing import Sequence
 
-from .app import App
-from .routes import DEFAULT, Routes, discover
+from .application import App
+from .routes import Routes, discover
 
 
 def table_of(packages: Sequence[str]) -> Routes | None:
@@ -59,7 +59,14 @@ def print_routes(packages: Sequence[str], table: Routes | None = None) -> int:
     imported = discover(*packages)
     if imported:
         print(f"[routes] imported {len(imported)} module(s) from {', '.join(packages)}")
-    rows = (table if table is not None else table_of(packages) or DEFAULT).table()
+    # Import first: a module that says `from reflux import app` registers onto the framework's app
+    # as a side effect, which is the whole reason this verb imports the packages it names.
+    found = table or table_of(packages)
+    if found is None:
+        from . import app as framework_app  # imported late: `reflux` is still initialising above
+
+        found = framework_app.routes
+    rows = found.table()
     if not rows:
         print("[routes] nothing registered")
         return 0

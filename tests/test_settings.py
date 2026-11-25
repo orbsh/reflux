@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from examples.zh import demo_settings as settings
-from reflux.app import App
+from reflux.application import create_app, App
 from tests.fakes import FakeDevice, run_sync
 
 
@@ -139,7 +139,7 @@ class TestStore(unittest.TestCase):
 
 class TestSeed(unittest.TestCase):
     def test_the_first_draw_writes_the_slot_once(self):
-        app = App()
+        app = create_app()
         device = FakeDevice(app=app)
         ctx = app.context(device)
         settings.seed(ctx)
@@ -155,7 +155,7 @@ class TestSeed(unittest.TestCase):
             settings.settings.path = Path(where) / "s.json"
             settings.settings.state = dict(settings.DEFAULTS)
             settings.settings.apply({"round": {"data": 21}})
-            device = FakeDevice(app=App())
+            device = FakeDevice(app=create_app())
             settings.seed(device.app.context(device))
             landed = body(device)[settings.CONFIG]
             self.assertEqual(landed["source"]["default"]["round"], 21)
@@ -164,7 +164,7 @@ class TestSeed(unittest.TestCase):
 
 class TestThePage(unittest.TestCase):
     def drawn(self) -> dict:
-        app = App()
+        app = create_app()
         page = settings.page(app.context(FakeDevice(app=app)), None)
         return json.loads(page.model_dump_json(by_alias=True, exclude_none=True))
 
@@ -191,7 +191,7 @@ class TestTheUplink(unittest.TestCase):
     def test_a_dropped_member_is_named_on_the_page(self):
         with tempfile.TemporaryDirectory() as where:
             settings.settings.path = Path(where) / "s.json"
-            app = App()
+            app = create_app()
             device = FakeDevice(app=app)
             ctx = app.context(device)
             run_sync(

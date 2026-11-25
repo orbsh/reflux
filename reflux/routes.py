@@ -28,7 +28,7 @@ import re
 from typing import Any, Callable, Iterator, overload
 from urllib.parse import unquote
 
-__all__ = ["Match", "Route", "Routes", "RoutesError", "DEFAULT", "page", "discover"]
+__all__ = ["Match", "Route", "Routes", "RoutesError", "discover"]
 
 NAME = re.compile(r"^\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 CONVERTED = re.compile(r"^\{([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\}$")
@@ -343,5 +343,3 @@ def discover(*packages: str) -> list[str]:
     return imported
 
 
-DEFAULT = Routes()
-page = DEFAULT.add  # `@page(...)` at module level: the default table's decorator

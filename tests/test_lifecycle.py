@@ -11,12 +11,12 @@ import asyncio
 import threading
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 
 
 class TestHooks(unittest.TestCase):
     def test_a_startup_hook_runs_on_the_loop_before_serving(self) -> None:
-        app = App()
+        app = create_app()
         seen: list[tuple[str, str]] = []
 
         @app.startup
@@ -32,7 +32,7 @@ class TestHooks(unittest.TestCase):
             app.stop()
 
     def test_shutdown_hooks_run_last_first(self) -> None:
-        app = App()
+        app = create_app()
         seen: list[str] = []
 
         @app.shutdown
@@ -49,7 +49,7 @@ class TestHooks(unittest.TestCase):
         self.assertEqual(seen, ["two", "one"], "the last registered runs first")
 
     def test_a_failing_shutdown_hook_is_logged_and_the_rest_still_run(self) -> None:
-        app = App()
+        app = create_app()
         seen: list[str] = []
 
         @app.shutdown
@@ -68,7 +68,7 @@ class TestHooks(unittest.TestCase):
 
 class TestTheSharedClient(unittest.TestCase):
     def test_the_app_has_a_session_while_it_serves_and_not_after(self) -> None:
-        app = App()
+        app = create_app()
         self.assertIsNone(app.http, "an app nobody is serving has no client")
         app.start(port=0)
         session = app.http
@@ -79,7 +79,7 @@ class TestTheSharedClient(unittest.TestCase):
         self.assertTrue(session.closed)
 
     def test_a_startup_hook_may_use_the_session(self) -> None:
-        app = App()
+        app = create_app()
         seen: list[bool] = []
 
         @app.startup
@@ -95,7 +95,7 @@ class TestTheSharedClient(unittest.TestCase):
 
 class TestStartStop(unittest.TestCase):
     def test_starting_twice_is_an_error(self) -> None:
-        app = App()
+        app = create_app()
         app.start(port=0)
         try:
             with self.assertRaises(RuntimeError):
@@ -104,7 +104,7 @@ class TestStartStop(unittest.TestCase):
             app.stop()
 
     def test_stopping_twice_is_safe(self) -> None:
-        app = App()
+        app = create_app()
         server = app.start(port=0)
         seen: list[str] = []
 
@@ -118,7 +118,7 @@ class TestStartStop(unittest.TestCase):
         self.assertTrue(server._stopped.is_set())
 
     def test_stop_leaves_no_loop_thread_behind(self) -> None:
-        app = App()
+        app = create_app()
         before = [t.name for t in threading.enumerate()]
         app.start(port=0)
         self.assertIn("reflux-loop", [t.name for t in threading.enumerate()])
@@ -128,14 +128,14 @@ class TestStartStop(unittest.TestCase):
         self.assertGreaterEqual(len(before), 1)
 
     def test_stop_ends_a_server_this_app_started(self) -> None:
-        app = App()
+        app = create_app()
         server = app.start(port=0)
         self.assertFalse(server._stopped.is_set())
         app.stop()
         self.assertTrue(server._stopped.is_set())
 
     def test_an_app_can_serve_again_after_stopping(self) -> None:
-        app = App()
+        app = create_app()
         app.start(port=0)
         app.stop()
         server = app.start(port=0)

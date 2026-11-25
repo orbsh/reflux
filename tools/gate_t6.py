@@ -27,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
-from reflux.app import App  # noqa: E402
+from reflux.application import App  # noqa: E402
 from reflux.sdk import h  # noqa: E402
 from reflux.sdk import markers as page_markers  # noqa: E402
 from reflux.sdk._parse import dump  # noqa: E402

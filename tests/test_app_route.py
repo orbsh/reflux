@@ -12,15 +12,16 @@ from __future__ import annotations
 import json
 import unittest
 
-from reflux import DEFAULT, App, Routes, RoutesError, page
+from reflux import App, Routes, RoutesError
 from reflux.sdk import h
+from reflux.application import create_app
 
 from .fakes import page_nodes
 
 
 class TestDeclaringOnTheApp(unittest.TestCase):
     def test_the_page_lands_in_that_apps_table(self):
-        app = App(routes=Routes())
+        app = create_app()
 
         @app.page("/hello", title="问候")
         def hello(ctx, match):
@@ -32,19 +33,20 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         self.assertEqual(match.meta["title"], "问候")
         self.assertIs(match.route.handler, hello)
 
-    def test_the_default_table_is_not_touched(self):
-        before = len(DEFAULT)
-        app = App(routes=Routes())
+    def test_two_apps_share_nothing(self):
+        first = create_app()
+        second = create_app()
 
-        @app.page("/only-here")
+        @first.page("/only-here")
         def only_here(ctx, match):
             return h.text("x")
 
-        self.assertEqual(len(DEFAULT), before)
-        self.assertIsNone(DEFAULT.match("/only-here"))
+        self.assertIsNot(first.routes, second.routes)
+        self.assertIsNotNone(first.routes.match("/only-here"))
+        self.assertIsNone(second.routes.match("/only-here"))
 
     def test_a_second_decorator_is_an_alias(self):
-        app = App(routes=Routes())
+        app = create_app()
 
         @app.page("/")
         @app.page("/home")
@@ -57,21 +59,18 @@ class TestDeclaringOnTheApp(unittest.TestCase):
         self.assertIs(alias.route.handler, home)
 
     def test_the_same_path_twice_is_loud(self):
-        app = App(routes=Routes())
+        app = create_app()
         app.page("/taken")(lambda ctx, match: h.text("a"))
         with self.assertRaises(RoutesError):
             app.page("/taken")(lambda ctx, match: h.text("b"))
 
-    def test_a_bare_app_reads_the_module_table_and_app_route_does_not(self):
-        @page("/module-level")
-        def module_level(ctx, match):
-            return h.text("m")
-
-        self.assertIs(App().routes, DEFAULT)
-        self.assertIsNotNone(App().routes.match("/module-level"))
+    def test_a_fresh_app_starts_empty(self):
+        # There is no module-level table to inherit and nothing to opt out of: an app's table is its own
+        # from the first line, and `create_app()` is how a second, independent one is asked for.
+        self.assertEqual(create_app().routes.table(), [])
 
     def test_layout_rides_along(self):
-        app = App(routes=Routes())
+        app = create_app()
 
         def frame(ctx, match, page):
             return h.frame(page)
@@ -92,7 +91,7 @@ class TestWhatAPageGives(unittest.TestCase):
     """The structure leaves a page one way: returned, or drawn. Never both, never neither by accident."""
 
     def test_a_returned_node_is_the_page(self):
-        app = App(routes=Routes())
+        app = create_app()
 
         @app.page("/", title="回声")
         def home(ctx, match):
@@ -106,7 +105,7 @@ class TestWhatAPageGives(unittest.TestCase):
 
     def test_drawing_and_returning_is_loud(self):
         """Both is a defect with no right answer: refuse it instead of picking one."""
-        app = App(routes=Routes())
+        app = create_app()
 
         @app.page("/")
         def confused(ctx, match):
@@ -119,7 +118,7 @@ class TestWhatAPageGives(unittest.TestCase):
 
     def test_the_single_page_may_return_too(self):
         """`@app.page` with no path is the one page; it returns like any other."""
-        app = App(routes=Routes())
+        app = create_app()
 
         @app.page
         def only(ctx, path):
@@ -129,7 +128,7 @@ class TestWhatAPageGives(unittest.TestCase):
         self.assertIn('"where"', json.dumps(root, ensure_ascii=False))
 
     def test_a_single_page_with_parentheses_is_the_same_thing(self):
-        app = App(routes=Routes())
+        app = create_app()
 
         @app.page()
         def only(ctx, path):

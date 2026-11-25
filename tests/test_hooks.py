@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.protocol import AUTH_SLOT, LOGIN
 from reflux.sdk import builders as h
 from tests.fakes import run_sync
@@ -21,7 +21,7 @@ GOOD = {"username": "ada", "password": "pw"}
 
 def app_with(login, **hooks) -> App:
     """An app whose `login` seam is `login`, plus any other seam named in `hooks`."""
-    app = App()
+    app = create_app()
     app.hooks("login")(login)
     for name, handler in hooks.items():
         app.hooks(name)(handler)

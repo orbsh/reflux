@@ -111,11 +111,12 @@ python3 -m reflux.cli dests examples.zh.demo_app:make_app         # dest → kin
 Roughly twenty lines, and every one of them is used:
 
 ```python
-from reflux import App, wire
+from reflux import app, wire
 from reflux.sdk import builders as b
 from reflux.sdk import markers
 
-app = App()                       # one object; every declaration below hangs on it
+# `reflux.app` is the deployment's app: one per process, built when the package is imported. A test, or
+# a process that wants a second one, asks for a fresh instance with `create_app()`.
 
 
 @app.page("/", title="Hello")
@@ -139,9 +140,8 @@ if __name__ == "__main__":
 
 What the pieces are:
 
-- **`@app.page("/")`** declares a page on that app's table, right above its handler. (`@page(…)`
-  is the same declaration against the module-level table `App()` reads by default — use it when the
-  table is shared across modules, e.g. with `discover`.) The handler **returns** its node; the
+- **`@app.page("/")`** declares a page on that app's table, right above its handler — the only way a
+  route is declared. The handler **returns** its node; the
   framework wraps it in the markers, writes it into the `routes` slot, and `create`s the shell around
   it. Data the page reads is a slot, seeded with a send: `ctx.slot["rows"].append(row)` (what `demo_app`
   does, so its rows arrive before the structure that reads them). `ctx.page(*content)` is the other
@@ -201,7 +201,7 @@ def on_login(ctx, frame):
 The socket itself is a **route in a table**, next to whatever else you mount:
 
 ```python
-app = App()                                  # mounts == {"/ws": CHANNEL}
+app = create_app()                           # mounts == {"/ws": CHANNEL}
 app.mount("/health", lambda request: "ok")   # Request in; Response, (status, body) or a body out
 app.unmount("/ws"); app.mount("/socket", CHANNEL)   # move the channel
 ```

@@ -13,7 +13,7 @@ import pathlib
 import tomllib
 import unittest
 
-from reflux.app import PAGE_ROOT, STATIC_PREFIX
+from reflux.application import PAGE_ROOT, STATIC_PREFIX
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))

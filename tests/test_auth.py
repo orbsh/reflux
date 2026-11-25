@@ -19,7 +19,7 @@ import json
 import time
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.auth import Auth, Tokens
 from tests.fakes import run_sync
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, SIGNUP
@@ -36,7 +36,7 @@ def with_login(verify: Any) -> App:
         user = verify(ctx, credentials, mode)
         return (True, user, {}) if user else (False, "登录失败")
 
-    app = App()
+    app = create_app()
     app.hooks("login")(login)
     return app
 
@@ -157,7 +157,7 @@ class TestTheGate(unittest.TestCase):
         self.assertTrue(surface, "a refusal keeps the surface up")
 
     def test_without_a_declaration_there_is_no_gate(self) -> None:
-        app = App()  # no auth= at all
+        app = create_app()  # no auth= at all
         seen: list[dict] = []
         app.on("vault.open", lambda ctx, frame: seen.append(frame))
         channel = Scripted({"dest": "vault.open", "data": {}})
@@ -165,7 +165,7 @@ class TestTheGate(unittest.TestCase):
         self.assertEqual(len(seen), 1, "no gate declared, no gate enforced")
 
     def test_without_auth_the_verbs_do_not_exist(self) -> None:
-        app = App()
+        app = create_app()
         self.assertNotIn(LOGIN, app.dests.names())
         self.assertNotIn(SIGNUP, app.dests.names())
         self.assertNotIn(LOGOUT, app.dests.names())

@@ -12,7 +12,7 @@ import unittest
 
 from examples.zh import demo_app as demo
 from reflux import ROUTES_SLOT
-from reflux.app import App, not_found
+from reflux.application import create_app, App, not_found
 from reflux.routes import Routes
 from reflux.sdk import h
 from reflux.sdk._parse import dump
@@ -50,10 +50,10 @@ def shown(node: dict) -> str:
 
 class TestPageResolution(unittest.TestCase):
     def app(self, *paths: str) -> App:
-        table = Routes()
+        built = create_app()
         for path in paths:
-            table.add(path, page_for)
-        return App(routes=table)
+            built.routes.add(path, page_for)
+        return built
 
     def test_hello_resolves_the_path_it_carries(self) -> None:
         app = self.app("/a")
@@ -115,7 +115,7 @@ class TestPageResolution(unittest.TestCase):
         self.assertEqual(shown(op["data"]), "single:/whatever")
 
     def test_an_app_with_neither_page_nor_routes_draws_nothing(self) -> None:
-        app = App(routes=Routes())
+        app = create_app()
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         self.assertEqual(device.frames, [])

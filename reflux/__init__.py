@@ -35,7 +35,7 @@ whatever else the app mounts.
 """
 
 from . import sdk, wire
-from .app import App, Context, Device, Landing, gated
+from .application import App, Context, Device, Landing, create_app, gated
 from .auth import Auth, Tokens
 from .slots import Slot, Slots
 from .dests import Registry, RegistryError
@@ -50,11 +50,16 @@ from .protocol import (
     ROUTES_SLOT,
     SIGNUP,
 )
-from .routes import DEFAULT, Match, Route, Routes, RoutesError, discover, page
+from .routes import Match, Route, Routes, RoutesError, discover
 from .sdk import builders
 from .sdk._parse import dump, parse
 from .sdk.builders import *  # noqa: F401,F403  (one constructor per type, generated)
 from .server import CHANNEL, Request, Response
+
+# The app every deployment uses. User code says `from reflux import app` and hangs its pages, seams
+# and handlers on it; there is one per process because an `App` IS the deployment (one shell, one
+# login door, one dest registry). A test that needs its own calls `create_app()`.
+app = create_app()
 
 __version__ = "0.0.0"
 
@@ -73,13 +78,12 @@ __all__ = [
     "Response",
     "Registry",
     "RegistryError",
-    "page",
-    "Routes",
+    "app",
+    "create_app",
     "Route",
     "Match",
     "RoutesError",
     "discover",
-    "DEFAULT",
     "wire",
     "sdk",
     "parse",

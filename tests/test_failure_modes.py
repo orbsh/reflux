@@ -18,7 +18,7 @@ import time
 import unittest
 
 from reflux import wire
-from reflux.app import App
+from reflux.application import App
 from tests.fakes import run_sync
 from reflux.protocol import MAX_OPS_PER_FRAME
 from reflux.sdk import h

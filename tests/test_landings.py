@@ -19,7 +19,7 @@ from __future__ import annotations
 import unittest
 
 from reflux import Auth, wire
-from reflux.app import App, gated
+from reflux.application import create_app, App, gated
 from reflux.routes import Routes
 from reflux.sdk import h
 from tests.fakes import run_sync, FakeDevice
@@ -50,7 +50,7 @@ def drawn_page(device: FakeDevice) -> dict:
 class AClosureIsALandingPoint(unittest.TestCase):
     def setUp(self) -> None:
         self.calls: list = []
-        self.app = App(routes=Routes())
+        self.app = create_app()
 
         @self.app.page("/", title="test")
         def home(ctx, match):
@@ -92,7 +92,7 @@ class TheTableIsOneDraws(unittest.TestCase):
     def test_one_closure_bound_twice_is_one_name(self) -> None:
         # A loom carries the sink its button sends with, so the same author-written handler lands
         # on two nodes. That is one landing point, not two.
-        app = App(routes=Routes())
+        app = create_app()
 
         def pick(value):
             pass
@@ -113,7 +113,7 @@ class TheTableIsOneDraws(unittest.TestCase):
 
     def test_two_different_closures_are_two_names(self) -> None:
         # A per-row handler is a different closure per row: that is what a name per instance buys.
-        app = App(routes=Routes())
+        app = create_app()
         ids = ["a", "b"]
 
         @app.page("/", title="t")
@@ -134,7 +134,7 @@ class TheTableIsOneDraws(unittest.TestCase):
         self.assertEqual([a["dest"] for a in sinks(drawn_page(device), [])], ["/.hit", "/.hit#2"])
 
     def test_a_page_turn_replaces_the_table(self) -> None:
-        app = App(routes=Routes())
+        app = create_app()
 
         def hit(value):
             pass
@@ -152,7 +152,7 @@ class TheTableIsOneDraws(unittest.TestCase):
         self.assertTrue(before)
 
     def test_each_device_has_its_own_closures(self) -> None:
-        app = App(routes=Routes())
+        app = create_app()
         seen: list = []
 
         @app.page("/", title="t")
@@ -176,10 +176,7 @@ class TheTableIsOneDraws(unittest.TestCase):
 class GatedLandings(unittest.TestCase):
     def setUp(self) -> None:
         self.calls: list = []
-        self.app = App(
-            routes=Routes(),
-            auth=Auth(verify=lambda ctx, credentials, mode: "user-ada"),
-        )
+        self.app = create_app(auth=Auth(verify=lambda ctx, credentials, mode: "user-ada"))
 
         @self.app.page("/", title="t")
         def home(ctx, match):
@@ -210,7 +207,7 @@ class BothKindsLiveTogether(unittest.TestCase):
     """One slot, two sources: the case the registry is for, next to a closure that is not."""
 
     def test_a_graphed_name_and_a_closure_serve_the_same_page(self) -> None:
-        app = App(routes=Routes())
+        app = create_app()
         seen: list = []
 
         @app.on("demo.remote")

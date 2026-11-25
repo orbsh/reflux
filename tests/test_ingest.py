@@ -16,7 +16,7 @@ import unittest
 from typing import Any
 
 from reflux import ingest, wire
-from reflux.app import App, Device
+from reflux.application import App, Device
 from tests.fakes import run_sync
 from reflux.ingest import Refused
 from reflux.sdk import h

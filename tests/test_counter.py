@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.routes import Routes
 from tests.fakes import run_sync, FakeDevice
 
@@ -18,7 +18,7 @@ from examples.zh import demo_counter
 
 
 def build() -> tuple[App, FakeDevice]:
-    app = App(routes=Routes())
+    app = create_app()
     demo_counter.register(app)
     device = FakeDevice(app=app, path=demo_counter.PAGE)
     run_sync(app._draw(device))
@@ -163,7 +163,7 @@ class BothTrees(unittest.TestCase):
     def test_the_english_page_is_the_same_page(self) -> None:
         from examples.en import demo_counter as english
 
-        app = App(routes=Routes())
+        app = create_app()
         english.register(app)
         device = FakeDevice(app=app, path=english.PAGE)
         run_sync(app._draw(device))

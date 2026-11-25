@@ -14,8 +14,8 @@ import unittest
 
 from reflux import Context, cli
 from reflux.sdk import h
+from reflux import app as shared_app
 from reflux.routes import (
-    DEFAULT,
     Routes,
     RoutesError,
     compile_path,
@@ -276,22 +276,22 @@ class TestDiscovery(unittest.TestCase):
         for expected in ("tests.route_fixture", "tests.route_fixture.blog", "tests.route_fixture.admin"):
             with self.subTest(module=expected):
                 self.assertIn(expected, imported)
-        paths = [path for path, _, _ in DEFAULT.table()]
+        paths = [path for path, _, _ in shared_app.routes.table()]
         for expected in ("/blog/{slug}", "/posts", "/latest", "/admin"):
             with self.subTest(path=expected):
                 self.assertIn(expected, paths)
 
     def test_the_source_column_is_where_the_route_was_written(self) -> None:
         discover("tests.route_fixture")
-        sources = {path: source for path, source, _ in DEFAULT.table()}
+        sources = {path: source for path, source, _ in shared_app.routes.table()}
         self.assertEqual(sources["/blog/{slug}"], "tests.route_fixture.blog")
         self.assertEqual(sources["/admin"], "tests.route_fixture.admin")
 
     def test_discovering_twice_is_a_no_op(self) -> None:
         discover("tests.route_fixture")
-        before = len(DEFAULT)
+        before = len(shared_app.routes)
         discover("tests.route_fixture")  # a second import does not re-run the decorators
-        self.assertEqual(len(DEFAULT), before)
+        self.assertEqual(len(shared_app.routes), before)
 
     def test_a_module_that_cannot_be_imported_is_fatal(self) -> None:
         with self.assertRaises(ImportError):
@@ -320,7 +320,7 @@ class TestCli(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertIn(expected, text)
         printed = [line for line in text.splitlines() if line.startswith("/")]
-        self.assertEqual(len(printed), len(DEFAULT))
+        self.assertEqual(len(printed), len(shared_app.routes))
 
     def test_a_verb_is_required(self) -> None:
         with self.assertRaises(SystemExit) as caught:

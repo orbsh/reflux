@@ -19,7 +19,7 @@ from examples.zh import demo_app
 from examples.zh import demo_chat as chat
 from tests.fakes import run_sync
 from examples.zh.chat_model import CHUNK, OpenAI, Turn, parse_sse, parse_sse_async, scripted_reply
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.routes import page_of
 from tests.fakes import FakeDevice
 
@@ -350,7 +350,7 @@ class TheAsyncReader(unittest.TestCase):
         self.assertIn("app.http", str(caught.exception))
 
     def test_the_startup_hook_hands_the_model_the_session(self):
-        app = App()
+        app = create_app()
         model = OpenAI(base_url="http://127.0.0.1:1/v1", api_key="k")
         chat.share_http(app, model)
         app.start(port=0)

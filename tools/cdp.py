@@ -34,7 +34,7 @@ from typing import Iterator
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from reflux.app import App  # noqa: E402
+from reflux.application import App  # noqa: E402
 
 CHROMIUM = "chromium"
 IDLE = "data:text/html,<title>reflux-gate</title>"

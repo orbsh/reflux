@@ -23,7 +23,7 @@ from reflux import Context
 
 _CTX = Context(app=None, device=None)  # type: ignore[arg-type]  # only the slot names are read
 from reflux import cli
-from reflux.app import App
+from reflux.application import create_app, App
 from reflux.sdk import dump
 from tests.fakes import run_sync, FakeDevice  # noqa: F401
 from tests.fakes import page_nodes
@@ -109,7 +109,7 @@ class EventsCommand(unittest.TestCase):
     def test_this_app_is_not_the_only_app_the_registry_serves(self) -> None:
         # A fresh App is not "the app": the registry belongs to the instance, so its table is the
         # builtin protocol names only — the demo's names live on the demo's instance.
-        alone = App()
+        alone = create_app()
         self.assertEqual([name for name, _, _ in alone.dests.table()], ["reflux:hello", "reflux:nav"])
 
 
@@ -120,7 +120,7 @@ class TargetResolution(unittest.TestCase):
         self.assertIn("row.remove", app.dests.names())
 
     def test_an_app_instance_is_taken_as_it_is(self) -> None:
-        mine = App()
+        mine = create_app()
         setattr(demo, "app_for_the_test", mine)
         try:
             self.assertIs(cli.resolve_app("examples.zh.demo_app:app_for_the_test"), mine)

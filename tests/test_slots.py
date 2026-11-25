@@ -8,13 +8,14 @@ from reflux import App
 from reflux.sdk import h
 from reflux.sdk import dump
 from reflux.slots import Slot, Slots
+from reflux.application import create_app
 
 from tests.fakes import FakeDevice
 
 
 class TheSlot(unittest.TestCase):
     def setUp(self) -> None:
-        self.app = App()
+        self.app = create_app()
         self.device = FakeDevice()
         self.ctx = self.app.context(self.device)
 
@@ -96,7 +97,7 @@ class TheAddressesInNodes(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        self.app = App()
+        self.app = create_app()
         self.ctx = self.app.context(FakeDevice())
 
     def test_a_source_handle_reaches_the_wire_as_its_name(self) -> None:
@@ -133,7 +134,7 @@ class TheTurn(unittest.TestCase):
     """A turn is what one client sees at once: several writes, one frame."""
 
     def setUp(self) -> None:
-        self.app = App()
+        self.app = create_app()
         self.device = FakeDevice()
         self.ctx = self.app.context(self.device)
 

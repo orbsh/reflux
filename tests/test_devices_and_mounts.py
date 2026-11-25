@@ -23,6 +23,7 @@ from typing import Any
 
 from reflux import CHANNEL, App, Context, Device, Request, Response, Routes, wire
 from reflux.sdk import h
+from reflux.application import create_app
 from tools.wire_probe import Socket
 
 
@@ -46,10 +47,9 @@ def hello(app: App, ws: Socket, path: str = "/") -> Device:
 def bare_app(**kwargs: Any) -> App:
     """An app whose route table is empty: nothing is drawn until the test draws it.
 
-    `App()` falls back to the module-level `DEFAULT` table, which other tests fill with `@route`
-    decorators — so a test that assumes "no page yet" must say so.
+    `create_app()` builds its own empty table, so a test that assumes "no page yet" gets one.
     """
-    return App(routes=Routes(), **kwargs)
+    return create_app(**kwargs)
 
 
 def page_app(**kwargs) -> App:

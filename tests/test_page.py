@@ -12,6 +12,7 @@ prefix redirect and "a missing module never comes back as HTML" are server facts
 """
 
 from __future__ import annotations
+from reflux.application import create_app
 
 import hashlib
 import http.client
@@ -76,9 +77,9 @@ class TestPinnedRenderer(unittest.TestCase):
 
     def test_the_base_is_the_root_the_page_is_mounted_at(self) -> None:
         """The runtime translates markers with <base>; it must name the prefix the app mounts."""
-        from reflux.app import App
+        from reflux.application import App
 
-        app = App()
+        app = create_app()
         self.assertEqual(app.root, WWW, "the app's default root is the page tree")
         self.assertIn('<base href="/">', INDEX.read_text(encoding="utf-8"))
 
@@ -117,9 +118,9 @@ class TestMounts(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        from reflux.app import App
+        from reflux.application import App
 
-        cls.app = App()
+        cls.app = create_app()
         cls.server = cls.app.make_server(0)
         cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()

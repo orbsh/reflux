@@ -13,7 +13,7 @@ from __future__ import annotations
 import unittest
 
 from reflux import HOST_EVENTS, ROUTES_SLOT, wire
-from reflux.app import App, Device, into_routes, location_of, query_of
+from reflux.application import create_app, App, Device, into_routes, location_of, query_of
 from reflux.ingest import Refused, check_uplink
 from reflux.protocol import HOST_EVENTS as PROTOCOL_HOST_EVENTS
 from reflux.routes import Routes
@@ -34,12 +34,11 @@ def shell(ctx) -> object:
 
 
 def app_with_shell(*paths: str, page=None) -> App:
-    table = Routes()
+    built = create_app()
     for path in paths:
-        table.add(path, page or page_for)
-    app = App(routes=table)
-    app.hooks("shell")(shell)
-    return app
+        built.routes.add(path, page or page_for)
+    built.hooks("shell")(shell)
+    return built
 
 
 def ops(device: FakeDevice, index: int = -1) -> list[dict]:
@@ -119,9 +118,8 @@ class TestShell(unittest.TestCase):
 
     def test_an_app_without_a_shell_draws_into_the_default_one(self):
         """No shell declared is a smaller frame, not a second road: the page still lands in `routes`."""
-        table = Routes()
-        table.add("/", page_for)
-        app = App(routes=table)
+        app = create_app()
+        app.routes.add("/", page_for)
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         first = ops(device)
@@ -149,7 +147,7 @@ class TestShell(unittest.TestCase):
 
 class TestHostEvents(unittest.TestCase):
     def setUp(self):
-        self.app = App()
+        self.app = create_app()
         self.device = FakeDevice()
         self.heard: list[tuple[str, str]] = []
         for name in HOST_EVENTS:
@@ -174,11 +172,10 @@ class TestHostEvents(unittest.TestCase):
         self.assertEqual(self.heard, [("location", "/b")])
 
     def test_connect_is_raised_after_the_first_frame_is_queued(self):
-        app, device = App(), FakeDevice()
-        def single(ctx, path):
-            ctx.page(h.text("page"))
-
-        app.page = single  # something to draw, so there is a frame
+        app, device = create_app(), FakeDevice()
+        # A real route, not a monkeypatched `app.page`: the table is the app's own now, so a page has
+        # to be declared in it for the hello to have something to draw.
+        app.routes.add("/", lambda ctx, match: h.text("page"))
         seen: list[int] = []
 
         def record(ctx, frame):
@@ -197,7 +194,7 @@ class TestHostEvents(unittest.TestCase):
         self.assertEqual(self.heard, [("disconnect", "/")])
 
     def test_nobody_listening_is_not_a_refusal(self):
-        app = App()
+        app = create_app()
         device = FakeDevice()
         self.assertFalse(run_sync(app.dests.announce("connect", device, {"dest": "connect", "data": {}})))
         self.assertEqual(app.dests.refused, 0)

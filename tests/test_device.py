@@ -15,7 +15,7 @@ import threading
 import time
 import unittest
 
-from reflux.app import App
+from reflux.application import App
 from reflux.channel import JUDGED_DEAD
 from tests.fakes import background_loop, run_sync
 

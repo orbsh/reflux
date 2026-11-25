@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Ws, report, open_page  # noqa: E402
 
 from examples.zh import demo_app as demo  # noqa: E402
-from reflux.app import App  # noqa: E402
+from reflux.application import App  # noqa: E402
 from reflux.routes import Routes  # noqa: E402
 
 

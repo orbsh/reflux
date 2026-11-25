@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cdp import Cdp, console_errors, report, open_page  # noqa: E402
 from reflux import wire  # noqa: E402
-from reflux.app import App  # noqa: E402
+from reflux.application import App  # noqa: E402
 from reflux.sdk import h  # noqa: E402
 from reflux.sdk.types import Source  # noqa: E402
 from reflux.slots import Slot  # noqa: E402

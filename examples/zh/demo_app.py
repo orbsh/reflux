@@ -38,9 +38,8 @@ import argparse
 import json
 from pathlib import Path
 
-from reflux.app import App, Context, gated
+from reflux.application import Context, create_app, gated
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
-from reflux.routes import Routes
 from reflux.server import Request, Response
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, JsType, Source
@@ -101,13 +100,9 @@ class State:
 
 state = State()
 
-
-# 应用本体。写成模块级声明，是为了接缝与处理器都可以写在它们所在的地方（`@app.hooks(...)`、
-# `@app.on(...)`）—— 与 `@route` 用在页面上方是同一套糖：一个钩子就是一次注册，没有第二种拼写。
-#
-# `routes=Routes()` 不是仪式：不传就落到模块级的 `DEFAULT` 表（裸 `@page` 写的那张），同进程里
-# 两个 app 会写进同一张表。这一行说的是"这个 app 有自己的表"。
-app = App(routes=Routes())
+# 一个部署一个 app。演示用 `create_app()` 而不是框架那个单例，因为 zh 与 en 两棵树要在同一个进程里
+# 并存（`test_two_trees`）：单例只有一个，两个演示会写进同一张表、同一个 dest 注册表。
+app = create_app()
 
 
 @app.hooks("shell")

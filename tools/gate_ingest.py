@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cdp import Ws, free_port, report  # noqa: E402
 from reflux import wire  # noqa: E402
-from reflux.app import App  # noqa: E402
+from reflux.application import App  # noqa: E402
 from reflux.sdk import h  # noqa: E402
 from reflux.protocol import MAX_OPS_PER_FRAME  # noqa: E402
 

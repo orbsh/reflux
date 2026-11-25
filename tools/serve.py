@@ -22,7 +22,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from reflux.app import PAGE_ROOT, App
+from reflux.application import PAGE_ROOT, App
 
 
 def main(argv: list[str] | None = None) -> int:

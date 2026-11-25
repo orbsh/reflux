@@ -83,7 +83,7 @@ from .protocol import (
     ROUTES_SLOT,
     SIGNUP,
 )
-from .routes import DEFAULT, Match, Routes, page_of
+from .routes import Match, Routes, page_of
 from .sdk import builders as h
 from .sdk import markers
 from .sdk._parse import parse
@@ -566,13 +566,22 @@ class Context:
             self.app._spawn(pending)
 
 
+def create_app(**settings: Any) -> "App":
+    """A fresh app — what a test wants, and what an app factory hands the CLI.
+
+    The framework's own is `reflux.app`, built once at import. A second instance exists only when
+    someone asks for one, and it shares nothing with the first: its own route table, its own dest
+    registry, its own tokens.
+    """
+    return App(**settings)
+
+
 class App:
     """A reflux producer: the page tree, the channel route, the registry, and the pages."""
 
     def __init__(
         self,
         root: str | Path | None = None,
-        routes: Routes | None = None,
         *,
         heartbeat: float = 10.0,
         dead_after: float = 30.0,
@@ -589,7 +598,10 @@ class App:
         # declared once (next to the page that owns the slot) so that writing values — `s.count.set(3)`
         # — is enough, and the node's id and variant are not repeated at every write.
         self.views: dict[str, Callable[[Any], Any]] = {}
-        self.routes: Routes = routes if routes is not None else DEFAULT
+        # The route table is the app's own and nobody else's: no shared default, so two apps in one
+        # process cannot write into the same table by omission (`create_app()` is how a test gets a
+        # second one). `app.routes` stays readable — the CLI prints it.
+        self.routes: Routes = Routes()
         # The one page of an app that declares no routes: `@app.page` above its handler. A routed app
         # leaves this None and the route table answers instead.
         self._single: Callable[[Context, str], Any] | None = None

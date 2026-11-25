@@ -26,10 +26,8 @@
 应用要认证，就写一个 `login` 口子：
 
 ```python
-from reflux import App, Auth
+from reflux import app
 from reflux.sdk import builders as h
-
-app = App()
 
 @app.hooks("login")                       # 第二个参数可改线上的事件名：@app.hooks("login", "登录事件")
 def login(ctx, credentials, mode):        # mode 是 "login" 或 "signup"
@@ -92,9 +90,17 @@ def secret(ctx):
 ## 四、常见形状
 
 ```python
-# 短写法：Auth(verify=…) 会被降级到同一个 login 口子，运行时只有一张表
-app = App(auth=Auth(verify=async_check, view=my_screen, idle_window=3600))
+# 全部认证就是一个口子，三样东西各就各位：
+from reflux import app, Auth
+
+app = create_app(auth=Auth(idle_window=3600))   # 设置（会话多久算闲置）走构造函数
+
+@app.hooks("login")            # 验证：查库、问别的服务、绑 LDAP
+@app.hooks("login.request")    # 登录面：字段与它的页面同一套
+@app.hooks("shell")            # 外框：每个页面都在里面
 ```
+
+`Auth(verify=…)` / `Auth(view=…)` 的老写法会被降级到同一个口子和同一个表面，运行时只有一张表；新代码用口子。
 
 - 不做认证：什么都不写。没有 `login` 口子就**没有门**（不是一把锁着的门），`login` 帧会被当未注册拒掉。
 - 撤销：`logout` 帧丢掉这个连接上的 token；下次连接就是匿名。
