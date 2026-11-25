@@ -72,8 +72,9 @@ __all__ = [
 
 HERE = Path(__file__).resolve().parents[3]  # the repository root: examples/demo/ is two levels down
 VENDOR = HERE / "www" / "static" / "vendor"
-# 模块宿主来自 fluxen 检出（`tools/vendor.py --fluxen ../fluxen` 同一个约定）。它的演示资源搬过家：
-# 老布局 `assets/<名字>`，现在 `assets/modules/<名字>` —— 两条都探，别让一次搬家把整页的模块变成空气。
+# The module hosts come from the fluxen checkout — the same convention as
+# `tools/vendor.py --fluxen ../fluxen`. Its demo assets moved: the old layout was `assets/<name>`, now
+# it is `assets/modules/<name>`. Both are probed, so one move does not turn a whole page into air.
 ASSETS = Path(os.environ.get("REFLUX_ASSETS", HERE.parent / "fluxen" / "assets"))
 
 CHART_URL = "/assets/g2chart/index.js"
