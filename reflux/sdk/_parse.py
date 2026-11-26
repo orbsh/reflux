@@ -141,10 +141,19 @@ def as_source(value: Any = None, *, default: Any = None, constants: bool = True)
     wire means by `{slot, default}`, so giving both is one value, not a contradiction. An explicit
     `default` on a `Bind` wins over the positional one.
     """
-    entry = _address(value, "source", Source, "slot", constant=constants)
+    entry = _address(_source_of(value), "source", Source, "slot", constant=constants)
     if default is not None and "default" not in entry:
         entry["default"] = default
     return entry or None
+
+
+def _source_of(value: Any) -> Any:
+    """A bound signal reads as the slot it writes through: `h.text(source=count)` names `counter.count`."""
+    from ..signals import Computed, Signal  # local: reflux.sdk -> reflux.signals is a cycle here
+
+    if isinstance(value, (Signal, Computed)):
+        return value.slot
+    return value
 
 
 def as_sink(value: Any = None) -> dict[str, Any] | None:

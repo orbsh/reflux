@@ -355,9 +355,11 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     else:
         control = h.input(
             tag=name,
-            # Always `text`: an empty `number` input packs as 0 ("not written" turns into "set to zero"), and
-            # an empty value here means "not set". The kind is judged by the validator, not the control.
-            kind="text",
+            # A length is a **number with an interval** (ADR 0050): `min`/`max`/`step` go on the element, so an
+            # out-of-range value is refused where it is typed instead of being accepted, stored, and dropped at
+            # the last step. And an empty number is no longer zero — it packs `null`, which the validator reads
+            # as "not set".
+            kind={"type": "number", "min": 0, "max": 64, "step": 1},
             selector="cfg",
             source=Source(default=value),
             placeholder=CORE.get(name, ""),

@@ -115,17 +115,19 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] P5 删死代码 + 文档 —— 2026-11-25：`channel.py` 只剩 `WsChannel` 这个包装——手写编解码（`Channel` 的 `_take`/`recv`/`_send`/`send`/`ping`/`close`/`abort`/`__iter__`）与握手（`accept_key`／`is_upgrade`／`upgrade`）连同 `tests/test_channel.py` 的 8 例字节级测试一起删除（-8 例）；`ChannelClosed` 留下并成为 `WsChannel.send` 对 aiohttp 三种死法的统一翻译；`handle` 里那条读侧 `except ChannelClosed` 删掉（读侧现在以 `StopAsyncIteration` 结束）；看门狗的 `threading.Event` 删掉（task 可取消，不需要第二个停止信号）。`grep -rn threading reflux/` 只剩三处真线程：`Server` 的 loop 线程、`serve()` 的后台线程、`Server._stopped`。DESIGN 加「并发模型」一节，HANDOFF 记三个入口与 `app.http`。369 例 + 十道门全绿
 - 服务端搬到 asyncio：P1–P5 全部落地（ADR 0002）。
 
-## 槽带值（2026-11-26，已落地）
+## 槽的值：信号与持久化（2026-11-26，已落地）
 
-`signals.bound`／`into`／`keyed` 从自由函数变成句柄上的三个构造器，槽因此自己带一个值：
+值这一层翻了两次，最终形状是**信号是主语、槽是它的去处**：
 
-- `Slot.signal(default)`／`.computed(fn)`／`.keyed(render, initial=())`：细胞按（连接，名字）登记在 `ctx.data`，页面重画拿回同一个、首值只种一次；`.value` 读写，没声明细胞的槽读它抛 `RuntimeError`（消息里说要怎么声明）。三个自由函数留着，内部是同一套机制（`own`／`mirror`／`keep`）。
-- 名字的构造只留 `/`（`ctx.slot / "counter" / "count"`，两侧留空格，与 `pathlib` 一致），点只到句柄自己的东西（动词、细胞、`name`）。点号子名与下标一起删掉了：`Slot`／`Slots` 不再有子名解析，`__getitem__` 也撤了，`/` 不查属性，所以一条叫 `remove` 或 `value` 的槽照样是 `slots / "row" / "remove"`。名字没有逃逸口，也不需要。——2026-11-26 当天定的：兼容路不留，旧代码直接迁移。
-- 首值是一次写：值型槽要先有视图，`(slots / "x").view(fn).signal(0)`；顺序反了给一句 `ValueError`，而不是一个永远空的槽。
-- `demo_counter` 两棵树改成新写法：`State` 里三条槽带细胞、`step`／`refusal` 仍是裸信号（不上线），页面树直接读那几个句柄（`_Counter` Protocol 与 `counter_of` 随之删除），视图在 `register` 里由 `(counter / "count").view(...)` 声明。
-- 验证：全量 417 例（新增 `tests/test_slots.py::TheCell` 八例）、`tools/probe_counter.py` 真 Chromium 一次点击 0→1。
+- 声明写在页函数头部，一行一条：`Signal(0).bind(slot).view(fn)`、`Computed(fn).bind(slot).view(fn)`、`Signal([]).keyed(render).bind(slot)`、`Signal(v).store(key)`。`Slot` 不再有 `.signal`／`.computed`／`.keyed`／`.value` —— 值只在信号上，槽是地址加动词。
+- 身份：`.bind(slot)` 一个槽名一个信号（`ctx.data`），重画拿回同一个、首值只种一次；`.store(key)` 一个 key 一个信号 —— 匿名连接存在这条连接的数据里，`ctx.user` 有值时存在 `app.store`（按 user id），换连接／设备接着来。
+- 首写推迟到绘制结束（`signals.drawing`），所以 `.view` 写在 `.bind` 之后也不再要求调用者记顺序；`keyed` 的首写是它的行，不是列表本身。
+- 存储是接口：`reflux/stores.py` 的 `Store` 两个方法 `load(user, key)`／`save(user, key, value)`，默认 `MemoryStore`，`SqliteStore` 是 SQL 示例；值是 JSON，节点存不进去（会当场报错）。Redis／KV 引擎照这个形状接，不改页面。
+- 名字仍然只由 `/` 拼（两侧留空格，与 `pathlib` 一致），点只到句柄自己的东西（动词、`view`、`name`）；点号子名与 `__getitem__` 都删了，`/` 不查属性，所以叫 `remove`／`value` 的槽直接写。名字不走常量表（不做 `names.py`／`Literal`）：可读性优先，拼错靠 `AttributeError` 与 `/status`。
+- `demo_counter` 两棵树：`State` 类与 `state()` 缓存删除，五条声明在页函数头部（三条 `.store`、两条上线 + `.keyed`），视图提成 `_count_node`／`_hint_node`；`tests/test_slots.py::TheValue` 与 `tests/test_signals.py::TestTheAdapters` 改成新 API，新增 `tests/test_stores.py` 九例（匿名/用户/跨 app 的 sqlite/三条拒绝）。
+- 验证：全量 426 例、`probe_counter` 真 Chromium 一次点击 0→1。
 
 ## 复核与门的现状（2026-11-26）
 
-- [x] 全量 417 例、`tools/gen_sdk.py --check` 在同步态；十三道门十二绿（t0/t2/t3/t4/t6/t7/t8/t10/ingest/chat/demo/settings；t10 是 9/9 逐字节）。
+- [x] 全量 426 例、`tools/gen_sdk.py --check` 在同步态；十三道门十二绿（t0/t2/t3/t4/t6/t7/t8/t10/ingest/chat/demo/settings；t10 是 9/9 逐字节）。
 - [ ] `gate_t9` 17 项里两项红（#11 退出不撤销、#14 后退的帧带着 `token`）：同一个因——渲染器在「已登录的 auth 子树换成登录面」那一帧 panic（`Tried to access a reactive value that has already been disposed`），DOM 冻在旧状态，空标记到不了浏览器，存下的 token 因此还在。已排除空文本标记、`request_draw`、重复写同一块登录面三种嫌疑。这是 fluxen 侧的账（它的 `dd1765d` 已写明「the panic T9 reports」仍在），本仓等那边修好后重取 vendor、回跑十三道门。

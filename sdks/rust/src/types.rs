@@ -182,30 +182,6 @@ impl TextVariant {
     }
 }
 
-/// accrete's `JsType`: what an input's boundary value is (a sibling of the variant, not one).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum JsType {
-    Bool,
-    Number,
-    Text,
-    Password,
-    Button,
-    Submit,
-}
-
-impl JsType {
-    pub fn token(self) -> &'static str {
-        match self {
-            Self::Bool => "bool",
-            Self::Number => "number",
-            Self::Text => "text",
-            Self::Password => "password",
-            Self::Button => "button",
-            Self::Submit => "submit",
-        }
-    }
-}
-
 
 const SOURCE_ORDER: &[&str] = &["default", "path", "scope", "slot"];
 const SINK_ORDER: &[&str] = &["dest", "path", "scope"];

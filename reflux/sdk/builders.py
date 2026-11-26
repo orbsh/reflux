@@ -194,7 +194,7 @@ def input(
     selector: str | None = None,
     source: Any = None,
     emit: Emit | dict[str, Any] | None = None,
-    kind: JsType | str | None = None,
+    kind: Candidates | None = None,
     multiline: bool | None = None,
     placeholder: Any = None,
     tag: str | None = None,

@@ -90,6 +90,8 @@ from .sdk._parse import parse
 from .sdk.markers import PAGE_ID, token_marker
 from .sdk.types import Accrete
 from .slots import Slot, Slots
+from .signals import drawing
+from .stores import MemoryStore
 from .server import CHANNEL, Response, make_server
 
 class Landing:
@@ -627,6 +629,7 @@ class App:
         handler_timeout: float = 30.0,
         outbox: int = 256,
         auth: Auth | None = None,
+        store: Any = None,
     ) -> None:
         # One page tree, served at the origin root; its assets come from `root/static` under
         # `/static/` when that directory exists (a produced site may have none).
@@ -637,6 +640,9 @@ class App:
         # declared once (next to the page that owns the slot) so that writing values — `s.count.set(3)`
         # — is enough, and the node's id and variant are not repeated at every write.
         self.views: dict[str, Callable[[Any], Any]] = {}
+        # Where a signal's `.store(key)` keeps a value past its connection: one row per (user, key). A
+        # deployment swaps it (SQL, KV, Redis) without touching a page — the interface is `load`/`save`.
+        self.store: Any = store if store is not None else MemoryStore()
         # The route table is the app's own and nobody else's: no shared default, so two apps in one
         # process cannot write into the same table by omission (`create_app()` is how a test gets a
         # second one). `app.routes` stays readable — the CLI prints it.
@@ -1107,19 +1113,20 @@ class App:
         if self._single is None and len(self.routes) == 0:
             return
         ctx = self.context(device)
-        if self._single is not None:
-            drawn = page_of(ctx, await maybe(self._single, ctx, device.path), "the single page")
-        else:
-            match = self.routes.match(device.path)
-            if match is not None and match.meta.get("auth") and not device.data.get("user"):
-                # The page is the app's, so it still draws — it is context, not a secret. The surface
-                # opens beside it, which is where a person needs it; a page that must not be seen at
-                # all is the app's own 404 to write.
-                self._open_auth(device, "login")
-            drawn = None
-            if match is not None:
-                ctx = self.context(device, match=match)
-                drawn = await maybe(match.resolve, ctx)
+        with drawing(ctx):  # a signal declared while drawing can find its connection (`.store`)
+            if self._single is not None:
+                drawn = page_of(ctx, await maybe(self._single, ctx, device.path), "the single page")
+            else:
+                match = self.routes.match(device.path)
+                if match is not None and match.meta.get("auth") and not device.data.get("user"):
+                    # The page is the app's, so it still draws — it is context, not a secret. The surface
+                    # opens beside it, which is where a person needs it; a page that must not be seen at
+                    # all is the app's own 404 to write.
+                    self._open_auth(device, "login")
+                drawn = None
+                if match is not None:
+                    ctx = self.context(device, match=match)
+                    drawn = await maybe(match.resolve, ctx)
         if drawn is None:  # nothing drew for this address: the app's own 404, not a blank page
             drawn = not_found(device.path)
         drawn, named = self._name_landings(device, drawn, device.path)

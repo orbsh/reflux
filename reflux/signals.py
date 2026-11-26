@@ -15,12 +15,16 @@ What this layer does *not* do is write the page. An effect writes a slot — the
 writes, never what a write is. That keeps the write path exactly as it was (one write is one frame) and
 makes this layer optional: a page can use it for one number and keep writing the rest by hand.
 
-`bound` and `into` are the two lines where the two worlds meet: `bound(ctx, name, value)` is a signal
-that owns a slot, `into(ctx, name, computed)` is a computed mirrored onto one. Both write through
-`ctx.slot`, so the app's `view` still decides what a value looks like.
+`Signal` is the value, and what it is attached to is read off the signal:
 
-Scope: a signal made inside a page belongs to that connection (it holds that connection's `Slot`), and
-dies with it; a signal made at module level is shared by every connection, and every reader is told.
+    value = Signal(0).store("counter.step")        # survives the connection (see `stores.py`)
+    count = Signal(0).bind(slots / "counter" / "count").view(lambda v: h.text(str(v)))
+    hint  = Computed(fn).bind(slots / "counter" / "hint")
+    rows  = Signal([]).bind(slots / "counter" / "history").keyed(row_node)
+
+Scope: a signal made inside a page belongs to that connection (it holds that connection's `Slot` or its
+`ctx.data`), and dies with it; a signal made at module level is shared by every connection, and every
+reader is told.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Generic, Iterator, TypeVar
 
-__all__ = ["Computed", "Effect", "Signal", "batch", "bound", "effect", "into", "keyed"]
+__all__ = ["Computed", "Effect", "Signal", "batch", "drawing", "effect", "keyed"]
 
 T = TypeVar("T")
 _UNSET = object()
@@ -79,7 +83,10 @@ def _depend(node: Any) -> None:
 class Signal(Generic[T]):
     """A value. Reads subscribe, writes notify — and an equal write is not a change."""
 
-    __slots__ = ("_value", "_observers", "_equal", "_write", "_version")
+    __slots__ = (
+        "_value", "_observers", "_equal", "_write", "_version", "_slot", "_keyed", "_stored",
+        "_pending_keyed", "_keyed_done", "_keyed_effect",
+    )
 
     def __init__(
         self,
@@ -93,6 +100,12 @@ class Signal(Generic[T]):
         self._equal = equal
         self._write = write
         self._version = 0  # bumped only when the value really changes; readers compare it
+        self._slot: Any = None  # set by `bind`
+        self._keyed = False  # set by `keyed`, so a second draw does not stack effects
+        self._stored = False  # set by `store`, so a second draw returns the held one
+        self._pending_keyed: Callable[[Any, str], Any] | None = None
+        self._keyed_done = False
+        self._keyed_effect: Any = None
 
     @property
     def value(self) -> T:
@@ -116,6 +129,115 @@ class Signal(Generic[T]):
             for observer in list(self._observers):
                 observer.stale()
 
+    def bind(self, slot: Any) -> "Signal":
+        """Write through to `slot`: seeded once, then every change goes there. Identity = the slot's name.
+
+        A page is drawn again on every delivery, so the same declaration runs again — the table hands
+        back the first signal instead of seeding the slot a second time.
+        """
+        cells = _cells(slot.ctx)
+        held = cells.get(slot.name)
+        if held is not None:
+            if not isinstance(held, Signal):
+                raise RuntimeError(
+                    f"slot {slot.name!r} already has a {type(held).__name__}: one value per name"
+                )
+            return held
+        cells[slot.name] = self
+        self._slot = slot
+        inner = self._write
+
+        def write(new: T) -> None:
+            if inner is not None:
+                inner(new)
+            if not self._keyed:  # a keyed list reaches the slot by the effect, one row at a time
+                slot.set(new)
+
+        self._write = write
+        if self._keyed:
+            self._install_keyed()  # a keyed list's first write is its rows, not the list
+        else:
+            # The first value is a write like any other — the view still decides the node — but it waits
+            # for the end of the draw, because the page declares `.view(...)` after this line.
+            _defer(lambda: None if self._keyed else slot.set(self.value))
+        return self
+
+    def view(self, render: Callable[[Any], Any]) -> "Signal":
+        """Say how this value becomes a node, once: `Signal(0).bind(slot).view(lambda v: h.text(v))`."""
+        self._need_slot("view").view(render)
+        return self
+
+    def keyed(self, render: Callable[[Any, str], Any]) -> "Signal":
+        """A list slot kept equal to this one, by id: `render(item, row_id)` builds a row.
+
+        Declared before `.bind(...)` — a keyed list's first write is the rows it appends, never the list
+        as a value, so the seed a bind would make is not made at all.
+        """
+        self._keyed = True
+        self._pending_keyed = render
+        if self._slot is not None:
+            self._install_keyed()
+        return self
+
+    def _install_keyed(self) -> None:
+        if self._pending_keyed is None or self._keyed_done:
+            return
+        self._keyed_done = True
+        self._keyed_effect = _keyed_effect(self._slot, self, self._pending_keyed)
+
+    def store(self, key: str) -> "Signal":
+        """Keep this value beyond the connection, under `key`.
+
+        An anonymous device keeps it in this delivery's data (the session), and an authenticated user
+        keeps it in the app's store under their user id — so it follows them to another tab or device.
+        Declare it before `.bind(...)`: the stored value is what the slot's first write carries.
+        """
+        if self._stored:
+            return self
+        if self._slot is not None:
+            raise RuntimeError(
+                f"store({key!r}) must come before bind(slot): the stored value decides the first write"
+            )
+        ctx = _delivery.get()
+        if ctx is None:
+            raise RuntimeError(
+                f"store({key!r}) needs a delivery: declare it inside a page's draw (or bind a slot first)"
+            )
+        user = getattr(ctx, "user", None)
+        held = ctx.data.setdefault(STORED, {})
+        at = f"{user}/{'/'.join((key,))}" if user is not None else f"-/{key}"
+        held_cell = held.get(at)
+        if held_cell is not None:
+            return held_cell
+        if user is not None:
+            loaded = ctx.app.store.load(user, key)
+            if loaded is not None:
+                self._value = loaded  # type: ignore[assignment]
+        self._stored = True
+        held[at] = self
+        inner = self._write
+
+        def write(new: T) -> None:
+            if inner is not None:
+                inner(new)
+            if user is not None:
+                ctx.app.store.save(user, key, new)
+
+        self._write = write
+        return self
+
+    @property
+    def slot(self) -> Any:
+        """The slot this value writes through — what a node's `source=` takes: `h.text(source=count)`."""
+        if self._slot is None:
+            raise RuntimeError("this signal has no slot: bind one first — Signal(v).bind(ctx.slot / …)")
+        return self._slot
+
+    def _need_slot(self, verb: str) -> Any:
+        if self._slot is None:
+            raise RuntimeError(f"{verb}(…) needs a slot: Signal(value).bind(slot).{verb}(…)")
+        return self._slot
+
     def __repr__(self) -> str:
         return f"<Signal {self._value!r}>"
 
@@ -123,7 +245,7 @@ class Signal(Generic[T]):
 class Computed(Generic[T]):
     """A value computed from others: cached while clean, recomputed when stale, quiet when unchanged."""
 
-    __slots__ = ("_fn", "_value", "_dirty", "_sources", "_observers", "_equal", "_version")
+    __slots__ = ("_fn", "_value", "_dirty", "_sources", "_observers", "_equal", "_version", "_slot")
 
     def __init__(self, fn: Callable[[], T], *, equal: Callable[[T, T], bool] = operator.eq) -> None:
         self._fn = fn
@@ -133,6 +255,36 @@ class Computed(Generic[T]):
         self._observers: set[Any] = set()
         self._equal = equal
         self._version = 0
+        self._slot: Any = None
+
+    def bind(self, slot: Any) -> "Computed[T]":
+        """Keep `slot` equal to this answer: once now, and once per change. Identity = the slot's name."""
+        cells = _cells(slot.ctx)
+        held = cells.get(slot.name)
+        if held is not None:
+            if not isinstance(held, Computed):
+                raise RuntimeError(
+                    f"slot {slot.name!r} already has a {type(held).__name__}: one value per name"
+                )
+            return held
+        cells[slot.name] = self
+        self._slot = slot
+        _defer(lambda: effect(lambda: slot.set(self.value)))
+        return self
+
+    def view(self, render: Callable[[Any], Any]) -> "Computed[T]":
+        """Say how this answer becomes a node — the same `view` a plain value has."""
+        if self._slot is None:
+            raise RuntimeError("view(…) needs a slot: Computed(fn).bind(slot).view(…)")
+        self._slot.view(render)
+        return self
+
+    @property
+    def slot(self) -> Any:
+        """The slot this answer is mirrored onto — what a node's `source=` takes."""
+        if self._slot is None:
+            raise RuntimeError("this computed has no slot: bind one first — Computed(fn).bind(slot)")
+        return self._slot
 
     @property
     def value(self) -> T:
@@ -243,13 +395,52 @@ def effect(fn: Callable[[], None]) -> Effect:
     return node
 
 
-# --- the adapters: a slot that owns a value ---------------------------------
+# --- what a signal is attached to -------------------------------------------
 #
-# One table per connection (`ctx.data[CELLS]`), one cell per slot name — so a page may be drawn again
-# without seeding the slot back to its first value, and two handles for the same name are the same cell.
-# The three constructors below are the mechanism; `Slot.signal` / `Slot.computed` / `Slot.keyed` are the
-# same three, reached from the handle the page already holds.
+# Four attachments, all optional and all read off the signal instead of off the slot:
+#
+#   `.bind(slot)`   write through to it — once at declaration, then on every change;
+#   `.view(fn)`     how a value becomes a node (one per slot name, kept on the app);
+#   `.keyed(fn)`    a list slot kept equal to this one, by id;
+#   `.store(key)`   survive the connection (see `stores.py`).
+#
+# The cell table is one per connection (`ctx.data[CELLS]`) and one `STORED` table beside it — so drawing
+# a page again hands back the same signal instead of seeding the slot a second time.
 CELLS = "__cells__"
+STORED = "__stored__"
+_delivery: ContextVar[Any] = ContextVar("reflux_signals_delivery", default=None)
+_pending: ContextVar[list[Callable[[], None]] | None] = ContextVar(
+    "reflux_signals_pending", default=None
+)
+
+
+@contextmanager
+def drawing(ctx: Any) -> Iterator[None]:
+    """Say which delivery is being drawn, and hold the first writes until the draw is over.
+
+    A page declares its values at the top and says what they look like on the same line, but the write a
+    declaration makes is a frame, and `h.text(...)` needs the view — so the first write waits for the end
+    of the draw, when every view this page declares has been declared.
+    """
+    token_delivery = _delivery.set(ctx)
+    token_pending = _pending.set([])
+    try:
+        yield
+    finally:
+        queued = _pending.get() or []
+        _pending.reset(token_pending)
+        _delivery.reset(token_delivery)
+        for run in queued:
+            run()
+
+
+def _defer(run: Callable[[], None]) -> None:
+    """Run it now if nothing is being drawn, and at the end of the draw if something is."""
+    queue = _pending.get()
+    if queue is None:
+        run()
+    else:
+        queue.append(run)
 
 
 def _cells(ctx: Any) -> dict[str, Any]:
@@ -260,86 +451,14 @@ def _cells(ctx: Any) -> dict[str, Any]:
     return data.setdefault(CELLS, {})
 
 
-def own(ctx: Any, slot: Any, value: T, **kwargs: Any) -> Signal[T]:
-    """The signal that owns `slot`: created once, seeded once, and every change is written there."""
-    cells = _cells(ctx)
-    cell = cells.get(slot.name)
-    if cell is not None:
-        if not isinstance(cell, Signal):
-            raise RuntimeError(
-                f"slot {slot.name!r} already has a {type(cell).__name__}: one cell per name"
-            )
-        return cell
-    cell = Signal(value, write=slot.set, **kwargs)
-    cells[slot.name] = cell
-    slot.set(value)  # the first value is a write like any other — the view still decides the node
-    return cell
+def keyed(rows: Any, slot: Any, render: Callable[[Any, str], Any]) -> Effect:
+    """A list shared by every connection, kept equal on **this** connection's `slot`.
 
-
-def mirror(ctx: Any, slot: Any, computed: Computed[Any]) -> Computed[Any]:
-    """Keep `slot` equal to `computed`, once now and once per change. Declared once per name."""
-    cells = _cells(ctx)
-    existing = cells.get(slot.name)
-    if existing is not None:
-        if not isinstance(existing, Computed):
-            raise RuntimeError(
-                f"slot {slot.name!r} already has a {type(existing).__name__}: one cell per name"
-            )
-        return existing
-    cells[slot.name] = computed
-    effect(lambda: slot.set(computed.value))
-    return computed
-
-
-def keep(ctx: Any, slot: Any, rows: Any, render: Callable[[Any, str], Any]) -> Any:
-    """Keep the list slot `slot` equal to `rows`, by id. Declared once per name."""
-    cells = _cells(ctx)
-    existing = cells.get(slot.name)
-    if existing is not None:
-        if not isinstance(existing, Signal):
-            raise RuntimeError(
-                f"slot {slot.name!r} already has a {type(existing).__name__}: one cell per name"
-            )
-        return existing
-    cells[slot.name] = rows
-    _keyed_effect(slot, rows, render)
-    return rows
-
-
-def bound(ctx: Any, name: str, value: T, **kwargs: Any) -> Signal[T]:
-    """A signal that owns the slot `name`: every change is written there, and the first value seeds it.
-
-    The write is `ctx.slot(name).set(value)` — the app's `view` still decides what a value looks like,
-    so a page keeps rendering `h.text(source=slots.<same name>)` exactly as before.
+    `Signal.keyed` is the page's own list: one signal per connection, bound to that connection's slot.
+    This is the other case — one signal at module level, one subscription per connection — and the
+    subscription has to be made per connection because a slot is.
     """
-    return own(ctx, ctx.slot(name), value, **kwargs)
-
-
-def into(ctx: Any, name: str, computed: Computed[Any]) -> Computed[Any]:
-    """Mirror `computed` onto the slot `name`, once now and once per change."""
-    return mirror(ctx, ctx.slot(name), computed)
-
-
-def keyed(
-    ctx: Any,
-    name: str,
-    rows: Any,  # a `Signal[[(id, item), ...]]`, or a `Computed` of one — anything with `.value`
-    render: Callable[[Any, str], Any],
-) -> Any:
-    """Keep the list slot `name` equal to `rows`, by id: append what is new, remove what is gone.
-
-    `rows` is `[(id, item), ...]` in the order to show, and `render(item, row_id)` must build the row
-    with that id — a row's identity comes from the data, never from its position. The rendered ids are
-    tracked here, so a page does not have to remember them (that bookkeeping was the counter's
-    `State.ids`).
-
-    Reordering moves the fewest rows that can express it: the rows already in relative order (a longest
-    increasing run, by where they sit on screen) are left alone, and each of the rest is moved to its
-    own place — one `move` per row, and none at all when the order did not change. A `move`'s position
-    is counted with the row lifted out (fluxen ADR 0005), so placing row `i` is `-(i + 1)`: `-1` is the
-    head, and by then everything wanted before it is already there in order.
-    """
-    return keep(ctx, ctx.slot(name), rows, render)
+    return _keyed_effect(slot, rows, render)
 
 
 def _keyed_effect(slot: Any, rows: Any, render: Callable[[Any, str], Any]) -> Effect:

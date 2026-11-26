@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "ColorAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SelectAttr", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "Color", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "Bare", "ButtonAttr", "ClassAttr", "ColorAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SelectAttr", "Sink", "SizeAttr", "Source", "Stamp", "Stated1", "Stated2", "Stated", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Candidates", "Canvas", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "Color", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -24,6 +24,12 @@ class Align(Enum):
     start = 'start'
     center = 'center'
     end = 'end'
+
+
+class Bare(Enum):
+    text = 'text'
+    bool = 'bool'
+    password = 'password'
 
 
 class ButtonAttr(BaseModel):
@@ -126,15 +132,6 @@ class ImageAttr(BaseModel):
     width: str | None = None
 
 
-class JsType(Enum):
-    bool = 'bool'
-    number = 'number'
-    text = 'text'
-    password = 'password'
-    button = 'button'
-    submit = 'submit'
-
-
 class LinkShape1(Enum):
     straight = 'straight'
 
@@ -218,6 +215,24 @@ class Stamp(BaseModel):
     type: Literal['stamp'] = 'stamp'
 
 
+class Stated1(BaseModel):
+    max: float
+    min: float
+    step: float | None = None
+    type: Literal['number']
+
+
+class Stated2(BaseModel):
+    candidates: list[str] | None = None
+    type: Literal['text']
+
+
+class Stated(RootModel[Stated1 | Stated2]):
+    root: Stated1 | Stated2 = Field(
+        ..., description='The kinds that declare their domain.'
+    )
+
+
 class Step1(BaseModel):
     timer: conint(ge=0)
 
@@ -294,6 +309,13 @@ class Button(BaseModel):
     id: str | None = None
     source: Source | None = None
     type: Literal['button'] = 'button'
+
+
+class Candidates(RootModel[Bare | Stated]):
+    root: Bare | Stated = Field(
+        ...,
+        description='What a field\'s value may be (ADR 0050). The variant is the kind, so "text with a minimum" and\n"a number with no interval" cannot be written down at all.\n\nThe wire keeps the asymmetry, because the asymmetry carries information: a kind that declares\nnothing is a bare word, and a kind that declares something is a map with a `type`.\n\n```text\nkind: bool\nkind: text\nkind: {type: number, min: 0, max: 64, step: 1}\nkind: {type: text, candidates: [solid, dashed]}\n```',
+    )
 
 
 class Canvas(BaseModel):
@@ -399,9 +421,9 @@ class Input(BaseModel):
         description="When this field's typing reaches the loom (ADR 0032 §8). Absent = `{debounce: 250}`, which is\nwhat makes a per-keystroke `submit: [change]` bearable; `{debounce: 0}` is a frame per letter.\nTiming, not addressing: `source`/`tag` say where the value lives, this says when it is heard.",
     )
     id: str | None = None
-    kind: JsType | None = Field(
+    kind: Candidates | None = Field(
         None,
-        description="What kind of field this is — the element type and the parse, one declaration (ADR 0032 §2: a field\nhas one type, and it is not the read's or the write's). Named `kind` because `type` is the node's own\ndiscriminator on the wire. Absent = text.",
+        description="What this field's value may be — the element type, the parse, and (for a number) the interval, one\ndeclaration (ADR 0032 §2, ADR 0050). Named `kind` because `type` is the node's own discriminator on\nthe wire. Absent = free text.",
     )
     multiline: bool | None = Field(
         None, description='Multi-line is a layout of the field, not a different node.'
@@ -641,6 +663,8 @@ Sink.model_rebuild()
 SizeAttr.model_rebuild()
 Source.model_rebuild()
 Stamp.model_rebuild()
+Stated1.model_rebuild()
+Stated2.model_rebuild()
 Step1.model_rebuild()
 Step2.model_rebuild()
 TextAttr.model_rebuild()

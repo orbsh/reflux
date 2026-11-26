@@ -340,9 +340,10 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     else:
         control = h.input(
             tag=name,
-            # 一律 text：`number` 输入框在空着的时候打包出 0（"没写" 变成了 "设成 0"），而这里的空值
-            # 是"不设"——种类的判断在校验器里，不在控件的类型上。
-            kind="text",
+            # 一个长度就是一个**有区间的数**（ADR 0050）：`min`/`max`/`step` 一起挂到元素上，所以越界在打字的
+            # 地方就被拒，而不是先收下、存进状态、再在最后一步丢掉。空值不再是 0——空着打包 `null`，
+            # 校验器读成"不设"。
+            kind={"type": "number", "min": 0, "max": 64, "step": 1},
             selector="cfg",
             source=Source(default=value),
             placeholder=CORE.get(name, ""),

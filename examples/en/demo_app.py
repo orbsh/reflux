@@ -253,7 +253,7 @@ def home_page(ctx, match):
     # A slot outlives a `create` (the tree is replaced, the data planes are not), so this subscription
     # is made once — making it again on the next visit would append the same rows twice.
     if ctx.data.get("rows_keyed") is None:
-        ctx.data["rows_keyed"] = signals.keyed(ctx, "rows", state.rows, row_node)
+        ctx.data["rows_keyed"] = signals.keyed(state.rows, slots / "rows", row_node)
     # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
     # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):

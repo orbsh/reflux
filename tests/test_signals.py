@@ -36,6 +36,12 @@ class FakeSlot:
         self.ops: list[tuple] = []
         self.rows: list[str] = []
         self.refused: list[tuple] = []
+        self.ctx: object | None = None  # who it belongs to: `Signal.bind` asks for the delivery's table
+        self.views: list[object] = []
+
+    def view(self, render: object) -> "FakeSlot":
+        self.views.append(render)
+        return self
 
     def set(self, value: object) -> None:
         self.ops.append(("set", value))
@@ -67,7 +73,9 @@ class FakeCtx:
         self.data: dict[str, object] = {}
 
     def slot(self, name: str) -> FakeSlot:
-        return self.slots.setdefault(name, FakeSlot(name))
+        slot = self.slots.setdefault(name, FakeSlot(name))
+        slot.ctx = self
+        return slot
 
 
 class Node:
@@ -188,7 +196,7 @@ class TestBatch(unittest.TestCase):
 class TestTheAdapters(unittest.TestCase):
     def test_bound_owns_a_slot(self) -> None:
         ctx = FakeCtx()
-        count = signals.bound(ctx, "counter.count", 0)
+        count = signals.Signal(0).bind(ctx.slot("counter.count"))
 
         self.assertEqual(ctx.slots["counter.count"].ops, [("set", 0)], "the first value seeds the slot")
         count.value = 3
@@ -196,7 +204,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_into_mirrors_a_computed(self) -> None:
         ctx, step = FakeCtx(), signals.Signal(1)
-        signals.into(ctx, "counter.hint", signals.Computed(lambda: f"step {step.value}"))
+        signals.Computed(lambda: f"step {step.value}").bind(ctx.slot("counter.hint"))
 
         step.value = 2
 
@@ -206,7 +214,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_keyed_moves_a_row_that_moved_to_the_head(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])
-        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.keyed(lambda item, row_id: Node(row_id, item)).bind(ctx.slot("log"))
         rows.value = [("a", "1"), ("b", "2"), ("c", "3")]
         ctx.slots["log"].ops.clear()
 
@@ -219,7 +227,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_keyed_leaves_the_rows_that_stayed_in_order(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])
-        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.keyed(lambda item, row_id: Node(row_id, item)).bind(ctx.slot("log"))
         rows.value = [("a", ""), ("b", ""), ("c", ""), ("d", "")]
         ctx.slots["log"].ops.clear()
 
@@ -233,7 +241,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_keyed_rotates_with_one_move(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])
-        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.keyed(lambda item, row_id: Node(row_id, item)).bind(ctx.slot("log"))
         rows.value = [("a", ""), ("b", ""), ("c", ""), ("d", "")]
         ctx.slots["log"].ops.clear()
 
@@ -245,7 +253,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_keyed_adds_removes_and_reorders_in_one_pass(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])
-        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.keyed(lambda item, row_id: Node(row_id, item)).bind(ctx.slot("log"))
         rows.value = [("a", ""), ("b", ""), ("c", "")]
         ctx.slots["log"].ops.clear()
 
@@ -257,7 +265,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_keyed_writes_nothing_when_the_order_did_not_change(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])
-        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.keyed(lambda item, row_id: Node(row_id, item)).bind(ctx.slot("log"))
         rows.value = [("a", ""), ("b", "")]
         ctx.slots["log"].ops.clear()
 
@@ -267,7 +275,7 @@ class TestTheAdapters(unittest.TestCase):
 
     def test_keyed_appends_what_is_new_and_removes_what_is_gone(self) -> None:
         ctx, rows = FakeCtx(), signals.Signal([])
-        signals.keyed(ctx, "log", rows, lambda item, row_id: Node(row_id, item))
+        rows.keyed(lambda item, row_id: Node(row_id, item)).bind(ctx.slot("log"))
 
         rows.value = [("a", "first"), ("b", "second")]
         rows.value = [("b", "second"), ("c", "third")]

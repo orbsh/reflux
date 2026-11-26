@@ -12,22 +12,23 @@ line it is made of is only a use of the API. A few things to read:
   `slot.set(...)` is its verb — construction and membership stop sharing one dot.
 - **A closure sink**: the three buttons' handlers are written beside the buttons, they receive the
   event's value, and the handles are captured. One request, one answer — that is how it is written.
-- **State follows the connection**: `ctx.data` belongs to one socket, so two tabs count separately and a
-  refresh starts over. This page has no database and needs none.
-- **A slot can own a value** (`reflux.signals`): `.signal(0)` gives a slot a cell and from then on
-  `.value` reads and writes it; `.computed(fn)` is a read-only derivation; `.keyed(row)` keeps a list
-  slot aligned by id. One cell per name per connection, so drawing the page again does not seed it back.
-  `step` and `refusal` have no cell — they never reach the wire, they are local in-between values.
+- **The signal is the subject, the slot is where it goes** (`reflux.signals`): `Signal(0).bind(slot)`
+  says which slot the value writes through, `.view(fn)` says what the value looks like, `.keyed(row)`
+  says a list is kept aligned by id, `.store(key)` says the value outlives the connection. Every
+  declaration sits at the top of the page function, one per line; a redraw hands back the same signal,
+  so the slot is never seeded back.
+- **`step` / `refusal` / `seq` never reach the wire**: they have no slot, only `.store(key)` — an
+  anonymous connection keeps them in its own data, an authenticated user in the app's store, by user id.
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from reflux import Context, signals
 from reflux.sdk import h
 
-__all__ = ["HISTORY", "PAGE", "State", "register", "state", "step_line"]
+__all__ = ["HISTORY", "PAGE", "register", "step_line"]
 
 PAGE = "/counter"
 HISTORY = 6  # how many entries the log keeps; past that the oldest one is removed
@@ -43,62 +44,13 @@ def _row(label: str, row_id: str) -> Any:
     return h.text(label, variant="muted", id=row_id)
 
 
-class State:
-    """One connection's count. Two tabs are two States.
-
-    Three slots each own a cell (`count`'s, `hint`'s, `history`'s), and a cell is registered per name on
-    the connection, so drawing this page again hands back the same one. `step` and `refusal` are the two
-    signals with no cell — they never reach the wire, so the whole State still lives in `ctx.data`.
-    """
-
-    def __init__(self, ctx: Context) -> None:
-        counter = ctx.slot / "counter"
-        self.step = signals.Signal(1)
-        self.refusal = signals.Signal("")
-        self.count = (counter / "count").signal(0)
-        self.hint = (counter / "hint").computed(self._hint)
-        self.history = (counter / "history").keyed(_row)
-        self.seq = 0  # a row's identity comes from the data: `log-1`, `log-2`, …
-
-    def _hint(self) -> str:
-        return self.refusal.value or step_line(self.step.value)
-
-    def record(self, label: str) -> None:
-        """Add a line; whatever falls off the cap leaves with the table (`keyed` removes by id, not by slot)."""
-        self.seq += 1
-        row = (f"log-{self.seq}", f"{label} → {self.count.value}")
-        self.history.value = (self.history.value + [row])[-HISTORY:]
-
-
-def state(ctx: Context) -> State:
-    """This connection's count, made on first use (`ctx.data` lives and dies with the connection).
-
-    A slot's cell is idempotent, but `step` and `refusal` are not — building a State per draw and
-    throwing it away would reset those two, so the whole State is still cached.
-    """
-    # Not `setdefault(..., State(ctx))`: that builds a State on every draw and throws it away.
-    current = ctx.data.get("counter")
-    if current is None:
-        current = ctx.data["counter"] = State(ctx)
-    return cast(State, current)
-
-
 def register(app: Any) -> None:
-    """Put this page on the app: its route (the decorator is right here), two views, three names.
+    """Put this page on the app: its route, and those three names.
 
     Every landing point is a closure, so none of them is in the app's table — they exist once this page
     has been drawn and are gone when it turns. That is why `register` has nothing else to declare: no
     name has to be registered ahead of the page, except the route itself.
     """
-
-    # A slot carries a node on the wire; these two carry one **value** — a number, a line of text. So
-    # what that value looks like is said here once, and something writes values: `current.count.value = 3`.
-    # A node still goes through untouched (`slot.set(h.text("3"))`): already a node, not a value.
-    counter = app.slot / "counter"
-    (counter / "count").view(
-        lambda value: h.text(str(value), variant="heading-1", id="counter-value")
-    )
-    (counter / "hint").view(lambda value: h.text(value, variant="muted", id="counter-hint"))
 
     # The names are declared here once: `/status` and `inspect` list "names in use", and should not
     # wait for someone to open this page first.
@@ -107,13 +59,34 @@ def register(app: Any) -> None:
 
     @app.page(PAGE, title="Counter")
     def counter_page(ctx: Context, match) -> None:
-        """One draw of the counter: the value comes from the connection's State, the handlers from below."""
-        current = state(ctx)
+        """One draw of the counter: the state is declared at the top, the handlers below are closures."""
+        slots = ctx.slot
+        # Three that never reach the wire: only `.store(key)`, no slot. An anonymous connection keeps
+        # them in its own data (the session); an authenticated user keeps them in the app's store, by
+        # user id — so another tab carries on where this one left off.
+        step = signals.Signal(1).store("counter.step")
+        refusal = signals.Signal("").store("counter.refusal")
+        seq = signals.Signal(0).store("counter.seq")
+        # Three that do: the value writes through to its slot, `.view` says what it looks like, and
+        # `.keyed` keeps the list aligned by id.
+        count = signals.Signal(0).bind(slots / "counter" / "count").view(
+            lambda value: h.text(str(value), variant="heading-1", id="counter-value")
+        )
+        hint = signals.Computed(lambda: refusal.value or step_line(step.value)).bind(
+            slots / "counter" / "hint"
+        ).view(lambda value: h.text(value, variant="muted", id="counter-hint"))
+        history = signals.Signal([]).keyed(_row).bind(slots / "counter" / "history")
+
+        def record(label: str) -> None:
+            """Add a line; whatever falls off the cap leaves with the table (`keyed` removes by id)."""
+            seq.value += 1
+            row = (f"log-{seq.value}", f"{label} → {count.value}")
+            history.value = (history.value + [row])[-HISTORY:]
 
         def change(by: int) -> None:
             with signals.batch():  # one press: the value moves, a line is written, the page hears once
-                current.count.value += by * current.step.value
-                current.record(f"{by * current.step.value:+d}")
+                count.value += by * step.value
+                record(f"{by * step.value:+d}")
 
         def up(value: object) -> None:
             change(+1)
@@ -123,8 +96,8 @@ def register(app: Any) -> None:
 
         def reset(value: object) -> None:
             with signals.batch():
-                current.count.value = 0
-                current.record("reset")
+                count.value = 0
+                record("reset")
 
         def set_step(value: object) -> None:
             # A loom submits the object it packed ({field: value}), and the value is a string — so this
@@ -132,13 +105,13 @@ def register(app: Any) -> None:
             raw = value.get("step") if isinstance(value, dict) else None
             text = raw.strip() if isinstance(raw, str) else ""
             try:
-                step = int(text)
+                wanted = int(text)
             except ValueError:
-                current.refusal.value = f"“{text}” is not a whole number; the step is still {current.step.value}"
+                refusal.value = f"“{text}” is not a whole number; the step is still {step.value}"
                 return
             with signals.batch():
-                current.step.value = min(max(step, 1), 10)
-                current.refusal.value = ""  # a good input retires the refusal
+                step.value = min(max(wanted, 1), 10)
+                refusal.value = ""  # a good input retires the refusal
 
         return (
             h.frame(
@@ -149,9 +122,9 @@ def register(app: Any) -> None:
                     variant="muted",
                     id="counter-blurb",
                 ),
-                # Reading a slot takes the handles above: each name is written once, never twice.
-                h.text(source=current.count, id="counter-slot"),
-                h.text(source=current.hint, id="counter-hint-slot"),
+                # Reading a slot takes the signals above: each name is written once, never twice.
+                h.text(source=count, id="counter-slot"),
+                h.text(source=hint, id="counter-hint-slot"),
                 h.frame(
                     # A `button` lives inside a `loom`, and the loom's `submit` names the press —
                     # so each press is a loom's submit, not a button that speaks on its own (ADR 0032 §3).
@@ -179,7 +152,7 @@ def register(app: Any) -> None:
                 ),
                 h.frame(
                     h.text("History", variant="heading-3"),
-                    h.tiles(source=current.history, id="counter-history"),
+                    h.tiles(source=history, id="counter-history"),
                     grid={"grid-auto-rows": "auto", "gap": "6px", "align-content": "start"},
                     variant="card",
                     id="counter-log",

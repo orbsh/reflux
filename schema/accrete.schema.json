@@ -22,6 +22,26 @@
       ],
       "type": "string"
     },
+    "Bare": {
+      "description": "The kinds with no parameters.",
+      "oneOf": [
+        {
+          "const": "text",
+          "description": "Free text — anything of any length. The usual field.",
+          "type": "string"
+        },
+        {
+          "const": "bool",
+          "description": "Two values, and there is nothing to say about them.",
+          "type": "string"
+        },
+        {
+          "const": "password",
+          "description": "Text the browser hides. A rendering of text, not a different domain.",
+          "type": "string"
+        }
+      ]
+    },
     "Button": {
       "properties": {
         "attrs": {
@@ -76,6 +96,19 @@
         }
       },
       "type": "object"
+    },
+    "Candidates": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Bare",
+          "description": "Nothing to declare: the element type is the whole answer."
+        },
+        {
+          "$ref": "#/$defs/Stated",
+          "description": "A kind that states its domain."
+        }
+      ],
+      "description": "What a field's value may be (ADR 0050). The variant is the kind, so \"text with a minimum\" and\n\"a number with no interval\" cannot be written down at all.\n\nThe wire keeps the asymmetry, because the asymmetry carries information: a kind that declares\nnothing is a bare word, and a kind that declares something is a map with a `type`.\n\n```text\nkind: bool\nkind: text\nkind: {type: number, min: 0, max: 64, step: 1}\nkind: {type: text, candidates: [solid, dashed]}\n```"
     },
     "Canvas": {
       "description": "An in-place mount container for an external render module (ADR 0007).\nThe core does not interpret `data` — payload semantics belong entirely to the module; size/style go through `attrs`,\nand coupling to the data flow goes through the existing bind slot protocol (`set`/`patch` addressed by `data_event`).",
@@ -780,13 +813,13 @@
         "kind": {
           "anyOf": [
             {
-              "$ref": "#/$defs/JsType"
+              "$ref": "#/$defs/Candidates"
             },
             {
               "type": "null"
             }
           ],
-          "description": "What kind of field this is — the element type and the parse, one declaration (ADR 0032 §2: a field\nhas one type, and it is not the read's or the write's). Named `kind` because `type` is the node's own\ndiscriminator on the wire. Absent = text."
+          "description": "What this field's value may be — the element type, the parse, and (for a number) the interval, one\ndeclaration (ADR 0032 §2, ADR 0050). Named `kind` because `type` is the node's own discriminator on\nthe wire. Absent = free text."
         },
         "multiline": {
           "description": "Multi-line is a layout of the field, not a different node.",
@@ -822,17 +855,6 @@
         }
       },
       "type": "object"
-    },
-    "JsType": {
-      "enum": [
-        "bool",
-        "number",
-        "text",
-        "password",
-        "button",
-        "submit"
-      ],
-      "type": "string"
     },
     "LinkShape": {
       "description": "The graph renderer's knobs. Same semantics as canvas's `options`: mount-time config, changing it takes\na remount (not on the update leg). The only difference is that this is our own renderer's vocabulary, so it can be\ntyped and checked by schema and by patch.\nThe direction of an edge. Both orientations are \"interfaces on a node\": a link leaves from one orientation and enters\nthe other end's orientation, joined in between by a cubic curve.",
@@ -1389,6 +1411,60 @@
         "data"
       ],
       "type": "object"
+    },
+    "Stated": {
+      "description": "The kinds that declare their domain.",
+      "oneOf": [
+        {
+          "description": "An interval. `min` and `max` are not optional: a number field that does not say which numbers it\ntakes is the field that quietly accepts 99.5 and loses it later.\n\n`step: None` is a continuous choice — a smooth drag, a slider with no detents. HTML refuses a step\nof zero, so a declared `0` reads back as `None` rather than as a divide-by-nothing.",
+          "properties": {
+            "max": {
+              "format": "double",
+              "type": "number"
+            },
+            "min": {
+              "format": "double",
+              "type": "number"
+            },
+            "step": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "number",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Text with a closed word list to pick from. An empty list is plain free text, which is why it\nstays off the wire.",
+          "properties": {
+            "candidates": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Step": {
       "anyOf": [

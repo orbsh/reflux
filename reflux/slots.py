@@ -21,17 +21,19 @@ data plane. Using one as a `sink=` is the same name used as an address, which is
 written: hierarchical names are allowed and nothing parses the `/` yet. Declared slots land in
 `App.slots`, which `/status` lists: where a page reads and where it speaks are one namespace.
 
-**A slot that owns a value.** `slots / "counter" / "count"` names one; `.signal(0)` gives it a cell —
-the same `signals.Signal` the adapters used to build, but reached from the handle the page holds:
+**A slot that owns a value.** `slots / "counter" / "count"` names one; what writes to it is a signal,
+declared with the slot as its destination:
 
-    count = (slots / "counter" / "count").signal(0)   # from here on: count.value
-    hint = (slots / "counter" / "hint").computed(fn)  # read-only, mirrored to the slot
-    rows = (slots / "counter" / "history").keyed(row) # a list the slot is kept equal to, by id
+    step  = Signal(1).store("counter.step")                                  # 只活在这条连接
+    count = Signal(0).bind(slots / "counter" / "count").view(lambda v: h.text(str(v)))
+    hint  = Computed(fn).bind(slots / "counter" / "hint")
+    rows  = Signal([]).bind(slots / "counter" / "history").keyed(row_node)
 
-One cell per name per connection (`ctx.data`), so drawing a page again does not seed it back. A slot
-with no cell has no `.value` (`RuntimeError`) and is what it always was: an address with verbs.
-`signal`/`computed`/`keyed`/`value` and the verbs are therefore members, not names: a slot called
-`value` is still reached as `slots / "value"`, because `/` never asks the handle's attributes.
+One value per name per connection (`ctx.data`), so drawing a page again hands back the same signal
+instead of seeding the slot a second time. A slot stays what it always was — an address with verbs; the
+value lives on the signal (`reflux/signals.py`), never on the handle. `view`/`name`/`frame` and the
+verbs are therefore members, not names: a slot called `view` is still reached as `slots / "view"`,
+because `/` never asks the handle's attributes.
 """
 
 from __future__ import annotations
@@ -39,7 +41,6 @@ from __future__ import annotations
 from typing import Any
 
 from . import wire
-from .signals import Computed, Signal, _cells, keep, mirror, own
 
 
 def is_node(value: Any) -> bool:
@@ -105,60 +106,10 @@ class Slot:
         self._app.view(self.name, render)
         return self
 
-    # --- the cell: a value this slot owns ---
     @property
-    def value(self) -> Any:
-        """The cell's value. A slot with no cell is an address, not a value — that read raises."""
-        return self._cell().value
-
-    @value.setter
-    def value(self, new: Any) -> None:
-        cell = self._cell()
-        if isinstance(cell, Computed):
-            raise RuntimeError(
-                f"slot {self.name!r} is computed — write what it is computed from, not the answer"
-            )
-        cell.value = new
-
-    def signal(self, value: Any, **kwargs: Any) -> "Slot":
-        """Give this slot a cell: `(slots / "counter").signal(0)`, then `handle.value` reads and writes.
-
-        The cell is made once per connection — drawing the page again hands back the same one, so the
-        first value is not written twice. Its first value is a write like any other, so a value needs
-        the slot's view already: `.view(fn).signal(0)`.
-        """
-        self._seeded(value)
-        own(self._ctx, self, value, **kwargs)
-        return self
-
-    def _seeded(self, value: Any) -> None:
-        """Say it plainly when a value slot has no view yet — the first value is a write like any other."""
-        if is_node(value):
-            return
-        if self._app is not None and self._app.view_for(self.name) is not None:
-            return
-        raise ValueError(
-            f"slot {self.name!r} holds nodes and has no view: declare one first — `.view(fn).signal(...)`"
-        )
-
-    def computed(self, fn: Any) -> "Slot":
-        """Declare this slot's cell as computed: mirrored onto the slot, read-only from here."""
-        mirror(self._ctx, self, Computed(fn))
-        return self
-
-    def keyed(self, render: Any, initial: Any = ()) -> "Slot":
-        """Declare this slot a list kept equal to `handle.value` by id: `render(item, row_id)` builds a row."""
-        keep(self._ctx, self, Signal(list(initial)), render)
-        return self
-
-    def _cell(self) -> Any:
-        """The cell this name holds on this connection, or a sentence saying how to declare one."""
-        cell = _cells(self._ctx).get(self.name)
-        if cell is None:
-            raise RuntimeError(
-                f"slot {self.name!r} has no signal — declare one with `.signal(default)`"
-            )
-        return cell
+    def ctx(self) -> Any:
+        """The delivery this handle belongs to — what a signal reads to find its connection."""
+        return self._ctx
 
     def patch(self, path: str, value: Any, *, op: str = "replace") -> None:
         """Write one value inside the node that is already here."""
@@ -217,7 +168,7 @@ class Slot:
 
         The `/` is how a name is *built*; a dot stays the verbs and the handle's own attributes. So
         `slot.set` is the verb and `slots / "row" / "remove"` is a slot that happens to be called
-        `remove` — the same escape `slots.row["remove"]` gives, spelled as construction.
+        `remove` — construction never meets a member, so nothing has to be escaped.
         """
         if not isinstance(name, str) or not name:
             raise ValueError(f"a slot name segment must be a non-empty string, got {name!r}")

@@ -232,7 +232,7 @@ def home_page(ctx, match):
     # 之后只跟着信号走增删与换位。槽活得比一次 `create` 长（树被替换，数据面不会），所以这张订阅只建
     # 一次 —— 第二次进来再建一遍就会把同样的行 append 两次。
     if ctx.data.get("rows_keyed") is None:
-        ctx.data["rows_keyed"] = signals.keyed(ctx, "rows", state.rows, row_node)
+        ctx.data["rows_keyed"] = signals.keyed(state.rows, slots / "rows", row_node)
     # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
     # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):

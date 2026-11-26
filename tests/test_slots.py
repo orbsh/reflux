@@ -89,16 +89,13 @@ class TheSlot(unittest.TestCase):
         self.assertEqual(self.app.declared, {"status", "chat/reply"})
 
 
-class TheCell(unittest.TestCase):
-    """A slot that owns a value: one cell per name per connection, read and written through `.value`."""
+class TheValue(unittest.TestCase):
+    """A signal a page declares: one per name per connection, seeded once, read and written on the signal."""
 
     def setUp(self) -> None:
         self.app = create_app()
         self.device = FakeDevice()
         self.ctx = self.app.context(self.device)
-        # A value slot needs its view before the first write (the seed is a write like any other).
-        self.ctx.slot("counter.count").view(lambda value: h.text(str(value)))
-        self.ctx.slot("counter.hint").view(lambda value: h.text(value))
 
     def test_the_slash_builds_a_name_and_leaves_the_dot_to_the_verbs(self) -> None:
         self.assertEqual((self.ctx.slot / "counter" / "count").name, "counter.count")
@@ -108,7 +105,12 @@ class TheCell(unittest.TestCase):
             self.ctx.slot / ""
 
     def test_a_signal_seeds_the_slot_once_then_reads_and_writes_the_value(self) -> None:
-        count = (self.ctx.slot / "counter" / "count").signal(0)
+        with signals.drawing(self.ctx):  # a page's draw: the first write waits for the view
+            count = (
+                signals.Signal(0)
+                .bind(self.ctx.slot / "counter" / "count")
+                .view(lambda value: h.text(str(value)))
+            )
         seed = self.device.frames[0][0]
         self.assertEqual((seed["action"], seed["slot"]), ("set", "counter.count"))
         self.assertEqual(seed["data"]["source"]["default"], "0", "the seed went through the view")
@@ -119,40 +121,56 @@ class TheCell(unittest.TestCase):
         self.assertEqual(self.device.frames[1][0]["data"]["source"]["default"], "3", "a write is one frame")
         self.assertEqual(count.value, 3)
 
-    def test_a_value_with_no_view_is_refused_with_a_sentence_saying_so(self) -> None:
+    def test_a_value_with_no_view_is_refused_at_the_end_of_the_draw(self) -> None:
         with self.assertRaises(ValueError) as caught:
-            (self.ctx.slot / "raw").signal(0)
-        self.assertIn(".view(", str(caught.exception))
+            with signals.drawing(self.ctx):
+                signals.Signal(0).bind(self.ctx.slot / "raw")
+        self.assertIn("accrete node", str(caught.exception), "the write says what it could not frame")
 
-    def test_drawing_again_hands_back_the_same_cell(self) -> None:
-        first = (self.ctx.slot / "counter" / "count").signal(0)
+    def test_drawing_again_hands_back_the_same_signal(self) -> None:
+        draw = lambda: signals.Signal(0).bind(self.ctx.slot / "counter" / "count").view(  # noqa: E731
+            lambda value: h.text(str(value))
+        )
+        with signals.drawing(self.ctx):
+            first = draw()
         first.value = 5
         sent = len(self.device.frames)
 
-        again = (self.ctx.slot / "counter" / "count").signal(0)
+        with signals.drawing(self.ctx):
+            again = draw()
 
-        self.assertEqual(again.value, 5, "the page's second draw keeps what was written")
+        self.assertIs(again, first, "the page's second draw keeps the same signal")
+        self.assertEqual(again.value, 5)
         self.assertEqual(len(self.device.frames), sent, "and seeds nothing")
 
-    def test_a_slot_with_no_cell_has_no_value(self) -> None:
-        with self.assertRaises(RuntimeError) as caught:
-            _ = self.ctx.slot("counter.count").value
-        self.assertIn(".signal(", str(caught.exception), "the message says how to declare one")
+    def test_a_slot_has_no_value_of_its_own(self) -> None:
+        slot = self.ctx.slot("counter.count")
+        self.assertFalse(hasattr(type(slot), "value"), "a value lives on a signal, not on the address")
 
-    def test_a_computed_cell_is_mirrored_and_read_only(self) -> None:
+    def test_a_computed_is_mirrored_and_read_only(self) -> None:
         step = signals.Signal(1)
-        hint = (self.ctx.slot / "counter" / "hint").computed(lambda: f"step {step.value}")
+        with signals.drawing(self.ctx):
+            hint = (
+                signals.Computed(lambda: f"step {step.value}")
+                .bind(self.ctx.slot / "counter" / "hint")
+                .view(lambda value: h.text(value))
+            )
         self.assertEqual(hint.value, "step 1")
 
         step.value = 2
 
         self.assertEqual(hint.value, "step 2")
         self.assertEqual(self.device.frames[-1][0]["data"]["source"]["default"], "step 2")
-        with self.assertRaises(RuntimeError):
-            hint.value = "mine"
+        with self.assertRaises(AttributeError):
+            hint.value = "mine"  # type: ignore[misc]
 
-    def test_a_keyed_cell_owns_the_rows(self) -> None:
-        log = (self.ctx.slot / "log").keyed(lambda item, row_id: h.text(item, id=row_id))
+    def test_a_keyed_signal_owns_the_rows(self) -> None:
+        with signals.drawing(self.ctx):
+            log = (
+                signals.Signal([])
+                .keyed(lambda item, row_id: h.text(item, id=row_id))
+                .bind(self.ctx.slot / "log")
+            )
 
         log.value = [("a", "1"), ("b", "2")]
         self.assertEqual(
@@ -162,13 +180,16 @@ class TheCell(unittest.TestCase):
 
         log.value = [("b", "2"), ("a", "1")]
         self.assertEqual(self.device.frames[-1][0]["action"], "move", "an order change is a move")
-        self.assertEqual(log.value, [("b", "2"), ("a", "1")], "the cell is the rows")
+        self.assertEqual(log.value, [("b", "2"), ("a", "1")], "the signal is the rows")
 
-    def test_a_view_is_declared_through_the_handle_and_the_chain_stays_on_it(self) -> None:
-        count = (self.ctx.slot / "chain" / "count").view(
-            lambda value: h.text(str(value), id="counter-value")
-        ).signal(0)
-        self.assertEqual(count.name, "chain.count")
+    def test_the_chain_declares_the_view_and_stays_on_the_signal(self) -> None:
+        with signals.drawing(self.ctx):
+            count = (
+                signals.Signal(0)
+                .bind(self.ctx.slot / "chain" / "count")
+                .view(lambda value: h.text(str(value), id="counter-value"))
+            )
+        self.assertEqual(count.slot.name, "chain.count", "the signal knows where it writes")
 
         count.value = 3
 

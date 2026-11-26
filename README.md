@@ -328,14 +328,23 @@ def home_page(ctx, match):
 ```
 
 A slot holds a node, and most slots hold one *value* — a number, a line of text. That decision is a
-**view**, declared once beside the page, so the writes take values and the node's id and variant are
-written in one place:
+**view**, declared on the signal that owns the value, so the writes take values and the node's id and
+variant are written in one place:
 
 ```python
-app.view("counter.count", lambda value: h.text(str(value), variant="heading-1", id="counter-value"))
+count = Signal(0).bind(slots / "counter" / "count").view(
+    lambda value: h.text(str(value), variant="heading-1", id="counter-value")
+)
 
-(slots / "count").set(3)              # the view makes the node
-(slots / "count").set(h.text("3"))    # already a node: goes through untouched
+count.value = 3                        # the view makes the node
+count.slot.set(h.text("3"))            # already a node: goes through untouched
+```
+
+A value that must outlive the connection says so — `.store(key)` keeps it in the delivery's own data
+for an anonymous connection, and in `app.store` by user id once the connection has one:
+
+```python
+step = Signal(1).store("counter.step")   # survives a redraw; a signed-in user keeps it across devices
 ```
 
 `@app.on(slot)` stays for the landing points whose name must exist before any page is drawn: a slot
