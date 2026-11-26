@@ -60,10 +60,11 @@ class FakeSlot:
 
 
 class FakeCtx:
-    """The part of a delivery the adapters use: named slots."""
+    """The part of a delivery the adapters use: named slots, and the table a cell lives in."""
 
     def __init__(self) -> None:
         self.slots: dict[str, FakeSlot] = {}
+        self.data: dict[str, object] = {}
 
     def slot(self, name: str) -> FakeSlot:
         return self.slots.setdefault(name, FakeSlot(name))

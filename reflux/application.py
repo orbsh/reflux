@@ -480,7 +480,7 @@ class Context:
     # --- what it can say, and where ---
     @property
     def slot(self) -> Slots:
-        """The slots of this delivery: `ctx.slot("chat/status")`, `ctx.slot["status"]`, `ctx.slot.status`.
+        """The slots of this delivery: `ctx.slot("chat/status")` and `ctx.slot / "status"`.
 
         A slot is a name plus its verbs (`set`/`append`/`patch`/`remove`), each of them one frame —
         so a handler never writes `wire.set("status", …)` and never keeps the name in a constant of
@@ -914,9 +914,9 @@ class App:
     def on(
         self, name: "str | Slot", handler: Callable | None = None, *, auth: bool = False
     ) -> Callable:
-        """Declare a handler for one upstream event: `@app.on(app.slot.go.chat)` above it.
+        """Declare a handler for one upstream event: `@app.on(app.slot / "go" / "chat")` above it.
 
-        The event is a handle from the app's table, so a page saying `sink=ctx.slot.go.chat` and the
+        The event is a handle from the app's table, so a page saying `sink=ctx.slot / "go" / "chat"` and the
         handler answering it are one name. A plain string is still accepted for the framework's own
         host events (`connect`, `location`, `disconnect`) — those names are the framework's, not the
         app's.
@@ -937,7 +937,7 @@ class App:
 
     @property
     def slot(self) -> Slots:
-        """The app's own table: `@app.on(app.slot.go.chat)`, `app.slot.routes`.
+        """The app's own table: `@app.on(app.slot / "go" / "chat")`, `app.slot / "routes"`.
 
         The names belong to the app — a page and its handler answering the same event are the same
         name — and a handle taken here has no delivery, so it names and declares but cannot send.

@@ -80,7 +80,7 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] 门与文档：t0/t2/t3/t4/t6/t7/t9/t10/chat/demo 全绿（t4 改成断言"无 `tag` 的字段回车什么都不发、也不清空"，t10 的 Rust 夹具按新签名与新页面同步）；README 的 SDK 段、`docs/DESIGN.md` 的 ADR 0032 段落写了这条规则，`gen_sdk.py --check` 在同步态。
 - [x] **字段上的 `sink` 已经不在 wire 上**（fluxen 侧落地，本仓只跟着删）：`Input`/`Select` 的 schema 现在只有 `source`（`tools/sync_schema.py --write` → in sync，`6b0211c8…`），本仓把为它写的守卫删了——`reflux/sdk/_parse.py` 的 `_check_uplinks` 与只被它用的 `FIELD_TYPES`，`tools/gate_t4.py` 的引言改成"字段在 wire 上没有 `sink` 这个属性，所以带不到页面上"，`tests/types_fixture.py` 的注释同改。`tests/test_auth.py::TheLoginSurface` 与各处 `Bind(type=…)` 借道早已随前几轮收敛（全仓 0 处）。手工构造的裸 dict 里再出现字段级 `sink` 不会报错了——那正是终态：渲染器记一条警告并丢掉（ADR 0032 §2）。
 
-## 设置页（ADR 0001，2026-11-25，进行中）
+## 设置页（ADR 0001，2026-11-25，已落地；最后一条卡在上游）
 
 决定在 `docs/adr/0001-page-options-and-the-settings-page.md`：值走 `__CONFIG__` 一个槽（fluxen ADR 0038 §2），组的 `sink` 用 `scope: both`——本地立刻改、同时上行；浏览器侧由 `reflux.js` 的 `STYLE` 表把镜像的 `data-*` 落到 `:root` 的自定义属性；服务端是"新连接从哪开始"那份，落盘记住选择。
 
@@ -90,7 +90,7 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] 验证：`tools/gate_settings.py` 十条（真 Chromium）：第一帧带着已存选项、`TOKENS` 把镜像落成 `:root` 属性、一次改动**本地**就动（`data-accent` → `--accent`）、`round` 10→18 变 `18px`、表对 99.5 回落到样式表缺省、`sketch` 镜像给渲染器、上行到服务端并合并、刷新后仍是存下的值、控制台除渲染器那条 `<svg> viewBox` 警告外无错误。`tests/test_settings.py` 21 例 + 全量 390 例 + 十一门全绿。
 - [x] 扩到 core 的整个令牌面（2026-11-25）：`TOKENS` 由三个成员变成一张表（颜色十、长度三、线型一），页面按表生成控件、`reflux.js` 按种类落到 `:root`（颜色存 `L C H`、合成 `oklch`），空值 = 不设、回到 `light-dark` 成对缺省；`tests/test_settings.py` 新增"表对着 core.css 的 `:root` 块一个不漏"与"浏览器表 == 服务端表"两例，`tools/gate_settings.py` 十一条（含清空即回缺省、`--border` 跟着拼它的三样）。
 - [x] 颜色改成点出来的（2026-11-25）：fluxen 加了 `oklch` 色盘 `disc`（ADR 0048，字段而非新类别，值就是 `L C H` 三元组；角度是色相、半径是彩度、圆心是灰，亮度按令牌钉住），十个颜色令牌共用它，线型是五个词；`gate_settings` 十三条（盘一次点击只动 `accent`、盘的圆心只动 `bg`、折起来的 `border-style` 点开选词再收起、手绘模式下同一层浮层由笔描出而不是画一条直边、上行之后状态里只有这几样）。
-- [ ] 值的三种类型，两种控件给不同手势（fluxen ADR 0050，**未实现**）：`kind: text|number|bool` 一根轴——`input` 的文本是文本框、数字是「数字框 + 内联 `−`/`+`」、布尔是勾选框；`select` 的文本是菜单、数字是滑块、布尔是开关；两种控件的文本与数字都吃 `dir`（横/竖）。值只有三种形状（字符串 / 数字 / 布尔），控件只改手势不改值。待定：滑块缺省的边界（倾向 0–100、步长 1）与开关两端标签的来源。落地后本页的三根长度（`round`/`input-round`/`border-width`）换 `kind="number"`（`0–64`、步长 1），`sketch` 换 `kind="bool"` 的开关，服务端成员校验随之认数字与布尔两种形状。
+- [ ] 值的三种类型，两种控件给不同手势（fluxen ADR 0050 仍是 Proposed，本仓等它落地再跟）：`kind: text|number|bool` 一根轴——`input` 的文本是文本框、数字是「数字框 + 内联 `−`/`+`」、布尔是勾选框；`select` 的文本是菜单、数字是滑块、布尔是开关；两种控件的文本与数字都吃 `dir`（横/竖）。值只有三种形状（字符串 / 数字 / 布尔），控件只改手势不改值。待定：滑块缺省的边界（倾向 0–100、步长 1）与开关两端标签的来源。落地后本页的三根长度（`round`/`input-round`/`border-width`）换 `kind="number"`（`0–64`、步长 1），`sketch` 换 `kind="bool"` 的开关，服务端成员校验随之认数字与布尔两种形状。
 
 ## 服务端搬到 asyncio（ADR 0002，2026-11-25，已落地）
 
@@ -114,3 +114,18 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - [x] P4 聊天页 async 迭代 —— 2026-11-25：`Model.reply` → `AsyncIterator[str]`（`Scripted` 包着同步的 `scripted_reply`）；`OpenAI` 走 `app.http`，`urllib` 与其阻塞读退场，`parse_sse` / `parse_sse_async` 共用一条 `sse_piece` 行判据（`END` 哨兵把 `[DONE]` 与"这行没有增量"分开）；`demo_chat.share_http` 在 `@app.startup` 把共享会话交给模型、`@app.shutdown` 收回；流式线程 → task（`launch()` 这一个测试缝），`threading.Event`/`Lock` → `asyncio.Event`（一次投递在 loop 上，`busy` 翻转不需要锁），`time.sleep` → `asyncio.sleep`；`disconnect` 的处理器 cancel 那条 task（否则 gate 退出时留下一个 pending task）。两面树同步。377 例（聊天 25 例，含异步读器对齐、缺会话的具名报错、启动钩子交会话、断开取消）+ 十道门全绿
 - [x] P5 删死代码 + 文档 —— 2026-11-25：`channel.py` 只剩 `WsChannel` 这个包装——手写编解码（`Channel` 的 `_take`/`recv`/`_send`/`send`/`ping`/`close`/`abort`/`__iter__`）与握手（`accept_key`／`is_upgrade`／`upgrade`）连同 `tests/test_channel.py` 的 8 例字节级测试一起删除（-8 例）；`ChannelClosed` 留下并成为 `WsChannel.send` 对 aiohttp 三种死法的统一翻译；`handle` 里那条读侧 `except ChannelClosed` 删掉（读侧现在以 `StopAsyncIteration` 结束）；看门狗的 `threading.Event` 删掉（task 可取消，不需要第二个停止信号）。`grep -rn threading reflux/` 只剩三处真线程：`Server` 的 loop 线程、`serve()` 的后台线程、`Server._stopped`。DESIGN 加「并发模型」一节，HANDOFF 记三个入口与 `app.http`。369 例 + 十道门全绿
 - 服务端搬到 asyncio：P1–P5 全部落地（ADR 0002）。
+
+## 槽带值（2026-11-26，已落地）
+
+`signals.bound`／`into`／`keyed` 从自由函数变成句柄上的三个构造器，槽因此自己带一个值：
+
+- `Slot.signal(default)`／`.computed(fn)`／`.keyed(render, initial=())`：细胞按（连接，名字）登记在 `ctx.data`，页面重画拿回同一个、首值只种一次；`.value` 读写，没声明细胞的槽读它抛 `RuntimeError`（消息里说要怎么声明）。三个自由函数留着，内部是同一套机制（`own`／`mirror`／`keep`）。
+- 名字的构造只留 `/`（`ctx.slot / "counter" / "count"`，两侧留空格，与 `pathlib` 一致），点只到句柄自己的东西（动词、细胞、`name`）。点号子名与下标一起删掉了：`Slot`／`Slots` 不再有子名解析，`__getitem__` 也撤了，`/` 不查属性，所以一条叫 `remove` 或 `value` 的槽照样是 `slots / "row" / "remove"`。名字没有逃逸口，也不需要。——2026-11-26 当天定的：兼容路不留，旧代码直接迁移。
+- 首值是一次写：值型槽要先有视图，`(slots / "x").view(fn).signal(0)`；顺序反了给一句 `ValueError`，而不是一个永远空的槽。
+- `demo_counter` 两棵树改成新写法：`State` 里三条槽带细胞、`step`／`refusal` 仍是裸信号（不上线），页面树直接读那几个句柄（`_Counter` Protocol 与 `counter_of` 随之删除），视图在 `register` 里由 `(counter / "count").view(...)` 声明。
+- 验证：全量 417 例（新增 `tests/test_slots.py::TheCell` 八例）、`tools/probe_counter.py` 真 Chromium 一次点击 0→1。
+
+## 复核与门的现状（2026-11-26）
+
+- [x] 全量 417 例、`tools/gen_sdk.py --check` 在同步态；十三道门十二绿（t0/t2/t3/t4/t6/t7/t8/t10/ingest/chat/demo/settings；t10 是 9/9 逐字节）。
+- [ ] `gate_t9` 17 项里两项红（#11 退出不撤销、#14 后退的帧带着 `token`）：同一个因——渲染器在「已登录的 auth 子树换成登录面」那一帧 panic（`Tried to access a reactive value that has already been disposed`），DOM 冻在旧状态，空标记到不了浏览器，存下的 token 因此还在。已排除空文本标记、`request_draw`、重复写同一块登录面三种嫌疑。这是 fluxen 侧的账（它的 `dd1765d` 已写明「the panic T9 reports」仍在），本仓等那边修好后重取 vendor、回跑十三道门。

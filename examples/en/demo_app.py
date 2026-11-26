@@ -97,7 +97,7 @@ def row_node(text: str, row_id: str) -> Accrete:
                 sink=slots("row.move"), style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
         h.frame(h.button("Remove"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
-        sink=slots.row["remove"],
+        sink=slots / "row" / "remove",
         submit=["button"],
         id=row_id,
     )
@@ -202,7 +202,7 @@ def demo_verify(ctx, credentials, mode):
         return (True, "user-ada", None)
     return (False, "Wrong username or password")
 
-# The app's own table, typed: `@app.on(slots.name.change)` completes, and a name that is not in
+# The app's own table, typed: `@app.on(app.slot / "name" / "change")` completes, and a name that is not in
 # `DemoSlots` is an error rather than a handler nothing ever sends to. `ctx.slot` is this table with
 # a device attached; `slots_of(ctx)` is where a write comes from.
 slots: DemoSlots = demo_slots.table(app)
@@ -236,7 +236,7 @@ def home_page(ctx, match):
         # anything unrecognised becomes the empty string instead of an exception.
         text = value.get("name") if isinstance(value, dict) else None
         state.echo = text if isinstance(text, str) else ""
-        slots.echo.set(h.text(state.echo))
+        (slots / "echo").set(h.text(state.echo))
 
     def add_row(value: object) -> None:
         row = (f"row-{state.next_row}", f"Row {state.next_row}")
@@ -246,7 +246,7 @@ def home_page(ctx, match):
     def reveal(value: object) -> None:
         # Only a signed-in click gets here: the gate answered the rest before the closure ran.
         ctx.data["may_see_secret"] = True
-        slots.secret.set(h.text("Classified content"))
+        (slots / "secret").set(h.text("Classified content"))
 
     # The rows are kept equal to `state.rows` by `signals.keyed`: on this connection's first draw it
     # appends every row there is, and after that it follows the signal through adds, removes and moves.
@@ -257,7 +257,7 @@ def home_page(ctx, match):
     # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
     # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        slots_of(ctx).secret.set(h.text(""))
+        (slots_of(ctx) / "secret").set(h.text(""))
     return (
         h.frame(
             h.frame(
@@ -278,7 +278,7 @@ def home_page(ctx, match):
                         variant="muted",
                     ),
                     h.loom(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
-                    h.text(source=slots.echo, id="echo"),
+                    h.text(source=slots / "echo", id="echo"),
                     grid=CARD,
                     variant="card",
                     id="card-echo",
@@ -293,7 +293,7 @@ def home_page(ctx, match):
                     ),
                     h.loom(h.button("Add a row"), sink=add_row,
                              submit=["button"], id="add-row"),
-                    h.tiles(source=slots.rows, id="rows"),
+                    h.tiles(source=slots / "rows", id="rows"),
                     # The landing point names its event and what it accepts; `accept` is one tag
                     # (or any), so cargo of another tag is refused without a frame — and a
                     # landing without a `sink` is a load error, which is why the two come
@@ -307,7 +307,7 @@ def home_page(ctx, match):
                                "min-height": "72px"},
                         id="archive",
                     ),
-                    h.text(source=slots.archived, id="archived"),
+                    h.text(source=slots / "archived", id="archived"),
                     grid=CARD,
                     variant="card",
                     id="card-rows",
@@ -343,7 +343,7 @@ def home_page(ctx, match):
                 # Behind a declaration: a click here from a visitor never reaches the handler.
                 h.loom(h.button("Secret"),
                          sink=gated(reveal), submit=["button"], id="vault"),
-                h.text(source=slots.secret, id="secret"),
+                h.text(source=slots / "secret", id="secret"),
                 h.loom(h.button("Log out"), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
@@ -381,7 +381,7 @@ def about_page(ctx, match):
 
 # --- handlers: the named landing points (identity in the page, or across it) --------------------
 
-@app.on(slots.row["remove"])  # `remove` is a verb: the name goes by subscript
+@app.on(slots / "row" / "remove")  # `remove` is a verb: the name goes by subscript
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # the row's form carried its identity up
     state.rows.value = [row for row in state.rows.value if row[0] != row_id]
@@ -395,7 +395,7 @@ def on_archive(ctx, frame) -> None:
     row = next((r for r in state.rows.value if r[0] == row_id), None)
     if row is None:
         return
-    slots_of(ctx).archived.set(h.text(f"Archived: {row[1]}"))
+    (slots_of(ctx) / "archived").set(h.text(f"Archived: {row[1]}"))
     state.rows.value = [r for r in state.rows.value if r[0] != row_id]
 
 

@@ -108,7 +108,7 @@ def row(*children: Accrete, id: str) -> Accrete:
 def page(ctx: Context, match) -> None:
     """The page — and, the first time this connection asks for it, the status line it reads.
 
-    The seed is a **send**, so it is written as one (`slots.status.set(...)`), not folded into the
+    The seed is a **send**, so it is written as one (`(slots / "status").set(...)`), not folded into the
     page: on this side of the socket nothing is a response, and a page that later has to say
     something to more than the one device that asked (a broadcast, a nudge from a timer) says it the
     same way.
@@ -119,24 +119,24 @@ def page(ctx: Context, match) -> None:
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # a slot outlives a create: seeding again would duplicate
-        slots.status.set(h.text("ready"))
+        (slots / "status").set(h.text("ready"))
     return (
         h.frame(
             h.text("Chat", variant="heading-1"),
-            h.text(source=slots.status, variant="muted", id="status"),
-            h.tiles(source=slots.messages, id="messages"),
+            h.text(source=slots / "status", variant="muted", id="status"),
+            h.tiles(source=slots / "messages", id="messages"),
             h.frame(
                 h.loom(
                     h.input(tag="text", id="composer"),
                     h.button("Send"),
-                    sink=slots.chat.send,
+                    sink=slots / "chat" / "send",
                     submit=["enter", "button"],
                     reset="clear",
                     id="send",
                 ),
                 h.loom(
                     h.button("Stop"),
-                    sink=slots.chat.stop,
+                    sink=slots / "chat" / "stop",
                     submit="button",
                     id="stop",
                 ),
@@ -176,15 +176,15 @@ async def send(ctx: Context, chat: Chat, text: str) -> None:
     """Take one message: refuse it with a reason, or put it on screen and start the reply."""
     slots = slots_of(ctx)
     if not text.strip():
-        slots.status.set(h.text("empty message — nothing was sent"))
+        (slots / "status").set(h.text("empty message — nothing was sent"))
         return
     if len(text) > MAX_CHARS:
-        slots.status.set(h.text(f"too long: {len(text)} characters > the {MAX_CHARS}-character limit — nothing was sent"))
+        (slots / "status").set(h.text(f"too long: {len(text)} characters > the {MAX_CHARS}-character limit — nothing was sent"))
         return
     # One delivery runs at a time on a loop, so this stretch has no await and no race: flipping
     # `busy` is atomic.
     if chat.busy:
-        slots.status.set(h.text("the previous reply is still streaming: press Stop, or wait for it"))
+        (slots / "status").set(h.text("the previous reply is still streaming: press Stop, or wait for it"))
         return
     chat.busy = True
     chat.stop.clear()
@@ -195,10 +195,10 @@ async def send(ctx: Context, chat: Chat, text: str) -> None:
     context = list(chat.turns)  # a snapshot: the window may move while the model is answering
     reply = ctx.slot(f"reply.{seq}")  # a path, because each answer gets its own plane
     with ctx.turn():  # the client sees the two rows, the empty bubble and the status at once
-        slots.messages.append(row(h.text(text), id=f"row-user-{seq}"))
-        slots.messages.append(row(h.text(source=reply), id=f"row-bot-{seq}"))
+        (slots / "messages").append(row(h.text(text), id=f"row-user-{seq}"))
+        (slots / "messages").append(row(h.text(source=reply), id=f"row-bot-{seq}"))
         reply.set(h.text(""))
-        slots.status.set(h.text(f"answering… ({chat.model.name})"))
+        (slots / "status").set(h.text(f"answering… ({chat.model.name})"))
     chat.task = launch(stream(ctx, chat, reply, context))
 
 
@@ -226,21 +226,21 @@ async def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> 
     if failure is not None:
         with ctx.turn():
             reply.patch(TEXT_VALUE, f"\n\n⚠️ the model failed: {failure}", op="append")
-            slots.status.set(h.text(f"failed: {type(failure).__name__} · you can send another"))
+            (slots / "status").set(h.text(f"failed: {type(failure).__name__} · you can send another"))
         return
     if chat.stop.is_set():
         with ctx.turn():
             reply.patch(TEXT_VALUE, " ⏹", op="append")
-            slots.status.set(h.text(f"stopped (the half sentence stayed out of the context) · {chat.total} turns"))
+            (slots / "status").set(h.text(f"stopped (the half sentence stayed out of the context) · {chat.total} turns"))
         return
     chat.record("assistant", "".join(pieces))
-    slots.status.set(h.text(chat.status()))
+    (slots / "status").set(h.text(chat.status()))
 
 
 async def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        slots_of(ctx).status.set(h.text("this frame carried no text field — nothing was sent"))
+        (slots_of(ctx) / "status").set(h.text("this frame carried no text field — nothing was sent"))
         return
     await send(ctx, state(ctx), text)
 
@@ -249,10 +249,10 @@ async def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     slots = slots_of(ctx)
     if not chat.busy:
-        slots.status.set(h.text("nothing is streaming"))
+        (slots / "status").set(h.text("nothing is streaming"))
         return
     chat.stop.set()
-    slots.status.set(h.text("stopping…"))
+    (slots / "status").set(h.text("stopping…"))
 
 
 def share_http(app, model) -> None:
@@ -293,7 +293,7 @@ def register(app, slots: DemoSlots) -> None:
     `__main__`, and `from .demo_app import app` would build a second copy of it.
     """
     app.page("/chat", title="Chat")(page)
-    app.on(slots.chat.send, on_send)
-    app.on(slots.chat.stop, on_stop)
+    app.on(slots / "chat" / "send", on_send)
+    app.on(slots / "chat" / "stop", on_stop)
     app.on("disconnect", on_disconnect)
 

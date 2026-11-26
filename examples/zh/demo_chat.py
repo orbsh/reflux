@@ -105,7 +105,7 @@ def row(*children: Accrete, id: str) -> Accrete:
 def page(ctx: Context, match) -> None:
     """页面 —— 以及这条连接第一次要它时、它读的那行状态。
     
-        种子是一次**发送**，所以它被写成一次发送（`slots.status.set(...)`），而不是折进页面里：在
+        种子是一次**发送**，所以它被写成一次发送（`(slots / "status").set(...)`），而不是折进页面里：在
         socket 的这一侧没有"响应"这回事，而一页日后若要同时对不止一个设备说话（广播、定时器的提醒），
         说的方式也是这个。
     
@@ -114,24 +114,24 @@ def page(ctx: Context, match) -> None:
     slots = slots_of(ctx)
     if not ctx.data.get("status_seeded"):
         ctx.data["status_seeded"] = True  # 槽比一次 create 活得久：再种一遍就重复了
-        slots.status.set(h.text("就绪"))
+        (slots / "status").set(h.text("就绪"))
     return (
         h.frame(
             h.text("对话", variant="heading-1"),
-            h.text(source=slots.status, variant="muted", id="status"),
-            h.tiles(source=slots.messages, id="messages"),
+            h.text(source=slots / "status", variant="muted", id="status"),
+            h.tiles(source=slots / "messages", id="messages"),
             h.frame(
                 h.loom(
                     h.input(tag="text", id="composer"),
                     h.button("发送"),
-                    sink=slots.chat.send,
+                    sink=slots / "chat" / "send",
                     submit=["enter", "button"],
                     reset="clear",
                     id="send",
                 ),
                 h.loom(
                     h.button("停止"),
-                    sink=slots.chat.stop,
+                    sink=slots / "chat" / "stop",
                     submit="button",
                     id="stop",
                 ),
@@ -171,14 +171,14 @@ async def send(ctx: Context, chat: Chat, text: str) -> None:
     """
     slots = slots_of(ctx)
     if not text.strip():
-        slots.status.set(h.text("空消息没有发出去"))
+        (slots / "status").set(h.text("空消息没有发出去"))
         return
     if len(text) > MAX_CHARS:
-        slots.status.set(h.text(f"太长：{len(text)} 字 > {MAX_CHARS} 字上限，没有发出去"))
+        (slots / "status").set(h.text(f"太长：{len(text)} 字 > {MAX_CHARS} 字上限，没有发出去"))
         return
     # 一个 loop 上只有一个投递在跑，所以这段没有 await，也就没有竞态：`busy` 的翻转是原子的。
     if chat.busy:
-        slots.status.set(h.text("上一条还在流：按「停止」或等它结束"))
+        (slots / "status").set(h.text("上一条还在流：按「停止」或等它结束"))
         return
     chat.busy = True
     chat.stop.clear()
@@ -189,10 +189,10 @@ async def send(ctx: Context, chat: Chat, text: str) -> None:
     context = list(chat.turns)  # 一份快照：模型作答时窗口可能已经动了
     reply = ctx.slot(f"reply.{seq}")  # 一个路径，因为每次回答有自己的平面
     with ctx.turn():  # 客户端同时看到这两行、空气泡和状态
-        slots.messages.append(row(h.text(text), id=f"row-user-{seq}"))
-        slots.messages.append(row(h.text(source=reply), id=f"row-bot-{seq}"))
+        (slots / "messages").append(row(h.text(text), id=f"row-user-{seq}"))
+        (slots / "messages").append(row(h.text(source=reply), id=f"row-bot-{seq}"))
         reply.set(h.text(""))
-        slots.status.set(h.text(f"正在回答…（{chat.model.name}）"))
+        (slots / "status").set(h.text(f"正在回答…（{chat.model.name}）"))
     chat.task = launch(stream(ctx, chat, reply, context))
 
 
@@ -220,21 +220,21 @@ async def stream(ctx: Context, chat: Chat, reply: Slot, context: list[Turn]) -> 
     if failure is not None:
         with ctx.turn():
             reply.patch(TEXT_VALUE, f"\n\n⚠️ 模型出错：{failure}", op="append")
-            slots.status.set(h.text(f"出错：{type(failure).__name__} · 可以再发一条"))
+            (slots / "status").set(h.text(f"出错：{type(failure).__name__} · 可以再发一条"))
         return
     if chat.stop.is_set():
         with ctx.turn():
             reply.patch(TEXT_VALUE, " ⏹", op="append")
-            slots.status.set(h.text(f"已停止（半句没有进上下文）· {chat.total} 轮"))
+            (slots / "status").set(h.text(f"已停止（半句没有进上下文）· {chat.total} 轮"))
         return
     chat.record("assistant", "".join(pieces))
-    slots.status.set(h.text(chat.status()))
+    (slots / "status").set(h.text(chat.status()))
 
 
 async def on_send(ctx: Context, frame: dict) -> None:
     text = prompt_of(frame)
     if text is None:
-        slots_of(ctx).status.set(h.text("这一帧里没有文本字段，什么都没发"))
+        (slots_of(ctx) / "status").set(h.text("这一帧里没有文本字段，什么都没发"))
         return
     await send(ctx, state(ctx), text)
 
@@ -243,10 +243,10 @@ async def on_stop(ctx: Context, frame: dict) -> None:
     chat = state(ctx)
     slots = slots_of(ctx)
     if not chat.busy:
-        slots.status.set(h.text("没有正在进行的回答"))
+        (slots / "status").set(h.text("没有正在进行的回答"))
         return
     chat.stop.set()
-    slots.status.set(h.text("正在停止…"))
+    (slots / "status").set(h.text("正在停止…"))
 
 
 def share_http(app, model) -> None:
@@ -284,7 +284,7 @@ def register(app, slots: DemoSlots) -> None:
         会造出第二份。
     """
     app.page("/chat", title="对话")(page)
-    app.on(slots.chat.send, on_send)
-    app.on(slots.chat.stop, on_stop)
+    app.on(slots / "chat" / "send", on_send)
+    app.on(slots / "chat" / "stop", on_stop)
     app.on("disconnect", on_disconnect)
 

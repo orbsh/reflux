@@ -127,14 +127,14 @@ def home(ctx, match):
     return h.frame(
         h.text("Hello", variant="heading-1"),
         # a field's exit is its group: the loom holds the sink, the field only names its key
-        h.loom(h.input(tag="name", id="name"), sink=ctx.slot.name.change),
-        h.text(source=ctx.slot.echo, id="echo"),          # a slot: the data plane's name
+        h.loom(h.input(tag="name", id="name"), sink=ctx.slot / "name" / "change"),
+        h.text(source=ctx.slot / "echo", id="echo"),          # a slot: the data plane's name
     )
 
 
-@app.on(app.slot.name.change)
+@app.on(app.slot / "name" / "change")
 def on_name(ctx, frame):
-    ctx.slot["echo"].set(h.text(str(frame["data"])))   # one frame: set the `echo` slot
+    (ctx.slot / "echo").set(h.text(str(frame["data"])))   # one frame: set the `echo` slot
 
 
 if __name__ == "__main__":
@@ -146,7 +146,7 @@ What the pieces are:
 - **`@app.page("/")`** declares a page on that app's table, right above its handler — the only way a
   route is declared. The handler **returns** its node; the
   framework wraps it in the markers, writes it into the `routes` slot, and `create`s the shell around
-  it. Data the page reads is a slot, seeded with a send: `ctx.slot["rows"].append(row)` (what `demo_app`
+  it. Data the page reads is a slot, seeded with a send: `(ctx.slot / "rows").append(row)` (what `demo_app`
   does, so its rows arrive before the structure that reads them). `ctx.page(*content)` is the other
   way to give a page — it draws instead of returning, which is what a handler driving a delivery by
   hand (`@app.on`) reaches for; a handler does one or the other, and doing both is a startup error.
@@ -157,17 +157,17 @@ What the pieces are:
   values. `h.text(source=…)` reads a slot and `h.loom(…, sink=…)` speaks to a dest — both take a
   handle from `ctx.slot`, never a string. A field has no exit of its own: `tag` makes it a member of
   the enclosing loom, and the loom owns the address (`attrs.submit` says when, `attrs.reset` what
-  its fields become afterwards, `attrs.sends` how many times it may send). A handle nests: `ctx.slot.chat.send` is the name `chat.send`, so a
+  its fields become afterwards, `attrs.sends` how many times it may send). A handle nests: `ctx.slot / "chat" / "send"` is the name `chat.send`, so a
   page's slots and its uplinks read off the same view.
-- **`@app.on(app.slot.name.change)`** is the only way an uplink frame reaches your code — the handle
+- **`@app.on(app.slot / "name" / "change")`** is the only way an uplink frame reaches your code — the handle
   is the app's own table, so the page that sends to the dest and the handler that answers it are one
   name (`@app.dests.register(name)` is the same declaration spelled at the registry). An
   unregistered name is refused and counted — never dispatched dynamically.
 "- **`ctx.emit(*ops)`** is exactly one frame, flushed in order — a handler's only way to speak.
-- **A slot is an object.** `ctx.slot["status"]` / `ctx.slot.chat.send` hand out a `Slot`; its verbs
+- **A slot is an object.** `ctx.slot / "status"` and `ctx.slot / "chat" / "send"` hand out a `Slot`; its verbs
   are the wire's: `.set(node)`, `.append(node)`, `.patch(path, value, op=)`, `.remove(id)`. The name is
-  written once, and a `Protocol` with the names is what the editor completes — no `STATUS = "status"`
-  constants kept in step by eye. `with ctx.turn():` collects several writes into one frame.
+  written once, and a name is *built* (`/`), never an attribute: a typo is an `AttributeError` on that
+  line, not a slot nobody writes. Static completion needs a declared name table, which is not built yet. `with ctx.turn():` collects several writes into one frame.
 - **Nothing returns.** An uplink handler says `ctx.emit(...)`; a page handler says `ctx.page(*content)`
   and the app composes the frame (shell once, then the `routes` slot) — including the two markers, so
   the address and the title are written once, on the route where they were declared. Only an HTTP route
@@ -191,7 +191,7 @@ own verification (`user = check_credentials(...)`, an external service, whatever
 the connection and redraw:
 
 ```python
-@app.on(app.slot.login)
+@app.on(app.slot / "login")
 def on_login(ctx, frame):
     user = check_credentials(frame["data"])     # yours; may call an external service
     if user is None:
@@ -278,7 +278,7 @@ Each tree is one page per file:
 
 ```
 demo_app.py     the app, its shell, `/` (the vocabulary, as cards) and `/about`; `/status`
-demo_slots.py   every name the app speaks, in one Protocol (the editor's view of them)
+demo_slots.py   the app's two accessors (`slots_of`, `table`) and the nav's addresses
 demo_chat.py    "/chat" — a conversation per connection, streamed, stoppable, refusable
 demo_counter.py "/counter" — the API on the most ordinary page there is: a number, three buttons, an
                 input, a capped history; state per connection, handlers as closures
@@ -312,17 +312,17 @@ def home_page(ctx, match):
     slots = slots_of(ctx)
 
     def echo(value):                      # a loom submits its pack: {tag: value}
-        slots.echo.set(h.text(value.get("name", "")))
+        (slots / "echo").set(h.text(value.get("name", "")))
 
     def add_row(value):
-        slots.rows.append(row_node(...))
+        (slots / "rows").append(row_node(...))
 
     return h.frame(
         h.loom(h.input(tag="name"), sink=echo, submit=["enter"]),
             # a button has no exit of its own: a press submits the loom, which owns the sink, the
             # payload and the id (ADR 0039 §2a)
             h.loom(h.button("加一行"), sink=add_row, submit=["button"]),
-            h.text(source=slots.echo),
+            h.text(source=slots / "echo"),
         )
     )
 ```
@@ -334,8 +334,8 @@ written in one place:
 ```python
 app.view("counter.count", lambda value: h.text(str(value), variant="heading-1", id="counter-value"))
 
-slots.count.set(3)              # the view makes the node
-slots.count.set(h.text("3"))    # already a node: goes through untouched
+(slots / "count").set(3)              # the view makes the node
+(slots / "count").set(h.text("3"))    # already a node: goes through untouched
 ```
 
 `@app.on(slot)` stays for the landing points whose name must exist before any page is drawn: a slot
@@ -352,8 +352,8 @@ its handlers:
 # examples/zh/demo_chat.py — the page, its route and its two uplinks, together
 def register(app, slots):
     app.page("/chat", title="对话")(page)
-    app.on(slots.chat.send, on_send)
-    app.on(slots.chat.stop, on_stop)
+    app.on(slots / "chat" / "send", on_send)
+    app.on(slots / "chat" / "stop", on_stop)
 ```
 
 - **The shell is drawn once.** The first frame is `create(shell)` plus the page in the `routes` slot;

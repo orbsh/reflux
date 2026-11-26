@@ -42,12 +42,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 from reflux import Context, Match
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, Source
-from reflux.slots import Slot
+from reflux.slots import Slot, Slots
 
 from . import scene
 
@@ -58,7 +58,6 @@ __all__ = [
     "ROW_ID",
     "Run",
     "Settings",
-    "Walkthrough",
     "install",
     "page",
     "register",
@@ -142,43 +141,12 @@ SAVE = Slot("demo.save")
 REVIEW = Slot("demo.review")
 
 
-class Walkthrough(Protocol):
-    """This page's slots — the editor's view of them; the wire only ever sees the names.
-
-    Every name in here is `demo.<field>`, so one handle (`ctx.slot("demo")`) reaches all of them and
-    the page reads `s.stream`, not a string.
-    """
-
-    graph: Slot  # the left column's forcegraph
-    stream: Slot  # the right column's row
-    pins: Slot  # what a drag landed on the rail
-    control: Slot  # the floating button's node
-    beat: Slot  # which beat is running
-    echo: Slot  # the app's answer to the last uplink
-    analytics: Slot  # the intro paragraph
-    trend: Slot  # the 30-day chart spec
-    radar_rd: Slot
-    radar_mkt: Slot
-    radar_ops: Slot
-    summary: Slot
-    review_form: Slot  # the table + the form, one node so they arrive in one turn
-    review_rows: Slot  # the table's rows
-    say_car: Slot
-    intro_car: Slot
-    say_shoe: Slot
-    intro_shoe: Slot
-    say_patch: Slot
-    patch_code: Slot
-    say_graph: Slot
-    toggle: Slot  # == TOGGLE: the rail's and the button's sink
-    pin: Slot
-    save: Slot
-    review: Slot
-
-
-def slots_of(ctx: Context) -> "Walkthrough":
-    """One delivery's names for this page — `ctx.slot("demo")` nested, so `s.stream` is `demo.stream`."""
-    return ctx.slot("demo")  # type: ignore[return-value]
+# This page's table is the framework's `Slots`: a name is a literal where it is used (`s / "stream"` is
+# `demo.stream`), and the dot is only verbs and cells. There is no second list of names — a typo is an
+# AttributeError at runtime.
+def slots_of(ctx: Context) -> Slots:
+    """One delivery's names for this page — `ctx.slot("demo")` nested, so `s / "stream"` is `demo.stream`."""
+    return ctx.slot("demo")
 
 
 PAGE = "/demo"
@@ -282,17 +250,17 @@ def page(ctx: Context, match: Match) -> None:
     a region's content is written to its slot. Seeding is guarded on the device because a slot
     outlives a `create` — drawing twice must not append the same chip twice.
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     if not ctx.data.get("demo_seeded"):
         ctx.data["demo_seeded"] = True
-        s.control.set(control("▶ Play"))
-        s.beat.set(h.text("not started · the button is bottom-right"))
-        s.echo.set(h.text(""))
+        (s / "control").set(control("▶ Play"))
+        (s / "beat").set(h.text("not started · the button is bottom-right"))
+        (s / "echo").set(h.text(""))
     return (
         h.frame(
             h.frame(  # the left column: one region, one slot
                 h.forcegraph(
-                    source=s.graph,
+                    source=s / "graph",
                     width="100%",
                     height="100%",
                     style={"fit_padding_px": 56},
@@ -303,25 +271,25 @@ def page(ctx: Context, match: Match) -> None:
                 id="demo-graph",
             ),
             h.frame(  # the right column: what landed, the stream, and the app's answers
-                h.tiles(source=s.pins, dir="row", wrap="wrap", id="pins"),
+                h.tiles(source=s / "pins", dir="row", wrap="wrap", id="pins"),
                 # The stream scrolls inside its own box: the row it holds is taller than any window,
                 # and a page that grows with it drags the graph's canvas along (measured: a 3.9k-tall
                 # forcegraph next to a 600-wide stream).
                 h.frame(
-                    h.tiles(source=s.stream, id="stream"),
+                    h.tiles(source=s / "stream", id="stream"),
                     grid={"grid-template-rows": "1fr"},
                     style={"overflow": "auto", "min-height": "0"},
                     id="stream-box",
                 ),
-                h.text(source=s.echo, variant="muted", id="echo"),
-                h.frame(accept={"tag": PIN_TAG}, sink=s.pin, style=RAIL, id="rail"),
+                h.text(source=s / "echo", variant="muted", id="echo"),
+                h.frame(accept={"tag": PIN_TAG}, sink=s / "pin", style=RAIL, id="rail"),
                 grid={"grid-template-rows": "auto 1fr auto"},
                 style={"min-height": "0", "min-width": "0", "position": "relative", "padding-right": "18px"},
                 id="demo-stream-column",
             ),
             h.frame(  # the control region: fixed to the window, drawn once
-                h.frame(source=s.control, id="demo-control"),
-                h.text(source=s.beat, variant="muted", id="demo-beat"),
+                h.frame(source=s / "control", id="demo-control"),
+                h.text(source=s / "beat", variant="muted", id="demo-beat"),
                 grid={"grid-template-columns": "auto auto", "gap": "10px", "align-items": "center"},
                 style=FLOAT,
                 id="demo-playback",
@@ -362,7 +330,7 @@ def pin_tile(name: str, title: str) -> Accrete:
     )
 
 
-def row(s: Demo) -> Accrete:
+def row(s: Slots) -> Accrete:
     """One row, every child bound to its own slot — the reason a stream re-renders one segment.
 
     An empty data area takes no room (ADR 0012), so the box opens holding nothing and grows a
@@ -370,26 +338,26 @@ def row(s: Demo) -> Accrete:
     nothing already on screen is rebuilt.
     """
     return h.frame(
-        h.text(source=s.analytics, format="md", id="say-analytics"),
+        h.text(source=s / "analytics", format="md", id="say-analytics"),
         pin_tile("analytics", "Analytics intro"),
-        band(h.canvas(source=s.trend, url=CHART_URL, id="chart-trend"), rows="260px", id="band-trend"),
+        band(h.canvas(source=s / "trend", url=CHART_URL, id="chart-trend"), rows="260px", id="band-trend"),
         band(
-            h.canvas(source=s.radar_rd, url=CHART_URL, id="chart-rd"),
-            h.canvas(source=s.radar_mkt, url=CHART_URL, id="chart-mkt"),
-            h.canvas(source=s.radar_ops, url=CHART_URL, id="chart-ops"),
+            h.canvas(source=s / "radar_rd", url=CHART_URL, id="chart-rd"),
+            h.canvas(source=s / "radar_mkt", url=CHART_URL, id="chart-mkt"),
+            h.canvas(source=s / "radar_ops", url=CHART_URL, id="chart-ops"),
             rows="340px",
             columns="repeat(3, minmax(0, 1fr))",
             id="band-radar",
         ),
-        h.text(source=s.summary, format="md", id="say-summary"),
-        h.frame(source=s.review_form, id="review-here"),
-        h.text(source=s.say_car, format="md", id="say-car"),
-        h.canvas(source=s.intro_car, url=SPLAT_URL, width="100%", height="460px", id="car"),
-        h.text(source=s.say_shoe, format="md", id="say-shoe"),
-        h.canvas(source=s.intro_shoe, url=VIEWER_URL, width="100%", height="420px", id="shoe"),
-        h.text(source=s.say_patch, format="md", id="say-patch"),
-        h.canvas(source=s.patch_code, url=EDITOR_URL, width="100%", height="280px", id="editor"),
-        h.text(source=s.say_graph, format="md", id="say-graph"),
+        h.text(source=s / "summary", format="md", id="say-summary"),
+        h.frame(source=s / "review_form", id="review-here"),
+        h.text(source=s / "say_car", format="md", id="say-car"),
+        h.canvas(source=s / "intro_car", url=SPLAT_URL, width="100%", height="460px", id="car"),
+        h.text(source=s / "say_shoe", format="md", id="say-shoe"),
+        h.canvas(source=s / "intro_shoe", url=VIEWER_URL, width="100%", height="420px", id="shoe"),
+        h.text(source=s / "say_patch", format="md", id="say-patch"),
+        h.canvas(source=s / "patch_code", url=EDITOR_URL, width="100%", height="280px", id="editor"),
+        h.text(source=s / "say_graph", format="md", id="say-graph"),
         grid={"gap": "10px"},
         id=ROW_ID,
     )
@@ -424,7 +392,7 @@ def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str
     )
 
 
-def review_form(s: Demo) -> Accrete:
+def review_form(s: Slots) -> Accrete:
     """The table (rows arrive through a slot) and the form (fields a loom can pack).
 
     Both halves are here because they cannot be one: `loom` claims a field by walking its own
@@ -444,7 +412,7 @@ def review_form(s: Demo) -> Accrete:
             h.tiles(
                 fields=REVIEW_FIELDS,
                 header={"selector": "review-head"},
-                source=s.review_rows,
+                source=s / "review_rows",
                 id="review-table",
             ),
             h.frame(
@@ -465,7 +433,7 @@ def review_form(s: Demo) -> Accrete:
             grid={"grid-template-rows": "auto auto auto", "gap": "8px"},
             id="review-body",
         ),
-        sink=s.review,
+        sink=s / "review",
         submit=["enter", "button"],
         id="review-form",
     )
@@ -511,80 +479,80 @@ def type_out(run: Run, slot: Slot, text: str) -> None:
         hold(run, settings.pace)
 
 
-def grow(run: Run, s: Demo, label: str) -> None:
+def grow(run: Run, s: Slots, label: str) -> None:
     """Push the snapshot for what has appeared so far — the graph grows with the stream."""
     ids = next((ids for name, ids in scene.GRAPH_REVEAL if name == label), ())
     if not ids:
         return
     run.revealed.update(ids)
-    s.graph.set(payload(scene.graph_payload(run.revealed)))
+    (s / "graph").set(payload(scene.graph_payload(run.revealed)))
 
 
-def beat_row(ctx: Context, run: Run, s: Demo) -> None:
+def beat_row(ctx: Context, run: Run, s: Slots) -> None:
     """The one row, the six text slots it will be typed into, and the graph's first snapshot."""
     with ctx.turn():  # the reader sees the box and its empty segments arrive together
-        s.stream.append(row(s))
-        for slot in (s.analytics, s.summary, s.say_car, s.say_shoe, s.say_patch, s.say_graph):
+        (s / "stream").append(row(s))
+        for slot in (s / "analytics", s / "summary", s / "say_car", s / "say_shoe", s / "say_patch", s / "say_graph"):
             slot.set(h.text(""))  # a patch needs a node to append into
-        s.graph.set(payload(scene.graph_payload(run.revealed)))
+        (s / "graph").set(payload(scene.graph_payload(run.revealed)))
 
 
-def beat_analytics(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.analytics, scene.ANALYTICS)
+def beat_analytics(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "analytics", scene.ANALYTICS)
 
 
-def beat_charts(ctx: Context, run: Run, s: Demo) -> None:
+def beat_charts(ctx: Context, run: Run, s: Slots) -> None:
     """Four specs in one frame: the line chart and the three radars fill their bands."""
     with ctx.turn():
         for name, spec in (("trend", scene.TREND), *scene.RADARS.items()):
-            getattr(s, name).set(payload(spec))
+            (s / name).set(payload(spec))
 
 
-def beat_days(ctx: Context, run: Run, s: Demo) -> None:
+def beat_days(ctx: Context, run: Run, s: Slots) -> None:
     """One frame per day, three appends each — the line grows to thirty days while the reader watches."""
     for day, *scores in scene.TAIL_DAYS:
         hold(run, settings.day)
         with ctx.turn():
             for dept, avg in zip(scene.DEPTS, scores):
-                s.trend.patch(TREND_DATA, {"day": day, "avg": avg, "dept": dept}, op="append")
+                (s / "trend").patch(TREND_DATA, {"day": day, "avg": avg, "dept": dept}, op="append")
 
 
-def beat_summary(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.summary, scene.SUMMARY)
+def beat_summary(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "summary", scene.SUMMARY)
 
 
-def beat_review(ctx: Context, run: Run, s: Demo) -> None:
+def beat_review(ctx: Context, run: Run, s: Slots) -> None:
     with ctx.turn():  # the table arrives complete: its frame and its three rows together
-        s.review_form.set(review_form(s))
+        (s / "review_form").set(review_form(s))
         for key, _kind, initial, *cells in scene.REVIEW:
-            s.review_rows.append(review_row(key, initial, *cells))
+            (s / "review_rows").append(review_row(key, initial, *cells))
 
 
-def beat_car(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.say_car, scene.SAY_CAR)
-    s.intro_car.set(payload({"assets": {"scene": TRUCK_URL}, "camera": scene.TRUCK_CAMERA}))
+def beat_car(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "say_car", scene.SAY_CAR)
+    (s / "intro_car").set(payload({"assets": {"scene": TRUCK_URL}, "camera": scene.TRUCK_CAMERA}))
 
 
-def beat_shoe(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.say_shoe, scene.SAY_SHOE)
-    s.intro_shoe.set(payload({"assets": {"shoe": SHOE_URL}}))
+def beat_shoe(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "say_shoe", scene.SAY_SHOE)
+    (s / "intro_shoe").set(payload({"assets": {"shoe": SHOE_URL}}))
 
 
-def beat_editor(ctx: Context, run: Run, s: Demo) -> None:
+def beat_editor(ctx: Context, run: Run, s: Slots) -> None:
     """The code is a parameter like the two models: Monaco is fetched when the payload arrives."""
-    type_out(run, s.say_patch, scene.PATCH)
-    s.patch_code.set(payload({"code": scene.PATCH_CODE, "lang": "rust", "event": str(SAVE)}))
+    type_out(run, s / "say_patch", scene.PATCH)
+    (s / "patch_code").set(payload({"code": scene.PATCH_CODE, "lang": "rust", "event": str(SAVE)}))
 
 
-def beat_graph(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.say_graph, scene.SAY_GRAPH)
+def beat_graph(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "say_graph", scene.SAY_GRAPH)
 
 
-def beat_focus(ctx: Context, run: Run, s: Demo) -> None:
+def beat_focus(ctx: Context, run: Run, s: Slots) -> None:
     """The equivalent of a search landing: the camera flies to a cluster, nothing else leaves."""
     snapshot = scene.graph_payload(run.revealed)
     snapshot["focus"] = {"ids": ["accrete", "content", "transport"], "seq": 1}
-    s.graph.set(payload(snapshot))
+    (s / "graph").set(payload(snapshot))
 
 
 BEATS: tuple[tuple[str, Callable[[Context, Run, Demo], None]], ...] = (
@@ -612,23 +580,23 @@ def spawn(target: Callable[..., None], args: tuple) -> None:
 def play(ctx: Context) -> None:
     """The script, beat by beat. Synchronous on purpose: the thread is the caller's choice."""
     run = state(ctx)
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     try:
         for index, (label, step) in enumerate(BEATS, start=1):
             run.resume.wait()  # a paused script does not start the next beat
             run.beat, run.label = index, label
-            s.beat.set(h.text(f"{index}/{len(BEATS)} · {label}"))
+            (s / "beat").set(h.text(f"{index}/{len(BEATS)} · {label}"))
             step(ctx, run, s)
             grow(run, s, label)
             hold(run, settings.hold)
     except Exception as failure:  # a demo's defect is a line on screen, not a dead thread
         run.phase = "done"
-        s.control.set(control("↻ Replay"))
-        s.beat.set(h.text(f"error: {type(failure).__name__} · {failure}"))
+        (s / "control").set(control("↻ Replay"))
+        (s / "beat").set(h.text(f"error: {type(failure).__name__} · {failure}"))
         return
     run.phase = "done"
-    s.control.set(control("↻ Replay"))
-    s.beat.set(h.text("done · 30 days of trend, a review that submits, an editor that writes back"))
+    (s / "control").set(control("↻ Replay"))
+    (s / "beat").set(h.text("done · 30 days of trend, a review that submits, an editor that writes back"))
 
 
 def start(ctx: Context, run: Run) -> None:
@@ -638,37 +606,37 @@ def start(ctx: Context, run: Run) -> None:
     and its payloads are re-set by theirs) and the table's three rows. What the *reader* dropped on
     the rail stays — replaying the story is not undoing someone's pins.
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     if run.beat:
-        s.stream.remove(ROW_ID)
+        (s / "stream").remove(ROW_ID)
         for key, *_ in scene.REVIEW:
-            s.review_rows.remove(f"review-{key}")
+            (s / "review_rows").remove(f"review-{key}")
     run.phase = "playing"
     run.beat, run.label = 0, ""
     run.revealed = set(scene.GRAPH_SEED)
     run.resume.set()
-    s.control.set(control("⏸ Pause"))
-    s.beat.set(h.text(f"0/{len(BEATS)} · start"))
+    (s / "control").set(control("⏸ Pause"))
+    (s / "beat").set(h.text(f"0/{len(BEATS)} · start"))
     spawn(play, (ctx,))
 
 
 def on_toggle(ctx: Context, frame: dict) -> None:
     """One button, four states: play → pause → resume → replay."""
     run = state(ctx)
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     if run.phase in ("idle", "done"):
         start(ctx, run)
         return
     if run.phase == "playing":
         run.phase = "paused"
         run.resume.clear()
-        s.control.set(control("▶ Resume"))
-        s.beat.set(h.text(f"paused · {run.beat}/{len(BEATS)} · {run.label}"))
+        (s / "control").set(control("▶ Resume"))
+        (s / "beat").set(h.text(f"paused · {run.beat}/{len(BEATS)} · {run.label}"))
         return
     run.phase = "playing"
     run.resume.set()
-    s.control.set(control("⏸ Pause"))
-    s.beat.set(h.text(f"{run.beat}/{len(BEATS)} · {run.label}"))
+    (s / "control").set(control("⏸ Pause"))
+    (s / "beat").set(h.text(f"{run.beat}/{len(BEATS)} · {run.label}"))
 
 
 def fields(frame: dict) -> dict:
@@ -683,16 +651,16 @@ def fields(frame: dict) -> dict:
 
 def on_pin(ctx: Context, frame: dict) -> None:
     """A drag landed on the rail: the cargo's own id and kind, named on screen (ADR 0034)."""
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     data = fields(frame)
     ident = data.get("id")
     if not ident:
-        s.echo.set(h.text("the landing point got cargo with no id; nothing was recorded"))
+        (s / "echo").set(h.text("the landing point got cargo with no id; nothing was recorded"))
         return
     kind = data.get("kind") or data.get("tag") or "—"
     # The chip is described by the payload (an id and a kind), so it is built from data: `h.node` and
     # `h.frame` are the same constructor — the first reads like "what a pin is", not "make a frame".
-    s.pins.append(
+    (s / "pins").append(
         h.node(
             (
                 "frame",
@@ -701,29 +669,29 @@ def on_pin(ctx: Context, frame: dict) -> None:
             )
         )
     )
-    s.echo.set(h.text(f"landing point got {ident} ({kind})"))
+    (s / "echo").set(h.text(f"landing point got {ident} ({kind})"))
 
 
 def on_save(ctx: Context, frame: dict) -> None:
     """Ctrl/Cmd+S in the editor: the code and its language, up the same leg the form uses."""
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     data = fields(frame)
     code = data.get("code")
     if not isinstance(code, str):
-        s.echo.set(h.text("the editor wrote back no code; nothing was recorded"))
+        (s / "echo").set(h.text("the editor wrote back no code; nothing was recorded"))
         return
-    s.echo.set(h.text(f"editor wrote back {len(code)} chars · {data.get('lang') or '—'}"))
+    (s / "echo").set(h.text(f"editor wrote back {len(code)} chars · {data.get('lang') or '—'}"))
 
 
 def on_review(ctx: Context, frame: dict) -> None:
     """The form's fields, as the renderer packed them — one key per row."""
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     data = frame.get("data") if isinstance(frame.get("data"), dict) else {}
     if not data:
-        s.echo.set(h.text("it submitted, but with no fields: this frame only packs the form's own named fields"))
+        (s / "echo").set(h.text("it submitted, but with no fields: this frame only packs the form's own named fields"))
         return
     packed = ", ".join(f"{key}={value!r}" for key, value in data.items())
-    s.echo.set(h.text(f"review submitted: {packed}"))
+    (s / "echo").set(h.text(f"review submitted: {packed}"))
 
 
 # ---- what an app does with this page --------------------------------------------------------------

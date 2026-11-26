@@ -1,110 +1,49 @@
-"""The reference app's slot names: one Protocol, one accessor, and the nav's addresses.
+"""The reference app's slot names: one type alias, two accessors, and the nav's six addresses.
 
 Names only: the `@app.on` landing points — identity in the page, a name that outlives a page, or one
 slot with several sources. A page's own request-response does not belong here: that is a closure,
 `sink=add_row`, written beside the button that sends to it, named by the framework when the page is
 drawn.
 
-A slot name is a string on the wire (`reflux/slots.py`), and the framework's table hands out a `Slot`
-for anything it is asked — `Slots.__getattr__ -> Slot`, no vocabulary. So the checking a page needs
-comes from a Protocol that names them, which is what this module is: every name the app speaks, in one
-place, and the two ways a page reaches them.
+A slot name is a string on the wire (`reflux/slots.py`), and a name is built with `/`:
+`ctx.slot / "echo"`. A dot on a handle is a verb or a cell (`set`, `append`, `value`, …), never a name —
+`Slot.__getattr__` refuses anything else. So this namespace has no second list: `ctx.slot / "echo"` and
+`app.slot / "echo"` are one slot, and a typo shows up at runtime. The module keeps two things:
 
     slots_of(ctx)        the page's table, with the delivery — writes go through it (`set`, `append`)
     table(app)           the app's table, no delivery — addresses go through it (`sink=`, `source=`,
                          `@app.on(...)`)
 
-The second one is why `@app.on` gets completion: `App.slot` is typed `Slots`, whose `__getattr__`
-accepts any name, so a typo there would register a handler nothing ever sends to, silently. Taking the
-table once, annotated, moves that check to the line where the name is written.
+Both return the framework's `Slots`; `DemoSlots` is this app's alias for it, so a signature still reads
+"this app's slots".
 
 This is the English tree; `examples/zh/demo_slots.py` is the same file in Chinese.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 from reflux.application import Context
-from reflux.slots import Slot
+from reflux.slots import Slot, Slots
 
 __all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_COUNTER", "GO_DEMO", "GO_SETTINGS", "GO_HOME", "slots_of", "table"]
 
-
-class _Row(Protocol):
-    """The `row` family. `remove` is a verb on `Slot`, so that name goes by subscript."""
-
-    def __getitem__(self, name: str) -> Slot: ...
-
-
-class _Vault(Protocol):
-    vault: Slot
-    secret: Slot
-
-
-class _Chat(Protocol):
-    """The chat page's two uplinks: the composer's send, and the stop that ends a reply."""
-
-    send: Slot
-    stop: Slot
-
-
-class _Go(Protocol):
-    """The nav's six targets — the frame's `dest` is the name."""
-
-    home: Slot
-    about: Slot
-    demo: Slot
-    chat: Slot
-    counter: Slot
-    settings: Slot
-
-
-class _Settings(Protocol):
-    """The settings page's one line of answer: which member was taken, and which was not."""
-
-    note: Slot
-
-
-class DemoSlots(Protocol):
-    """The reference app's slots, for the editor — the runtime only ever sees the names.
-
-    Two halves: the ones the page *writes* (`echo`, `rows`, … — reached through `slots_of(ctx)`, which
-    carries the delivery) and the ones the page *addresses* (`name.change`, `row.add`, `go.home`, … —
-    reached through `table(app)`, which carries none). One protocol, because they are one namespace:
-    the sink of an uplink and the handler that answers it are the same name.
-    """
-
-    echo: Slot  # what the input last carried
-    rows: Slot  # the list the tiles node reads
-    archived: Slot  # what the last drop archived — a text slot, written by the dock's handler
-    secret: Slot  # only a signed-in click writes it; every anonymous draw clears it
-    routes: Slot  # the shell's reader — where the page is written
-    messages: Slot  # the chat page's transcript — a list slot, appended to per bubble
-    status: Slot  # the chat page's status line
-
-    row: _Row
-    vault: _Vault
-    go: _Go
-    chat: _Chat
-
-    def __call__(self, path: str) -> Slot: ...  # `reflux:login`, `reflux:logout`, `reflux:auth`
-
-    # (the login form's answer is the framework's: it lands in the reserved `auth` region)
+DemoSlots = Slots
 
 
 def slots_of(ctx: Context) -> DemoSlots:
     """The reference app's slots for this delivery — the names the page writes through."""
-    return ctx.slot  # type: ignore[return-value]
+    return ctx.slot
 
 
 def table(app: Any) -> DemoSlots:
-    """The app's own table, typed — the names it addresses: `@app.on(slots.row["remove"])`.
+    """The app's own table — the names it addresses: `@app.on(app.slot / "row" / "remove")`.
 
     `Any` for the app is the price of not importing the framework's `App` here: this module is the
     names, and an import of `App` would tie the names to one application's shape for nothing.
     """
-    return app.slot  # type: ignore[return-value]
+    return app.slot
 
 
 # Where a navigation form sends the client. The frame's `dest` is the target's name.

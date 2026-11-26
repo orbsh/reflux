@@ -144,11 +144,22 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 - 渲染器侧的槽是**按路径的惰性订阅**：写某个槽只惊动读它的那些组件，不广播全表。这是「增量」从线上延伸到客户端内部的那一段。
 - **两个地址口径上一视同仁**：`source=`（这条槽）和 `sink=`（那个处理器）都只收 `Slot` 句柄，不收字符串——句柄从同一张表 `ctx.slot` 来，指向哪边是 `source`／`sink` 的事，不是调用方的事。名字只写一次，拼错在构造那一行就 `TypeError`，而不是在客户端变成一个永远空的槽或一个没人接的上行。
 - **打包：资产在构建时装进 wheel**（2026-11-05）。`pip install reflux` 得到的服务器必须能直接伺服页面，所以 wheel 里带 `reflux/www/`——`hatch_build.py` 在构建时看 `www/static/vendor/fluxen/versions.json`：清单在、它列的每个文件也在，就用现成的；否则取 fluxen 的**最新 release**（不钉版本，2026-11-25）装一份，再把仓库根的 `www/` 整个拷成包内路径。仓库布局不动（`www/` 仍在根），包内那份只存在于 wheel；`PAGE_ROOT` 先认 `reflux/www`，没有再退回仓库根（检出与 editable 安装走后者）。构建需要一次网络，运行永远不需要。`www/static/vendor/` 下除渲染器那份之外（示例的 `g2chart`）不进 wheel——那是示例的事，不是服务器的。每个 wheel 里的 `versions.json` 记着它当时装的是哪个 rev：不钉版本意味着两个时间点构建的 wheel 可能带不同渲染器，可复现性落在产物自己身上，不在仓库。
-- **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")`、`ctx.slot["status"]`、`ctx.slot.status` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`h.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。名字会嵌套：`slots.chat.send` 就是 `chat.send`，和 `slots.status` 是 `status` 一样——一份视图读完页面读的槽和它说话的上行，因为两个方向本来就是对偶的（一条槽是页面里的位置，一个 dest 是宿主的处理器，都是名字）。名字原样送上线，框架不解析分隔符，`reply.{seq}` 这种现拼的照样能写。
-- **四个动词在任何层级都优先**：`set`／`append`／`patch`／`remove` 永远是动词，所以名字末尾撞上它们的走上标——`slots.row["remove"]` 是那个 dest，`slots.row.remove` 是删一行。例外只有这一种，且它出现在页面上就说明那个名字该换一个。
+- **生产侧的槽是个对象**（`reflux/slots.py`）：`ctx.slot("status")` 与 `ctx.slot / "status"` 是同一条槽，动词挂在它身上——`slot.set(node)` / `.append(node)` / `.patch(path, value, op=)` / `.remove(id)`，每个动词一帧。名字只写一次，不再有一堆 `STATUS = "status"` 常量在两边各写一遍、只能靠人眼对齐；`h.text(source=slot)` 也直接收这个对象，构造器读它的 `name`。名字按段拼：`slots / "chat" / "send"` 就是 `chat.send`，和 `slots / "status"` 是 `status` 一样——一份视图读完页面读的槽和它说话的上行，因为两个方向本来就是对偶的（一条槽是页面里的位置，一个 dest 是宿主的处理器，都是名字）。名字原样送上线，框架不解析分隔符，`reply.{seq}` 这种现拼的照样能写。**`/` 是构造、`.` 是成员**：名字只由 `/` 拼（与 `Path / "a"` 同一个用法），点号只到句柄自己的东西为止（动词、细胞、`name`）——两者不重合，所以"这个名字看起来像动词"不再是个问题。
+- **没有下标的逃逸口**：`set`／`append`／`patch`／`remove`／`move`／`declare` 与细胞那一层（`value`／`signal`／`computed`／`keyed`／`view`）都是句柄的成员，永远不是名字；`/` 不查属性，所以一条叫 `remove` 的槽就是 `slots / "row" / "remove"`，照原样写即可。用点号或下标去够名字会得到一句 `AttributeError`，消息里说明该用 `/`。
 - **写完几处要一起到，就用 `with ctx.turn():`**：块里的每次发送（`ctx.emit`、`ctx.slot.*` 的动词）进同一帧，出块时一起送。一个回合是一个客户端的所见，客户端看到「行、空气泡、状态行」同时出现，比省几帧更值钱。不嵌套——块里的块得先回答它属于哪一帧，而还没有页面需要两帧。
-- **表在应用上，投递只是给表接上设备**：`app.slot` 是这个应用的名字表，拿到的句柄没有投递上下文，能命名、能声明、不能发；`ctx.slot` 是同一张表接上这一条连接，动词于是能说话。所以 `@app.on(app.slot.go.chat)` 声明的那个名字，页面里写 `dest=names.go.chat` 就是它——不是两份拼写。
-- **静态补全交给 `Protocol`**，不交给框架：`ctx.slot` 运行时认任何名字，应用声明一个只含注解的 `Protocol`（`status: Slot`、`messages: Slot`），在处理器里 `slots: ChatSlots = ctx.slot  # type: ignore[assignment]` —— 编辑器据此补全，拼错在第一次调用就是 `AttributeError`，而不是一个永远空的槽。声明记账发生在**用**的那一处（一次写，或者进节点当 `source=`／`dest=`），所以 `App.slots` 与 `/status` 列的是真正在用的名字，不是沿途路过的前缀。
+- **表在应用上，投递只是给表接上设备**：`app.slot` 是这个应用的名字表，拿到的句柄没有投递上下文，能命名、能声明、不能发；`ctx.slot` 是同一张表接上这一条连接，动词于是能说话。所以 `@app.on(app.slot / "go" / "chat")` 声明的那个名字，页面里写 `sink=ctx.slot / "go" / "chat"` 就是它——不是两份拼写。
+- **补全没有"运行时词表"可依**：`ctx.slot` 认任何名字，所以拼错只会在用它的那一行显出来。名字是字符串，静态补全要么来自一份声明过的常量表（`names.py` 里的 `Final` 字面量，由 `app.declared` 生成、`--check` 挡漂移），要么来自一个 `Literal` 联合——两条都还没做；现在能提供的只是出错位置准确。声明记账发生在**用**的那一处（一次写，或者进节点当 `source=`／`sink=`），所以 `App.slots` 与 `/status` 列的是真正在用的名字，不是沿途路过的前缀。
+
+### 槽的值：细胞
+
+一条槽在 wire 上装的是节点；页面里大多数槽装的其实是一个值 —— 一个数、一行说明、一张表。`reflux.signals` 就是这层：一个值、它的读者，以及"改了"这件事怎么传开。
+
+- **三种信号，一条规则**：`Signal` 是值（读 = 订阅，写 = 通知，相等的写不算变）；`Computed` 是派生（脏了才重算，答案相等就不再往下传）；`Effect` 是"读过这些东西的代码"（立刻跑一次，之后依赖变了再跑）。`with batch():` 把一轮传播收在一起 —— 一次按下改两个值，页面只写一轮。
+- **这层不写页面**：effect 写的还是 `ctx.slot(name).set(...)`，所以"谁写"归信号，"写成什么样"仍归页面的 `app.view(name, fn)`。写路径没有被改道，这层因此是可选的 —— 一页可以只用一个信号，其余照旧手写。
+- **槽自己带值**（`Slot.signal`／`.computed`／`.keyed`）：`.signal(0)` 给这条槽一个细胞，之后 `.value` 读写；`.computed(fn)` 是只读的派生，值一变就镜像回槽；`.keyed(render)` 让列表槽按 id 对齐（增 `append`、删 `remove`、换位 `move` 最少条）。三个都是 `signals.bound`／`into`／`keyed` 的同一条机制，只是从页面已经握着的句柄上调用。
+- **一个名字一个细胞，一条连接一份**：细胞登记在 `ctx.data` 里，所以页面重画拿回的是同一个 —— 否则每次绘制都把首值再种一遍（旧写法要在页面上自己守"只种一次"）。没有细胞的槽没有 `.value`（读它抛错），它就是原来那样的一条地址加动词。
+- **先有视图，再有信号**：首值是一次写，所以值型槽必须已经声明视图 —— `(slots / "x").view(fn).signal(0)`，或视图写在 `register` 里。顺序反了会得到一句"这条槽没有视图"的 `ValueError`，而不是一个永远空的槽。
+- **不上线的状态仍是裸信号**：计数器页的 `step`、`refusal` 没有槽，只是本地派生的中间量；它们没有细胞这层登记，所以那一页仍把整个 `State` 挂在 `ctx.data` 上。别让"合并"把私有状态逼上线 —— 那是为省一层 API 凭空加帧。
 
 ### 上行落点就是寻址契约
 
@@ -371,8 +382,8 @@ def only(ctx, path):
 def shell(ctx):
     return h.frame(
         h.text("示例站点", variant="heading-1"),
-        h.loom(h.button("首页"), sink=ctx.slot.go.home, submit=["button"]),
-        h.frame(source=ctx.slot.routes, id="routes"),   # 页面就画在这里
+        h.loom(h.button("首页"), sink=ctx.slot / "go" / "home", submit=["button"]),
+        h.frame(source=ctx.slot / "routes", id="routes"),   # 页面就画在这里
     )
 ```
 
@@ -433,15 +444,15 @@ app.unmount("/ws"); app.mount("/socket", CHANNEL)   # 通道换个路径
 三个名字是**宿主**的，不是线上的地址：`connect`（hello 落地）、`location`（客户端导航了）、`disconnect`（设备结束）。它们注册的方式和别的名字一样，形状也一样（`handler(device, frame)`，`frame.data` 带地址）：
 
 ```python
-@app.on(app.slot.connect)
+@app.on(app.slot / "connect")
 def on_connect(device, frame):
     device.emit(wire.set("hello", h.text(f"来自 {device.path}")))
 
-@app.on(app.slot.location)
+@app.on(app.slot / "location")
 def on_location(device, frame):
     print("客户端走到了", frame["data"]["path"])
 
-@app.on(app.slot.disconnect)
+@app.on(app.slot / "disconnect")
 def on_disconnect(device, frame):
     print("走了", device.id, frame["data"]["reason"])   # reason: "closed" 或 "dead"
 ```
@@ -511,7 +522,7 @@ def on_disconnect(device, frame):
 
 词表的构造器叫 `h`（`from reflux.sdk import h`，前端惯例的那个名字）：`h.frame(...)` 给人写页面 —— 每个节点类型保留生成的签名，关键字有补全、拼错立刻 `TypeError`；`h.node(('frame', props, children))` 给"页面就是数据"的情形（载荷描述的 chips、从槽里读出来的行、场景表）—— props 仍是那个构造器自己的关键字，所以拼错照样被拒，只是没有补全。两者在同一条构造器上，产物逐字节相同（`tests/test_h.py`）。JavaScript 里 `h('div', …)` 值得存在是因为 JSX 会生成它；这里没有那层编译，所以不提供第三种拼法。
 
-**槽的视图**（2026-11-24）：一个槽在 wire 上放的是节点，而多数槽放的就是一个值——一个数字、一行说明。`app.view(name, render)` 把"这个值长什么样"声明一次（写在它所属页面旁边），之后写入交值：`slots.count.set(3)` 变成 `render(3)`，id 与 variant 只出现在那一处。规则按值读、不按槽读：**已经是节点的值原样通过**（`slots.count.set(h.text("3"))` 不被转换），没有视图的槽照旧收节点。视图挂在 app 上而不是句柄上，因为句柄是每次投递的（`ctx.slot(...)`），而这是页面的决定。
+**槽的视图**（2026-11-24）：一个槽在 wire 上放的是节点，而多数槽放的就是一个值——一个数字、一行说明。`app.view(name, render)` 把"这个值长什么样"声明一次（写在它所属页面旁边），之后写入交值：`(slots / "count").set(3)` 变成 `render(3)`，id 与 variant 只出现在那一处。规则按值读、不按槽读：**已经是节点的值原样通过**（`(slots / "count").set(h.text("3"))` 不被转换），没有视图的槽照旧收节点。视图挂在 app 上而不是句柄上，因为句柄是每次投递的（`ctx.slot(...)`），而这是页面的决定。
 
 **字段的出口是它的组**（2026-11-24，随 fluxen `2ee6c13` 落地）：`tag` 是成员身份，没有 `tag` 的 `input`/`select` 不上行；字段自己的 `sink` 只表示**本地落点**（`scope: local`，值一变就写），`remote`/`both` 又没有 `tag` 的会被渲染器记一条警告并丢掉。清空也不再是字段的规则。组多了两件事：`attrs.reset`（`keep` 缺省 / `clear` / `default`）与 `attrs.sends`（发几次，`0` 从第一帧就锁）。本仓的 SDK 把这条提前到构造那一行：`parse()` 的 `_check_uplinks` 拒绝"remote sink 且无 `tag`"的字段——那是**没人收的值**，与其等渲染器丢，不如在写它的地方报错；本地落点与无落点的字段照旧合法。字段的类型仍走 `Bind.type`（读侧 `source.type` 亦可），登录面的密码框因此写成 `h.input(tag="pass", source=Bind(type=JsType.password))`：读侧说的是形状，不是出口。处理器拿到的永远是组打包出来的对象（`{tag: value}`），没有裸值特例。这一步之后字段上还留着一个不是出口的 `sink`——类型从它身上读（`sink.type`，读侧 `source.type` 亦可），不进组的字段还用它做本地落点；这两件事都不该由地址承担，所以字段上的 `sink` 整体删除的决定已写进 fluxen ADR 0032 §2 末段（工单 #470），本仓的 `_check_uplinks` 与那条借道写法随之退场。
 

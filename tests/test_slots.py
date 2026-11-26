@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from reflux import App
+from reflux import signals
 from reflux.sdk import h
 from reflux.sdk import dump
 from reflux.slots import Slot, Slots
@@ -23,30 +24,30 @@ class TheSlot(unittest.TestCase):
         status = self.ctx.slot("status")
         self.assertEqual(status.name, "status")
         self.assertEqual(status, Slot("status", self.ctx))  # two handles, one plane
-        self.assertEqual(len({status, self.ctx.slot["status"]}), 1)  # hashable, equal, not duplicated
+        self.assertEqual(len({status, (self.ctx.slot / "status")}), 1)  # hashable, equal, not duplicated
 
     def test_a_name_nests(self) -> None:
-        """`ctx.slot.go.dashboard` is the name "go.dashboard" — a dest reads off the same view."""
-        self.assertEqual(self.ctx.slot.go.dashboard.name, "go.dashboard")
-        self.assertEqual(self.ctx.slot.chat["send"].name, "chat.send")  # subscript works at either level
-        self.assertEqual(self.ctx.slot.go.dashboard, self.ctx.slot("go.dashboard"))
+        """`ctx.slot / "go" / "dashboard"` is the name "go.dashboard" — a dest reads off the same view."""
+        self.assertEqual((self.ctx.slot / "go" / "dashboard").name, "go.dashboard")
+        self.assertEqual((self.ctx.slot / "chat" / "send").name, "chat.send", "one `/` per segment")
+        self.assertEqual(self.ctx.slot / "go" / "dashboard", self.ctx.slot("go.dashboard"))
 
     def test_a_child_carries_the_delivery(self) -> None:
-        self.ctx.slot.chat.status.set(h.text("x"))
+        (self.ctx.slot / "chat" / "status").set(h.text("x"))
         self.assertEqual(self.device.frames[0][0]["slot"], "chat.status")
 
     def test_nesting_keeps_the_verbs_verbs(self) -> None:
         for verb in ("set", "append", "patch", "remove"):
-            self.assertTrue(callable(getattr(self.ctx.slot.chat, verb)))
+            self.assertTrue(callable(getattr(self.ctx.slot / "chat", verb)))
 
-    def test_a_name_ending_in_a_verb_goes_by_subscript(self) -> None:
-        """`set`/`append`/`patch`/`remove` stay verbs at every level; the subscript is the way past."""
-        self.assertEqual(self.ctx.slot.row["remove"].name, "row.remove")
-        self.assertTrue(callable(self.ctx.slot.row.remove), "the verb, not a child")
+    def test_a_name_ending_in_a_verb_is_still_just_a_name(self) -> None:
+        """`remove` is a verb on the handle; a slot called `remove` is built with `/` and never collides."""
+        self.assertEqual((self.ctx.slot / "row" / "remove").name, "row.remove")
+        self.assertTrue(callable((self.ctx.slot / "row").remove), "the verb, not a name")
 
-    def test_the_three_forms_are_one_slot(self) -> None:
-        self.assertEqual(self.ctx.slot("chat/status").name, self.ctx.slot["chat/status"].name)
-        self.assertEqual(self.ctx.slot["status"].name, self.ctx.slot.status.name)  # the Protocol's form
+    def test_the_two_forms_are_one_slot(self) -> None:
+        self.assertEqual(self.ctx.slot("chat/status").name, (self.ctx.slot / "chat/status").name)
+        self.assertEqual((self.ctx.slot / "status").name, self.ctx.slot("status").name)
 
     def test_a_path_is_carried_through(self) -> None:
         # Hierarchical names are allowed and nothing reads the `/` yet: the name goes out as written.
@@ -63,7 +64,7 @@ class TheSlot(unittest.TestCase):
             self.ctx.slot("")
 
     def test_each_verb_is_one_frame(self) -> None:
-        slot = self.ctx.slot["messages"]
+        slot = (self.ctx.slot / "messages")
         slot.set(h.text("here"))
         slot.append(h.text("row"))
         slot.patch("/bind/value/default", "more", op="append")
@@ -76,16 +77,104 @@ class TheSlot(unittest.TestCase):
 
     def test_a_slot_stands_for_its_name_in_a_node(self) -> None:
         # A handle reaches the wire as its name in the `Bind` the channel carries (ADR 0031 §1–2).
-        node = h.text(source=self.ctx.slot["status"])
+        node = h.text(source=(self.ctx.slot / "status"))
         assert node.source is not None  # optional on the wire, never on a node built with one
         self.assertEqual(node.source.slot, "status")
 
     def test_a_declaration_is_recorded_on_the_app(self) -> None:
-        self.ctx.slot["status"].set(h.text("x"))
+        (self.ctx.slot / "status").set(h.text("x"))
         self.assertEqual(self.app.declared, {"status"})
 
         self.ctx.slot("chat/reply").set(h.text("y"))
         self.assertEqual(self.app.declared, {"status", "chat/reply"})
+
+
+class TheCell(unittest.TestCase):
+    """A slot that owns a value: one cell per name per connection, read and written through `.value`."""
+
+    def setUp(self) -> None:
+        self.app = create_app()
+        self.device = FakeDevice()
+        self.ctx = self.app.context(self.device)
+        # A value slot needs its view before the first write (the seed is a write like any other).
+        self.ctx.slot("counter.count").view(lambda value: h.text(str(value)))
+        self.ctx.slot("counter.hint").view(lambda value: h.text(value))
+
+    def test_the_slash_builds_a_name_and_leaves_the_dot_to_the_verbs(self) -> None:
+        self.assertEqual((self.ctx.slot / "counter" / "count").name, "counter.count")
+        self.assertEqual((self.ctx.slot / "chat" / "remove").name, "chat.remove", "a name, not a verb")
+        self.assertEqual(self.ctx.slot / "a" / "b", self.ctx.slot("a.b"), "one plane, two spellings")
+        with self.assertRaises(ValueError):
+            self.ctx.slot / ""
+
+    def test_a_signal_seeds_the_slot_once_then_reads_and_writes_the_value(self) -> None:
+        count = (self.ctx.slot / "counter" / "count").signal(0)
+        seed = self.device.frames[0][0]
+        self.assertEqual((seed["action"], seed["slot"]), ("set", "counter.count"))
+        self.assertEqual(seed["data"]["source"]["default"], "0", "the seed went through the view")
+        self.assertEqual(count.value, 0)
+
+        count.value = 3
+
+        self.assertEqual(self.device.frames[1][0]["data"]["source"]["default"], "3", "a write is one frame")
+        self.assertEqual(count.value, 3)
+
+    def test_a_value_with_no_view_is_refused_with_a_sentence_saying_so(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            (self.ctx.slot / "raw").signal(0)
+        self.assertIn(".view(", str(caught.exception))
+
+    def test_drawing_again_hands_back_the_same_cell(self) -> None:
+        first = (self.ctx.slot / "counter" / "count").signal(0)
+        first.value = 5
+        sent = len(self.device.frames)
+
+        again = (self.ctx.slot / "counter" / "count").signal(0)
+
+        self.assertEqual(again.value, 5, "the page's second draw keeps what was written")
+        self.assertEqual(len(self.device.frames), sent, "and seeds nothing")
+
+    def test_a_slot_with_no_cell_has_no_value(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            _ = self.ctx.slot("counter.count").value
+        self.assertIn(".signal(", str(caught.exception), "the message says how to declare one")
+
+    def test_a_computed_cell_is_mirrored_and_read_only(self) -> None:
+        step = signals.Signal(1)
+        hint = (self.ctx.slot / "counter" / "hint").computed(lambda: f"step {step.value}")
+        self.assertEqual(hint.value, "step 1")
+
+        step.value = 2
+
+        self.assertEqual(hint.value, "step 2")
+        self.assertEqual(self.device.frames[-1][0]["data"]["source"]["default"], "step 2")
+        with self.assertRaises(RuntimeError):
+            hint.value = "mine"
+
+    def test_a_keyed_cell_owns_the_rows(self) -> None:
+        log = (self.ctx.slot / "log").keyed(lambda item, row_id: h.text(item, id=row_id))
+
+        log.value = [("a", "1"), ("b", "2")]
+        self.assertEqual(
+            [operation["action"] for frame in self.device.frames for operation in frame],
+            ["append", "append"],
+        )
+
+        log.value = [("b", "2"), ("a", "1")]
+        self.assertEqual(self.device.frames[-1][0]["action"], "move", "an order change is a move")
+        self.assertEqual(log.value, [("b", "2"), ("a", "1")], "the cell is the rows")
+
+    def test_a_view_is_declared_through_the_handle_and_the_chain_stays_on_it(self) -> None:
+        count = (self.ctx.slot / "chain" / "count").view(
+            lambda value: h.text(str(value), id="counter-value")
+        ).signal(0)
+        self.assertEqual(count.name, "chain.count")
+
+        count.value = 3
+
+        node = self.device.frames[-1][0]["data"]
+        self.assertEqual(node["type"], "text", "a value became a node through the view")
+        self.assertEqual(node["id"], "counter-value")
 
 
 class TheAddressesInNodes(unittest.TestCase):
@@ -101,7 +190,7 @@ class TheAddressesInNodes(unittest.TestCase):
         self.ctx = self.app.context(FakeDevice())
 
     def test_a_source_handle_reaches_the_wire_as_its_name(self) -> None:
-        self.assertEqual(h.text(source=self.ctx.slot["status"]).source.slot, "status")
+        self.assertEqual(h.text(source=(self.ctx.slot / "status")).source.slot, "status")
 
     def test_a_sink_handle_reaches_the_wire_as_its_name(self) -> None:
         node = h.loom(h.button("send"), sink=self.ctx.slot("chat.send"))
@@ -141,15 +230,15 @@ class TheTurn(unittest.TestCase):
     def test_writes_inside_a_turn_leave_as_one_frame(self) -> None:
         slots = self.ctx.slot
         with self.ctx.turn():
-            slots.messages.append(h.text("row"))
-            slots.status.set(h.text("就绪"))
+            (slots / "messages").append(h.text("row"))
+            (slots / "status").set(h.text("就绪"))
         self.assertEqual(len(self.device.frames), 1)
         self.assertEqual([op["action"] for op in self.device.frames[0]], ["append", "set"])
 
     def test_outside_a_turn_each_write_is_its_own_frame(self) -> None:
         slots = self.ctx.slot
-        slots.messages.append(h.text("row"))
-        slots.status.set(h.text("就绪"))
+        (slots / "messages").append(h.text("row"))
+        (slots / "status").set(h.text("就绪"))
         self.assertEqual(len(self.device.frames), 2)
 
     def test_an_empty_turn_sends_nothing(self) -> None:
@@ -162,8 +251,8 @@ class TheGroup(unittest.TestCase):
     def test_a_group_without_an_app_still_hands_out_slots(self) -> None:
         # `Context(app=None, …)` is what a test builds when it only reads names.
         group = Slots(ctx=_Bare())
-        self.assertEqual(group["status"].name, "status")
-        self.assertEqual(group.status.name, "status")
+        self.assertEqual((group / "status").name, "status")
+        self.assertEqual((group / "chat" / "send").name, "chat.send")
 
 
 class _Bare:

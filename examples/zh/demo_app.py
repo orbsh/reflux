@@ -84,7 +84,7 @@ def row_node(text: str, row_id: str) -> Accrete:
                 sink=slots("row.move"), style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
         h.frame(h.button("删"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
-        sink=slots.row["remove"],
+        sink=slots / "row" / "remove",
         submit=["button"],
         id=row_id,
     )
@@ -187,7 +187,7 @@ def demo_verify(ctx, credentials, mode):
         return (True, "user-ada", None)
     return (False, "用户或密码不对")
 
-# 应用自己的表，带类型：`@app.on(slots.name.change)` 有补全，而不在
+# 应用自己的表，带类型：`@app.on(app.slot / "name" / "change")` 有补全，而不在
 # `DemoSlots` 里的名字是错误，不是一个永远没人发的处理器。`ctx.slot` 是
 # 这张表挂上设备；写入来自 `slots_of(ctx)`。
 slots: DemoSlots = demo_slots.table(app)
@@ -216,7 +216,7 @@ def home_page(ctx, match):
         # 一个组提交的是它打包出来的对象：{字段: 值}。帧从外面来，所以不认识的东西给空串，不炸。
         text = value.get("name") if isinstance(value, dict) else None
         state.echo = text if isinstance(text, str) else ""
-        slots.echo.set(h.text(state.echo))
+        (slots / "echo").set(h.text(state.echo))
 
     def add_row(value: object) -> None:
         row = (f"row-{state.next_row}", f"第 {state.next_row} 行")
@@ -226,7 +226,7 @@ def home_page(ctx, match):
     def reveal(value: object) -> None:
         # 只有已登录的点击能到这里：其余的在闭包之前就被门答掉了（`gated`）。
         ctx.data["may_see_secret"] = True
-        slots.secret.set(h.text("机密内容"))
+        (slots / "secret").set(h.text("机密内容"))
 
     # 行由 `signals.keyed` 与 `state.rows` 对齐：这条连接第一次画这一页时它把现有的行全部 append 上去，
     # 之后只跟着信号走增删与换位。槽活得比一次 `create` 长（树被替换，数据面不会），所以这张订阅只建
@@ -236,7 +236,7 @@ def home_page(ctx, match):
     # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
     # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
     if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        slots_of(ctx).secret.set(h.text(""))
+        (slots_of(ctx) / "secret").set(h.text(""))
     return (
         h.frame(
             h.frame(
@@ -256,7 +256,7 @@ def home_page(ctx, match):
                         variant="muted",
                     ),
                     h.loom(h.input(tag="name", id="name-input"), sink=echo, submit=["enter"], id="echo-form"),
-                    h.text(source=slots.echo, id="echo"),
+                    h.text(source=slots / "echo", id="echo"),
                     grid=CARD,
                     variant="card",
                     id="card-echo",
@@ -270,7 +270,7 @@ def home_page(ctx, match):
                     ),
                     h.loom(h.button("加一行"), sink=add_row,
                              submit=["button"], id="add-row"),
-                    h.tiles(source=slots.rows, id="rows"),
+                    h.tiles(source=slots / "rows", id="rows"),
                     # 落点说出它的事件和它收什么；`accept` 是一个 tag（或 any），所以别的 tag 的
                     # 货物不发一帧就被拒 —— 而一个没有 `sink` 的落点是加载错误，所以这两样
                     # 总是成对出现。
@@ -283,7 +283,7 @@ def home_page(ctx, match):
                                "min-height": "72px"},
                         id="archive",
                     ),
-                    h.text(source=slots.archived, id="archived"),
+                    h.text(source=slots / "archived", id="archived"),
                     grid=CARD,
                     variant="card",
                     id="card-rows",
@@ -319,7 +319,7 @@ def home_page(ctx, match):
                 # 在一句声明后面：访客在这里的点击永远到不了处理器。
                 h.loom(h.button("私密"),
                          sink=gated(reveal), submit=["button"], id="vault"),
-                h.text(source=slots.secret, id="secret"),
+                h.text(source=slots / "secret", id="secret"),
                 h.loom(h.button("退出"), sink=slots(LOGOUT),
                          submit=["button"], id="logout"),
                 grid=CARD,
@@ -358,7 +358,7 @@ def about_page(ctx, match):
 
 # --- 处理器：名字的落点（身份在页面里或跨页的那些） ---------------------------------
 
-@app.on(slots.row["remove"])  # `remove` 是动词：这个名字要用下标访问
+@app.on(slots / "row" / "remove")  # `remove` 是动词：这个名字要用下标访问
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # 这一行的表单把它的身份带了上来
     state.rows.value = [row for row in state.rows.value if row[0] != row_id]
@@ -373,7 +373,7 @@ def on_archive(ctx, frame) -> None:
     row = next((r for r in state.rows.value if r[0] == row_id), None)
     if row is None:
         return
-    slots_of(ctx).archived.set(h.text(f"已归档：{row[1]}"))
+    (slots_of(ctx) / "archived").set(h.text(f"已归档：{row[1]}"))
     state.rows.value = [r for r in state.rows.value if r[0] != row_id]
 
 

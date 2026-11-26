@@ -6,7 +6,7 @@ any page is drawn — the answer to "one slot, several sources". The closure's i
 case, a page and the handler it answers with written as one thought:
 
     def add_row(value):                 # the value, not a frame
-        slots.rows.append(row(...))
+        (slots / "rows").append(row(...))
 
     h.loom(h.button("Add a row"), sink=add_row, submit=["button"])
 
@@ -58,7 +58,7 @@ class AClosureIsALandingPoint(unittest.TestCase):
 
             def add(value):
                 self.calls.append(("add", value))
-                slots.rows.append(h.text(f"row {value}"))
+                (slots / "rows").append(h.text(f"row {value}"))
 
             ctx.page(
                 h.frame(

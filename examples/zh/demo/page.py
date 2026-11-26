@@ -37,12 +37,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 from reflux import Context, Match
 from reflux.sdk import h
 from reflux.sdk.types import Accrete, Source
-from reflux.slots import Slot
+from reflux.slots import Slot, Slots
 
 from . import scene
 
@@ -53,7 +53,6 @@ __all__ = [
     "ROW_ID",
     "Run",
     "Settings",
-    "Walkthrough",
     "install",
     "page",
     "register",
@@ -137,44 +136,11 @@ SAVE = Slot("demo.save")
 REVIEW = Slot("demo.review")
 
 
-class Walkthrough(Protocol):
-    """这一页的槽 —— 给编辑器看的视图；wire 只看得见名字。
-
-    这里每个名字都是 `demo.<字段>`，所以一个句柄（`ctx.slot("demo")`）就能拿到全部，页面写
-    `s.stream`，而不是写字符串。
-    """
-
-    graph: Slot  # 左列的关系图
-    stream: Slot  # 右列的那一行
-    pins: Slot  # 拖到轨道上落地的东西
-    control: Slot  # 浮动按钮那个节点
-    beat: Slot  # 正走到哪一拍
-    echo: Slot  # 应用对最近一次上行的答复
-    analytics: Slot  # 引言那一段
-    trend: Slot  # 30 天那张图的 spec
-    radar_rd: Slot
-    radar_mkt: Slot
-    radar_ops: Slot
-    summary: Slot
-    review_form: Slot  # 表与表单：一个节点，所以它们一次到场
-    review_rows: Slot  # 表里的行
-    say_car: Slot
-    intro_car: Slot
-    say_shoe: Slot
-    intro_shoe: Slot
-    say_patch: Slot
-    patch_code: Slot
-    say_graph: Slot
-    toggle: Slot  # == TOGGLE：轨道的和按钮的 sink
-    pin: Slot
-    save: Slot
-    review: Slot
-
-
-def slots_of(ctx: Context) -> "Walkthrough":
-    """一次投递里这一页的名字 —— `ctx.slot("demo")` 套着一层，于是 `s.stream` 就是 `demo.stream`。
-    """
-    return ctx.slot("demo")  # type: ignore[return-value]
+# 这一页的表就是框架的 `Slots`：名字在用的地方写成字面量（`s / "stream"` 就是 `demo.stream`），
+# 点号只留动词与细胞。名字没有第二份清单 —— 拼错在运行期就是一条 AttributeError。
+def slots_of(ctx: Context) -> Slots:
+    """一次投递里这一页的名字 —— `ctx.slot("demo")` 套着一层，于是 `s / "stream"` 就是 `demo.stream`。"""
+    return ctx.slot("demo")
 
 
 PAGE = "/demo"
@@ -277,17 +243,17 @@ def page(ctx: Context, match: Match) -> None:
     浮动控件的第一个节点是一次**发送**，和所有种子一样：页面提供结构，一个区的内容写进它的槽。
     种在这里按设备守卫，因为槽活得比一次 `create` 长 —— 画两次不能把同一个碎片追加两遍。
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     if not ctx.data.get("demo_seeded"):
         ctx.data["demo_seeded"] = True
-        s.control.set(control("▶ 播放"))
-        s.beat.set(h.text("未开始 · 右下角开始"))
-        s.echo.set(h.text(""))
+        (s / "control").set(control("▶ 播放"))
+        (s / "beat").set(h.text("未开始 · 右下角开始"))
+        (s / "echo").set(h.text(""))
     return (
         h.frame(
             h.frame(  # 左列：一个区，一个槽
                 h.forcegraph(
-                    source=s.graph,
+                    source=s / "graph",
                     width="100%",
                     height="100%",
                     style={"fit_padding_px": 56},
@@ -298,25 +264,25 @@ def page(ctx: Context, match: Match) -> None:
                 id="demo-graph",
             ),
             h.frame(  # 右列：落下的东西、消息流、应用的答复
-                h.tiles(source=s.pins, dir="row", wrap="wrap", id="pins"),
+                h.tiles(source=s / "pins", dir="row", wrap="wrap", id="pins"),
                 # 消息流在自己的盒子里滚动：它装的那一行比任何窗口都高，
                 # 而跟着它一起长的页面会把关系图的画布拖走（实测：3.9k 高的
                 # forcegraph 挨着 600 宽的消息流）。
                 h.frame(
-                    h.tiles(source=s.stream, id="stream"),
+                    h.tiles(source=s / "stream", id="stream"),
                     grid={"grid-template-rows": "1fr"},
                     style={"overflow": "auto", "min-height": "0"},
                     id="stream-box",
                 ),
-                h.text(source=s.echo, variant="muted", id="echo"),
-                h.frame(accept={"tag": PIN_TAG}, sink=s.pin, style=RAIL, id="rail"),
+                h.text(source=s / "echo", variant="muted", id="echo"),
+                h.frame(accept={"tag": PIN_TAG}, sink=s / "pin", style=RAIL, id="rail"),
                 grid={"grid-template-rows": "auto 1fr auto"},
                 style={"min-height": "0", "min-width": "0", "position": "relative", "padding-right": "18px"},
                 id="demo-stream-column",
             ),
             h.frame(  # 控制区：固定在窗口上，只画一次
-                h.frame(source=s.control, id="demo-control"),
-                h.text(source=s.beat, variant="muted", id="demo-beat"),
+                h.frame(source=s / "control", id="demo-control"),
+                h.text(source=s / "beat", variant="muted", id="demo-beat"),
                 grid={"grid-template-columns": "auto auto", "gap": "10px", "align-items": "center"},
                 style=FLOAT,
                 id="demo-playback",
@@ -356,33 +322,33 @@ def pin_tile(name: str, title: str) -> Accrete:
     )
 
 
-def row(s: Demo) -> Accrete:
+def row(s: Slots) -> Accrete:
     """一行，每个子节点绑在自己的槽上 —— 这就是一段流只重绘一截的原因。
 
     空的数据区不占位置（ADR 0012），所以盒子一开始什么都不装，一段一段长出来：图表、模型或编辑器
     在各自的载荷到达那一刻出现，屏幕上已有的东西不会被重建。
     """
     return h.frame(
-        h.text(source=s.analytics, format="md", id="say-analytics"),
+        h.text(source=s / "analytics", format="md", id="say-analytics"),
         pin_tile("analytics", "分析引言"),
-        band(h.canvas(source=s.trend, url=CHART_URL, id="chart-trend"), rows="260px", id="band-trend"),
+        band(h.canvas(source=s / "trend", url=CHART_URL, id="chart-trend"), rows="260px", id="band-trend"),
         band(
-            h.canvas(source=s.radar_rd, url=CHART_URL, id="chart-rd"),
-            h.canvas(source=s.radar_mkt, url=CHART_URL, id="chart-mkt"),
-            h.canvas(source=s.radar_ops, url=CHART_URL, id="chart-ops"),
+            h.canvas(source=s / "radar_rd", url=CHART_URL, id="chart-rd"),
+            h.canvas(source=s / "radar_mkt", url=CHART_URL, id="chart-mkt"),
+            h.canvas(source=s / "radar_ops", url=CHART_URL, id="chart-ops"),
             rows="340px",
             columns="repeat(3, minmax(0, 1fr))",
             id="band-radar",
         ),
-        h.text(source=s.summary, format="md", id="say-summary"),
-        h.frame(source=s.review_form, id="review-here"),
-        h.text(source=s.say_car, format="md", id="say-car"),
-        h.canvas(source=s.intro_car, url=SPLAT_URL, width="100%", height="460px", id="car"),
-        h.text(source=s.say_shoe, format="md", id="say-shoe"),
-        h.canvas(source=s.intro_shoe, url=VIEWER_URL, width="100%", height="420px", id="shoe"),
-        h.text(source=s.say_patch, format="md", id="say-patch"),
-        h.canvas(source=s.patch_code, url=EDITOR_URL, width="100%", height="280px", id="editor"),
-        h.text(source=s.say_graph, format="md", id="say-graph"),
+        h.text(source=s / "summary", format="md", id="say-summary"),
+        h.frame(source=s / "review_form", id="review-here"),
+        h.text(source=s / "say_car", format="md", id="say-car"),
+        h.canvas(source=s / "intro_car", url=SPLAT_URL, width="100%", height="460px", id="car"),
+        h.text(source=s / "say_shoe", format="md", id="say-shoe"),
+        h.canvas(source=s / "intro_shoe", url=VIEWER_URL, width="100%", height="420px", id="shoe"),
+        h.text(source=s / "say_patch", format="md", id="say-patch"),
+        h.canvas(source=s / "patch_code", url=EDITOR_URL, width="100%", height="280px", id="editor"),
+        h.text(source=s / "say_graph", format="md", id="say-graph"),
         grid={"gap": "10px"},
         id=ROW_ID,
     )
@@ -417,7 +383,7 @@ def review_row(key: str, initial: Any, name: str, dept: str, avg: str, note: str
     )
 
 
-def review_form(s: Demo) -> Accrete:
+def review_form(s: Slots) -> Accrete:
     """表（行从槽里来）与表单（loom 能打包的那些字段）。
 
     两半都在这里，因为它们合不成一个：`loom` 靠遍历自己的静态子节点认领字段（`hooks.rs`、`collect`），
@@ -436,7 +402,7 @@ def review_form(s: Demo) -> Accrete:
             h.tiles(
                 fields=REVIEW_FIELDS,
                 header={"selector": "review-head"},
-                source=s.review_rows,
+                source=s / "review_rows",
                 id="review-table",
             ),
             h.frame(
@@ -457,7 +423,7 @@ def review_form(s: Demo) -> Accrete:
             grid={"grid-template-rows": "auto auto auto", "gap": "8px"},
             id="review-body",
         ),
-        sink=s.review,
+        sink=s / "review",
         submit=["enter", "button"],
         id="review-form",
     )
@@ -501,86 +467,86 @@ def type_out(run: Run, slot: Slot, text: str) -> None:
         hold(run, settings.pace)
 
 
-def grow(run: Run, s: Demo, label: str) -> None:
+def grow(run: Run, s: Slots, label: str) -> None:
     """把到场到现在为止的快照推出去 —— 图随流一起长大。
     """
     ids = next((ids for name, ids in scene.GRAPH_REVEAL if name == label), ())
     if not ids:
         return
     run.revealed.update(ids)
-    s.graph.set(payload(scene.graph_payload(run.revealed)))
+    (s / "graph").set(payload(scene.graph_payload(run.revealed)))
 
 
-def beat_row(ctx: Context, run: Run, s: Demo) -> None:
+def beat_row(ctx: Context, run: Run, s: Slots) -> None:
     """那一行、它将被写进去的六个文本槽，和图的第一个快照。
     """
     with ctx.turn():  # 盒子与它空着的几段一起到场，读者看得见
-        s.stream.append(row(s))
-        for slot in (s.analytics, s.summary, s.say_car, s.say_shoe, s.say_patch, s.say_graph):
+        (s / "stream").append(row(s))
+        for slot in (s / "analytics", s / "summary", s / "say_car", s / "say_shoe", s / "say_patch", s / "say_graph"):
             slot.set(h.text(""))  # 追加需要一个能装东西的节点
-        s.graph.set(payload(scene.graph_payload(run.revealed)))
+        (s / "graph").set(payload(scene.graph_payload(run.revealed)))
 
 
-def beat_analytics(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.analytics, scene.ANALYTICS)
+def beat_analytics(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "analytics", scene.ANALYTICS)
 
 
-def beat_charts(ctx: Context, run: Run, s: Demo) -> None:
+def beat_charts(ctx: Context, run: Run, s: Slots) -> None:
     """一帧里四份 spec：折线与三个雷达填满各自那一条。
     """
     with ctx.turn():
         for name, spec in (("trend", scene.TREND), *scene.RADARS.items()):
-            getattr(s, name).set(payload(spec))
+            (s / name).set(payload(spec))
 
 
-def beat_days(ctx: Context, run: Run, s: Demo) -> None:
+def beat_days(ctx: Context, run: Run, s: Slots) -> None:
     """一天一帧，每帧三次追加 —— 折线长到三十天，读者一路看着。
     """
     for day, *scores in scene.TAIL_DAYS:
         hold(run, settings.day)
         with ctx.turn():
             for dept, avg in zip(scene.DEPTS, scores):
-                s.trend.patch(TREND_DATA, {"day": day, "avg": avg, "dept": dept}, op="append")
+                (s / "trend").patch(TREND_DATA, {"day": day, "avg": avg, "dept": dept}, op="append")
 
 
-def beat_summary(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.summary, scene.SUMMARY)
+def beat_summary(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "summary", scene.SUMMARY)
 
 
-def beat_review(ctx: Context, run: Run, s: Demo) -> None:
+def beat_review(ctx: Context, run: Run, s: Slots) -> None:
     with ctx.turn():  # 表一次到齐：它的 frame 和三行一起
-        s.review_form.set(review_form(s))
+        (s / "review_form").set(review_form(s))
         for key, _kind, initial, *cells in scene.REVIEW:
-            s.review_rows.append(review_row(key, initial, *cells))
+            (s / "review_rows").append(review_row(key, initial, *cells))
 
 
-def beat_car(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.say_car, scene.SAY_CAR)
-    s.intro_car.set(payload({"assets": {"scene": TRUCK_URL}, "camera": scene.TRUCK_CAMERA}))
+def beat_car(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "say_car", scene.SAY_CAR)
+    (s / "intro_car").set(payload({"assets": {"scene": TRUCK_URL}, "camera": scene.TRUCK_CAMERA}))
 
 
-def beat_shoe(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.say_shoe, scene.SAY_SHOE)
-    s.intro_shoe.set(payload({"assets": {"shoe": SHOE_URL}}))
+def beat_shoe(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "say_shoe", scene.SAY_SHOE)
+    (s / "intro_shoe").set(payload({"assets": {"shoe": SHOE_URL}}))
 
 
-def beat_editor(ctx: Context, run: Run, s: Demo) -> None:
+def beat_editor(ctx: Context, run: Run, s: Slots) -> None:
     """代码和两个模型一样是参数：Monaco 在载荷到达时才取。
     """
-    type_out(run, s.say_patch, scene.PATCH)
-    s.patch_code.set(payload({"code": scene.PATCH_CODE, "lang": "rust", "event": str(SAVE)}))
+    type_out(run, s / "say_patch", scene.PATCH)
+    (s / "patch_code").set(payload({"code": scene.PATCH_CODE, "lang": "rust", "event": str(SAVE)}))
 
 
-def beat_graph(ctx: Context, run: Run, s: Demo) -> None:
-    type_out(run, s.say_graph, scene.SAY_GRAPH)
+def beat_graph(ctx: Context, run: Run, s: Slots) -> None:
+    type_out(run, s / "say_graph", scene.SAY_GRAPH)
 
 
-def beat_focus(ctx: Context, run: Run, s: Demo) -> None:
+def beat_focus(ctx: Context, run: Run, s: Slots) -> None:
     """相当于一次搜索落点：相机飞向一簇，别的东西不离开。
     """
     snapshot = scene.graph_payload(run.revealed)
     snapshot["focus"] = {"ids": ["accrete", "content", "transport"], "seq": 1}
-    s.graph.set(payload(snapshot))
+    (s / "graph").set(payload(snapshot))
 
 
 BEATS: tuple[tuple[str, Callable[[Context, Run, Demo], None]], ...] = (
@@ -610,23 +576,23 @@ def play(ctx: Context) -> None:
     """剧本，一拍一拍地走。故意是同步的：线程是调用方的选择。
     """
     run = state(ctx)
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     try:
         for index, (label, step) in enumerate(BEATS, start=1):
             run.resume.wait()  # 暂停的剧本不会开始下一拍
             run.beat, run.label = index, label
-            s.beat.set(h.text(f"{index}/{len(BEATS)} · {label}"))
+            (s / "beat").set(h.text(f"{index}/{len(BEATS)} · {label}"))
             step(ctx, run, s)
             grow(run, s, label)
             hold(run, settings.hold)
     except Exception as failure:  # 演示里的缺陷是屏幕上的一行字，不是一条死掉的线程
         run.phase = "done"
-        s.control.set(control("↻ 重播"))
-        s.beat.set(h.text(f"出错：{type(failure).__name__} · {failure}"))
+        (s / "control").set(control("↻ 重播"))
+        (s / "beat").set(h.text(f"出错：{type(failure).__name__} · {failure}"))
         return
     run.phase = "done"
-    s.control.set(control("↻ 重播"))
-    s.beat.set(h.text("完 · 折线 30 天，复核可提交，编辑器可回传"))
+    (s / "control").set(control("↻ 重播"))
+    (s / "beat").set(h.text("完 · 折线 30 天，复核可提交，编辑器可回传"))
 
 
 def start(ctx: Context, run: Run) -> None:
@@ -635,17 +601,17 @@ def start(ctx: Context, run: Run) -> None:
     只清播放器自己写的：那一行（它的子节点由第一拍重新种，载荷由各自的拍重新设）和表的三行。
     **读者**拖到轨道上的东西留着 —— 重播这个故事不是撤销别人钉下的东西。
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     if run.beat:
-        s.stream.remove(ROW_ID)
+        (s / "stream").remove(ROW_ID)
         for key, *_ in scene.REVIEW:
-            s.review_rows.remove(f"review-{key}")
+            (s / "review_rows").remove(f"review-{key}")
     run.phase = "playing"
     run.beat, run.label = 0, ""
     run.revealed = set(scene.GRAPH_SEED)
     run.resume.set()
-    s.control.set(control("⏸ 暂停"))
-    s.beat.set(h.text(f"0/{len(BEATS)} · 开始"))
+    (s / "control").set(control("⏸ 暂停"))
+    (s / "beat").set(h.text(f"0/{len(BEATS)} · 开始"))
     spawn(play, (ctx,))
 
 
@@ -653,20 +619,20 @@ def on_toggle(ctx: Context, frame: dict) -> None:
     """一个按钮，四种状态：播放 → 暂停 → 继续 → 重播。
     """
     run = state(ctx)
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     if run.phase in ("idle", "done"):
         start(ctx, run)
         return
     if run.phase == "playing":
         run.phase = "paused"
         run.resume.clear()
-        s.control.set(control("▶ 继续"))
-        s.beat.set(h.text(f"已暂停 · {run.beat}/{len(BEATS)} · {run.label}"))
+        (s / "control").set(control("▶ 继续"))
+        (s / "beat").set(h.text(f"已暂停 · {run.beat}/{len(BEATS)} · {run.label}"))
         return
     run.phase = "playing"
     run.resume.set()
-    s.control.set(control("⏸ 暂停"))
-    s.beat.set(h.text(f"{run.beat}/{len(BEATS)} · {run.label}"))
+    (s / "control").set(control("⏸ 暂停"))
+    (s / "beat").set(h.text(f"{run.beat}/{len(BEATS)} · {run.label}"))
 
 
 def fields(frame: dict) -> dict:
@@ -682,16 +648,16 @@ def fields(frame: dict) -> dict:
 def on_pin(ctx: Context, frame: dict) -> None:
     """一次落点落在轨道上：货物自己的 id 与 kind，写在屏幕上（ADR 0034）。
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     data = fields(frame)
     ident = data.get("id")
     if not ident:
-        s.echo.set(h.text("落点上收到一份没有 id 的货物，什么都没记"))
+        (s / "echo").set(h.text("落点上收到一份没有 id 的货物，什么都没记"))
         return
     kind = data.get("kind") or data.get("tag") or "—"
     # 这一块是数据描述出来的（载荷只有 id 与 kind），所以按数据构造：`h.node` 与 `h.frame` 是同一条
     # 构造器，只是前者读起来像"一颗 pin 是什么"，而不是"我在这里造一个 frame"。
-    s.pins.append(
+    (s / "pins").append(
         h.node(
             (
                 "frame",
@@ -700,31 +666,31 @@ def on_pin(ctx: Context, frame: dict) -> None:
             )
         )
     )
-    s.echo.set(h.text(f"落点收到 {ident}（{kind}）"))
+    (s / "echo").set(h.text(f"落点收到 {ident}（{kind}）"))
 
 
 def on_save(ctx: Context, frame: dict) -> None:
     """编辑器里按 Ctrl/Cmd+S：代码连同语言，走表单用的同一条腿。
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     data = fields(frame)
     code = data.get("code")
     if not isinstance(code, str):
-        s.echo.set(h.text("编辑器回传里没有 code，什么都没记"))
+        (s / "echo").set(h.text("编辑器回传里没有 code，什么都没记"))
         return
-    s.echo.set(h.text(f"编辑器回传 {len(code)} 字 · {data.get('lang') or '—'}"))
+    (s / "echo").set(h.text(f"编辑器回传 {len(code)} 字 · {data.get('lang') or '—'}"))
 
 
 def on_review(ctx: Context, frame: dict) -> None:
     """表单的字段，按渲染器打包的样子 —— 一行一个键。
     """
-    s: Walkthrough = slots_of(ctx)
+    s: Slots = slots_of(ctx)
     data = frame.get("data") if isinstance(frame.get("data"), dict) else {}
     if not data:
-        s.echo.set(h.text("提交到了，但没有字段：这一帧只打包表单自己的具名字段"))
+        (s / "echo").set(h.text("提交到了，但没有字段：这一帧只打包表单自己的具名字段"))
         return
     packed = ", ".join(f"{key}={value!r}" for key, value in data.items())
-    s.echo.set(h.text(f"复核已提交：{packed}"))
+    (s / "echo").set(h.text(f"复核已提交：{packed}"))
 
 
 # ---- 一个应用拿这一页做什么 ---------------------------------------------

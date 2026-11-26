@@ -243,23 +243,81 @@ def effect(fn: Callable[[], None]) -> Effect:
     return node
 
 
+# --- the adapters: a slot that owns a value ---------------------------------
+#
+# One table per connection (`ctx.data[CELLS]`), one cell per slot name — so a page may be drawn again
+# without seeding the slot back to its first value, and two handles for the same name are the same cell.
+# The three constructors below are the mechanism; `Slot.signal` / `Slot.computed` / `Slot.keyed` are the
+# same three, reached from the handle the page already holds.
+CELLS = "__cells__"
+
+
+def _cells(ctx: Any) -> dict[str, Any]:
+    """The per-connection cell table. A delivery is what a cell belongs to, so it lives in `ctx.data`."""
+    data = getattr(ctx, "data", None)
+    if not isinstance(data, dict):
+        raise RuntimeError(f"a signal needs a delivery with `ctx.data`, got {type(ctx).__name__}")
+    return data.setdefault(CELLS, {})
+
+
+def own(ctx: Any, slot: Any, value: T, **kwargs: Any) -> Signal[T]:
+    """The signal that owns `slot`: created once, seeded once, and every change is written there."""
+    cells = _cells(ctx)
+    cell = cells.get(slot.name)
+    if cell is not None:
+        if not isinstance(cell, Signal):
+            raise RuntimeError(
+                f"slot {slot.name!r} already has a {type(cell).__name__}: one cell per name"
+            )
+        return cell
+    cell = Signal(value, write=slot.set, **kwargs)
+    cells[slot.name] = cell
+    slot.set(value)  # the first value is a write like any other — the view still decides the node
+    return cell
+
+
+def mirror(ctx: Any, slot: Any, computed: Computed[Any]) -> Computed[Any]:
+    """Keep `slot` equal to `computed`, once now and once per change. Declared once per name."""
+    cells = _cells(ctx)
+    existing = cells.get(slot.name)
+    if existing is not None:
+        if not isinstance(existing, Computed):
+            raise RuntimeError(
+                f"slot {slot.name!r} already has a {type(existing).__name__}: one cell per name"
+            )
+        return existing
+    cells[slot.name] = computed
+    effect(lambda: slot.set(computed.value))
+    return computed
+
+
+def keep(ctx: Any, slot: Any, rows: Any, render: Callable[[Any, str], Any]) -> Any:
+    """Keep the list slot `slot` equal to `rows`, by id. Declared once per name."""
+    cells = _cells(ctx)
+    existing = cells.get(slot.name)
+    if existing is not None:
+        if not isinstance(existing, Signal):
+            raise RuntimeError(
+                f"slot {slot.name!r} already has a {type(existing).__name__}: one cell per name"
+            )
+        return existing
+    cells[slot.name] = rows
+    _keyed_effect(slot, rows, render)
+    return rows
+
+
 def bound(ctx: Any, name: str, value: T, **kwargs: Any) -> Signal[T]:
     """A signal that owns the slot `name`: every change is written there, and the first value seeds it.
 
     The write is `ctx.slot(name).set(value)` — the app's `view` still decides what a value looks like,
     so a page keeps rendering `h.text(source=slots.<same name>)` exactly as before.
     """
-    slot = ctx.slot(name)
-    signal: Signal[T] = Signal(value, write=slot.set, **kwargs)
-    slot.set(value)
-    return signal
+    return own(ctx, ctx.slot(name), value, **kwargs)
 
 
 def into(ctx: Any, name: str, computed: Computed[Any]) -> Computed[Any]:
     """Mirror `computed` onto the slot `name`, once now and once per change."""
-    slot = ctx.slot(name)
-    effect(lambda: slot.set(computed.value))
-    return computed
+    return mirror(ctx, ctx.slot(name), computed)
 
 
 def keyed(
@@ -267,7 +325,7 @@ def keyed(
     name: str,
     rows: Any,  # a `Signal[[(id, item), ...]]`, or a `Computed` of one — anything with `.value`
     render: Callable[[Any, str], Any],
-) -> Effect:
+) -> Any:
     """Keep the list slot `name` equal to `rows`, by id: append what is new, remove what is gone.
 
     `rows` is `[(id, item), ...]` in the order to show, and `render(item, row_id)` must build the row
@@ -281,7 +339,11 @@ def keyed(
     is counted with the row lifted out (fluxen ADR 0005), so placing row `i` is `-(i + 1)`: `-1` is the
     head, and by then everything wanted before it is already there in order.
     """
-    slot = ctx.slot(name)
+    return keep(ctx, ctx.slot(name), rows, render)
+
+
+def _keyed_effect(slot: Any, rows: Any, render: Callable[[Any, str], Any]) -> Effect:
+    """The effect behind `keyed`: one pass adds, removes and reorders; `shown` is its own ledger."""
     shown: list[str] = []
 
     def sync() -> None:

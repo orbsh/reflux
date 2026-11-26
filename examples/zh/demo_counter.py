@@ -1,47 +1,34 @@
 """计数器：最常见的那种页面，摆在这里是为了把 API 本身看清楚。
 
 前面几页各讲一件事（词表、走查、对话）；这一页没有内容上的野心 —— 一个数、三个按钮、一个输入框、
-一小段历史 —— 所以它写出来的每一行都只是 API 的用法。要读的只有五样：
+一小段历史 —— 所以它写出来的每一行都只是 API 的用法。要读的只有这几样：
 
 - `@app.page(...)`：装饰器写在这个文件里。它写在 `register(app)` 内部，因为页面模块不能 import
   应用（`python3 -m examples.zh.demo_app` 时应用模块以 `__main__` 跑），所以拿到的 `app` 从参数来，
   装饰器照用。
 - `h.*`：页面的词表。节点名就是 wire 的 `type`，关键字就是那个节点的字段。
-- **闭包 sink**：三个按钮的处理器写在按钮旁边，拿到的是事件的值，槽是它闭住的。一次请求一次回应
+- **名字用 `/` 拼，动词用 `.`**：`ctx.slot / "counter" / "count"` 是一条槽的名字，`slot.set(...)`
+  是它的动词 —— 名字是构造、动词是成员，两件事不再共用一个点。
+- **闭包 sink**：三个按钮的处理器写在按钮旁边，拿到的是事件的值，句柄是它闭住的。一次请求一次回应
   本来就该这样写。
 - **状态跟着连接**：`ctx.data` 是这条连接的，所以两个标签页各数各的，刷新即归零 —— 这个页面没有
   数据库，也不需要。
-- **信号**（`reflux.signals`）：值声明一次，槽跟着它走；处理器改值，不再自己写槽。这一页是那层的
-  最短用法 —— `bound` 让一个信号拥有一个槽，`Computed` 把说明从步长算出来，`keyed` 把历史按 id
-  对齐，`batch()` 让一次按下只写一轮。原来散在三处的 `slots.hint.set(...)`、那段"只种一次"的
-  守卫，以及那本 `State.ids` 账，都不在了。
+- **槽自己带值**（`reflux.signals`）：`.signal(0)` 给一条槽一个细胞，之后读写都走 `.value`；
+  `.computed(fn)` 是只读的派生；`.keyed(row)` 是列表槽按 id 对齐。细胞每个连接一份、每个名字一个，
+  所以页面重画不会把值推回起点。`step` 与 `refusal` 没有细胞 —— 它们不上线，只是本地的中间量。
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from reflux import Context, signals
 from reflux.sdk import h
-from reflux.slots import Slot
 
-__all__ = ["HISTORY", "PAGE", "State", "counter_of", "register", "state", "step_line"]
+__all__ = ["HISTORY", "PAGE", "State", "register", "state", "step_line"]
 
 PAGE = "/counter"
 HISTORY = 6  # 历史最多留几条，超了删最早的
-
-
-class _Counter(Protocol):
-    """`counter` 这一族：当前值、步长说明、历史。"""
-
-    count: Slot
-    hint: Slot
-    history: Slot
-
-
-def counter_of(ctx: Context) -> _Counter:
-    """这一页的槽，带类型 —— `ctx.slot("counter")` 是同一个东西，只是没有静态检查。"""
-    return cast(_Counter, ctx.slot("counter"))
 
 
 def step_line(step: int) -> str:
@@ -57,17 +44,18 @@ def _row(label: str, row_id: str) -> Any:
 class State:
     """一条连接自己的计数。两个标签页 = 两个 State。
 
-    三个信号是存储：`count`（带槽）、`step`、`refusal`（"上一次输入不合法"这一阵子的事实）；
-    `hint` 由后两者算出，`history` 是 `[(id, 文案)]` 的一张表，槽由 `keyed` 对齐。
+    三条槽各带一个细胞（`count` 的、`hint` 的、`history` 的），细胞按名字登记在连接上，所以这里
+    重画多少次都拿回同一个。`step` 与 `refusal` 是不上线的两个信号 —— 它们没有这层登记，整个 State
+    因此仍要挂在 `ctx.data` 上（见 `state()`）。
     """
 
     def __init__(self, ctx: Context) -> None:
-        self.count = signals.bound(ctx, "counter.count", 0)
+        counter = ctx.slot / "counter"
         self.step = signals.Signal(1)
         self.refusal = signals.Signal("")
-        self.hint = signals.into(ctx, "counter.hint", signals.Computed(self._hint))
-        self.history = signals.Signal([])
-        signals.keyed(ctx, "counter.history", self.history, _row)
+        self.count = (counter / "count").signal(0)
+        self.hint = (counter / "hint").computed(self._hint)
+        self.history = (counter / "history").keyed(_row)
         self.seq = 0  # 行的身份由数据给：`log-1`、`log-2`……
 
     def _hint(self) -> str:
@@ -81,9 +69,12 @@ class State:
 
 
 def state(ctx: Context) -> State:
-    """这条连接的计数；第一次进来时建一个（`ctx.data` 随连接生，随连接死）。"""
-    # 不能写 `setdefault(..., State(ctx))`：那个写法每次绘制都会造一个 State 再扔掉，而 State 里的
-    # `bound` 信号在构造时就写第一个值 —— 被扔掉的那一个会把读者刚改好的数推回 0。
+    """这条连接的计数；第一次进来时建一个（`ctx.data` 随连接生，随连接死）。
+
+    槽的细胞是幂等的，可是 `step` 与 `refusal` 不是 —— 每次绘制造一个 State 再扔掉，这两个会回到
+    初值，所以整个 State 照旧缓存。
+    """
+    # 不能写 `setdefault(..., State(ctx))`：那个写法每次绘制都会造一个 State 再扔掉。
     current = ctx.data.get("counter")
     if current is None:
         current = ctx.data["counter"] = State(ctx)
@@ -91,17 +82,20 @@ def state(ctx: Context) -> State:
 
 
 def register(app: Any) -> None:
-    """把这一页挂到应用上：路由（装饰器就写在这里），外加三个按钮与一个输入框的落点。
+    """把这一页挂到应用上：路由（装饰器就写在这里）、两个视图、三个名字。
 
     落点全是闭包，所以它们不在应用的表里 —— 画这一页的时候才存在，页面一换就没了。这也是为什么
     这里只需要 `register`：没有名字要提前登记，除了路由本身。
     """
 
-    # 槽在 wire 上放的是节点；可这两个槽放的就是一个值 —— 数字、一行说明。所以"这个值长什么样"
-    # 在这里说一次，之后有人写值：`slots.count.set(3)`。id 与 variant 只写这一个地方。
-    # 写成节点也照样可以（`slots.count.set(h.text("3"))`）—— 已经是节点的值不再经过视图。
-    app.view("counter.count", lambda value: h.text(str(value), variant="heading-1", id="counter-value"))
-    app.view("counter.hint", lambda value: h.text(value, variant="muted", id="counter-hint"))
+    # 槽在 wire 上放的是节点；可这两条槽放的就是一个值 —— 数字、一行说明。所以"这个值长什么样"
+    # 在这里说一次，之后有人写值：`current.count.value = 3`。id 与 variant 只写这一个地方。
+    # 写成节点也照样可以（`slot.set(h.text("3"))`）—— 已经是节点的值不再经过视图。
+    counter = app.slot / "counter"
+    (counter / "count").view(
+        lambda value: h.text(str(value), variant="heading-1", id="counter-value")
+    )
+    (counter / "hint").view(lambda value: h.text(value, variant="muted", id="counter-hint"))
 
     # 名字在这里先声明一次：`/status` 与 `inspect` 列的是"用过的名字"，不该等人打开这一页才有。
     for name in ("count", "hint", "history"):
@@ -110,7 +104,6 @@ def register(app: Any) -> None:
     @app.page(PAGE, title="计数器")
     def counter_page(ctx: Context, match) -> None:
         """一次计数页的绘制：值从连接的 State 来，按钮的处理器写在按钮下面。"""
-        slots = counter_of(ctx)
         current = state(ctx)
 
         def change(by: int) -> None:
@@ -150,8 +143,9 @@ def register(app: Any) -> None:
                     variant="muted",
                     id="counter-blurb",
                 ),
-                h.text(source=slots.count, id="counter-slot"),
-                h.text(source=slots.hint, id="counter-hint-slot"),
+                # 读槽拿的就是上面那几个句柄：名字写过一次，这里不再写第二遍。
+                h.text(source=current.count, id="counter-slot"),
+                h.text(source=current.hint, id="counter-hint-slot"),
                 h.frame(
                     # 一个 `button` 住在 `loom` 里，按下的时机由 loom 的 `submit` 命名 —— 所以每次
                     # 按下都是一个 loom 的提交，而不是按钮自己会说话（ADR 0032 §3）。
@@ -179,7 +173,7 @@ def register(app: Any) -> None:
                 ),
                 h.frame(
                     h.text("历史", variant="heading-3"),
-                    h.tiles(source=slots.history, id="counter-history"),
+                    h.tiles(source=current.history, id="counter-history"),
                     grid={"grid-auto-rows": "auto", "gap": "6px", "align-content": "start"},
                     variant="card",
                     id="counter-log",

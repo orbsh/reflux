@@ -69,7 +69,7 @@ def login_screen(ctx, state):             # state: "login" | "signup" | "refused
 def settings(ctx):
     return h.text(f"你好，{ctx.session.get('nick') or ctx.user}")
 
-@app.on(app.slot.go.secret, auth=True)    # 匿名发来的这个事件，处理器看不到它
+@app.on(app.slot / "go" / "secret", auth=True)    # 匿名发来的这个事件，处理器看不到它
 def secret(ctx):
     ...
 ```

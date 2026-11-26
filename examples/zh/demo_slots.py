@@ -1,108 +1,43 @@
-"""参考应用的槽名：一个 Protocol、一个取值函数，和导航的四个地址。
+"""参考应用的槽名：一个类型别名、两个取值函数，和导航的六个地址。
 
 这里只有**名字**：`@app.on` 那一类落点（身份在页面里、跨页存在、或一个槽有多个来源）。页面内部的
 请求-回应不在这里 —— 那些写成闭包，`sink=add_row`，写在发出它的按钮旁边，框架在绘制时给它起名。
 
-槽名在 wire 上是个字符串（框架的 `slots.py`），而框架的表对任何被问到的名字都给一个 `Slot` 句柄 ——
-`Slots.__getattr__ -> Slot`，没有词表。所以页面需要的检查只能来自一个把它们写出来的 Protocol，这个
-模块就是那份清单：应用说的所有名字在一处，以及页面拿到它们的两条路。
+槽名在 wire 上是个字符串（框架的 `slots.py`），名字由 `/` 拼出来：`ctx.slot / "echo"`。点号在句柄上
+只表示动词与细胞（`set`、`append`、`value`……），不表示名字 —— `Slot.__getattr__` 对别的名字直接拒绝。
+所以这个名字空间没有第二份清单：`ctx.slot / "echo"` 与 `app.slot / "echo"` 是同一条槽，拼错一处在运行
+期才看得见。这个模块留两件事：
 
     slots_of(ctx)        页面这一侧的表，带投递 —— 写入走它（`set`、`append`）
     table(app)           应用的表，不带投递 —— 地址走它（`sink=`、`source=`、`@app.on(...)`）
 
-第二条就是 `@app.on` 能有补全的原因：`App.slot` 的类型是 `Slots`，它的 `__getattr__` 接受任何名字，
-于是那里的拼写错误会注册一个永远没人发的处理器，而且悄无声息。把表取一次、标上类型，就把检查移到
-写名字的那一行。
+两个返回的都是框架的 `Slots`；`DemoSlots` 是这个应用给它的别名，读起来仍是"这个应用的槽"。
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 from reflux.application import Context
-from reflux.slots import Slot
+from reflux.slots import Slot, Slots
 
 __all__ = ["DemoSlots", "GO", "GO_ABOUT", "GO_CHAT", "GO_COUNTER", "GO_DEMO", "GO_SETTINGS", "GO_HOME", "slots_of", "table"]
 
-
-class _Row(Protocol):
-    """`row` 这一族。`remove` 在 `Slot` 上是动词，所以那个名字要下标访问。"""
-
-    def __getitem__(self, name: str) -> Slot: ...
-
-
-class _Vault(Protocol):
-    vault: Slot
-    secret: Slot
-
-
-class _Chat(Protocol):
-    """对话页的两条上行：输入框的发送，和结束一次回答的停止。"""
-
-    send: Slot
-    stop: Slot
-
-
-class _Go(Protocol):
-    """导航的六个去处 —— frame 的 `dest` 就是名字。
-    """
-
-    home: Slot
-    about: Slot
-    demo: Slot
-    chat: Slot
-    counter: Slot
-    settings: Slot
-
-
-class _Settings(Protocol):
-    """设置页的唯一一行回答：哪一条被收了，哪一条没有。
-    """
-
-    note: Slot
-
-
-class DemoSlots(Protocol):
-    """参考应用的槽，给编辑器看的 —— 运行时只看见名字。
-    
-        两半：页面**写**的那些（`echo`、`rows`…… 走 `slots_of(ctx)`，带投递），和页面**寻址**的
-        那些（`row.remove`、`row.archive`、`go.home`…… 走 `table(app)`，不带投递）。一个协议，因为它们是
-        一个名字空间：一帧上行的 sink 和回答它的处理器就是同一个名字。
-    """
-
-    echo: Slot  # 输入框最后带来的是什么
-    rows: Slot  # tiles 节点读的那个列表
-    archived: Slot  # 最近一次落点归档了什么 —— 文本槽，由落点处理器写
-    secret: Slot  # 只有已登录的点击才写；每次匿名绘制都清掉
-    routes: Slot  # 外壳的读槽 —— 页面写在这里
-
-    messages: Slot  # 对话页的记录 —— 列表槽，一条气泡追加一次
-    status: Slot  # 对话页的状态行
-
-    settings: _Settings  # 设置页的答复行
-
-    row: _Row
-    vault: _Vault
-    go: _Go
-    chat: _Chat
-
-    def __call__(self, path: str) -> Slot: ...  # `reflux:login`、`reflux:logout`、`reflux:auth`
-
-    #（登录表单的答复是框架的：落在保留的 `auth` 区）
+DemoSlots = Slots
 
 
 def slots_of(ctx: Context) -> DemoSlots:
     """参考应用这一次投递的槽 —— 页面写东西用的那些名字。"""
-    return ctx.slot  # type: ignore[return-value]
+    return ctx.slot
 
 
 def table(app: Any) -> DemoSlots:
-    """应用自己的表，带上类型 —— 它寻址的那些名字：`@app.on(slots.row["remove"])`。
+    """应用自己的表 —— 它寻址的那些名字：`@app.on(app.slot / "row" / "remove")`。
 
     `app` 写成 `Any` 是这里不导入框架 `App` 的代价：这个模块是名字，导入 `App` 只会把名字绑死在
     某一个应用的形状上，什么也没换来。
     """
-    return app.slot  # type: ignore[return-value]
+    return app.slot
 
 
 # 导航表单把客户端送去哪里。frame 的 `dest` 就是目标的名字。
