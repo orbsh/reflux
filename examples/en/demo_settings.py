@@ -129,22 +129,10 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# All ten colour tokens use the same **disc**: its face holds two of oklch's degrees of freedom — the angle is
-# the hue, the radius the chroma, the centre is grey — and the third (lightness) does not fit on a face, so it
-# is pinned per token to that token's own default. What the disc packs is the `L C H` triple, so the member,
-# the validators and the browser never learn that a disc was involved.
-LIGHT: dict[str, float] = {
-    "fg": 0.18,
-    "bg": 1.0,
-    "surface": 0.965,
-    "accent": 0.7,
-    "primary": 0.98,
-    "secondary": 0.93,
-    "disabled": 0.6,
-    "warn": 0.84,
-    "error": 0.63,
-    "border-color": 0.93,  # its default is `var(--secondary)`, so it sits at the same lightness
-}
+# All ten colour tokens share one **swatch**: the row holds a colour square and its `oklch()` literal, and a
+# hover opens three sliders (L, C, H, each with a number box). What the field packs is the `L C H` triple, so
+# the member, the validators and the browser never learn that a control was involved. Lightness is one of the
+# three now — there is no per-token constant pinning it any more.
 
 WORDS_SLOT = "palettes.words"
 
@@ -342,14 +330,13 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     The preview reads the variable itself (`background: var(--fg)`), so it shows the colour in force at that
     moment — no second copy of the state. A field's `tag` is the member name; the group's outlet packs by it.
 
-    Every colour is picked on the same disc (angle = hue, radius = chroma, the centre is grey) and the border
-    style is a word to click — nothing here is typed. Both are fields whose exit is the group they sit in, so
-    one click is one `change`.
+    A colour is a swatch with a copyable literal, and a hover opens the three sliders (L, C, H); the border
+    style is a word to click. Both are fields whose exit is the group they sit in, so one change is one
+    `change` — a drag coalesces on the field's own window.
     """
     if kind == "color":
-        control: Accrete = h.disc(
+        control: Accrete = h.color(
             tag=name,
-            light=LIGHT[name],
             source=Source(default=value),
             id=f"cfg-{name}",
         )

@@ -156,13 +156,12 @@ NODES: dict[str, dict] = {
         "source": {"slot": "opts", "default": "a"},
     },
     "text": text("text"),
-    # A disc in the oklch plane (fluxen ADR 0048): the angle picks the hue, the radius the chroma, the
-    # `attrs.light` pins the term a face cannot show, and what it packs is the written-out `L C H` triple a
-    # colour member takes.
-    "disc": {
-        "type": "disc",
-        "tag": "gate.disc",
-        "attrs": {"light": 0.7},
+    # A colour field (fluxen ADR 0052): a swatch and its literal in the row, three sliders behind them, and
+    # what it packs is the written-out `L C H` triple a colour member takes. All three terms are editable, so
+    # there is no `attrs.light` pinning one of them any more.
+    "color": {
+        "type": "color",
+        "tag": "gate.color",
         "source": {"default": "0.7 0.12 200"},
     },
 }

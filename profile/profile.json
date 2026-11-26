@@ -201,7 +201,7 @@
       "channels": {},
       "why": "the renderer instantiates it by name (a substitution node), not something a producer draws"
     },
-    "disc": {
+    "color": {
       "expose": true,
       "positional": null,
       "children": false,

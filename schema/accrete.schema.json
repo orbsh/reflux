@@ -147,6 +147,79 @@
       },
       "type": "object"
     },
+    "Color": {
+      "additionalProperties": false,
+      "description": "A colour field: what it packs is the whole `L C H` triple a colour member reads, so the picker and the\nvalue stay one thing, and nothing downstream has to know a colour picker was involved (ADR 0052).",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorAttr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "emit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Emit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The field's own clock (ADR 0032 §8). A drag is continuous, so one window is one frame rather than one\nframe per pointer event; absent = `{debounce: 250}`, the same as a text field."
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Source"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The current value, in the triple spelling above."
+        },
+        "tag": {
+          "description": "The field's name inside an enclosing loom (same rule as `input`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ColorAttr": {
+      "description": "The usual attribute surface — and nothing else: there is no pinned term left to configure.",
+      "properties": {
+        "class": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Debounce": {
       "additionalProperties": false,
       "description": "`{debounce: ms}` — the change reaches the loom once the field has been quiet that long, carrying the\nlast value. The right shape for a search box: the reader stops, the frame leaves.",
@@ -180,76 +253,6 @@
         "R"
       ],
       "type": "string"
-    },
-    "Disc": {
-      "additionalProperties": false,
-      "description": "A disc in the `oklch` plane: a field whose angle is the hue and whose radius is the chroma. One term\n(`attrs.light`) is pinned, so what it packs is the whole `L C H` triple a colour token reads — the\npicker and the value stay one thing, and nothing downstream has to know that a disc was involved.",
-      "properties": {
-        "attrs": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DiscAttr"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Source"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The current value, in the triple spelling above."
-        },
-        "tag": {
-          "description": "The field's name inside an enclosing loom (same rule as `input`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "DiscAttr": {
-      "description": "What the disc does not show: lightness, and the usual attribute surface.",
-      "properties": {
-        "class": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "light": {
-          "description": "Lightness the disc keeps (0–1). The face is drawn at this lightness, so the disc is a slice of the\nspace, not the whole of it.",
-          "format": "double",
-          "type": "number"
-        },
-        "selector": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "light"
-      ],
-      "type": "object"
     },
     "Draggable": {
       "additionalProperties": false,
@@ -1904,10 +1907,10 @@
       "type": "object"
     },
     {
-      "$ref": "#/$defs/Disc",
+      "$ref": "#/$defs/Color",
       "properties": {
         "type": {
-          "const": "disc",
+          "const": "color",
           "type": "string"
         }
       },

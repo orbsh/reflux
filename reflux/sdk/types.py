@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "Debounce", "Dir", "Direction", "DiscAttr", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SelectAttr", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Disc", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "ColorAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "JsType", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SelectAttr", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "Color", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -41,6 +41,11 @@ class ClassAttr(BaseModel):
     selector: str | None = None
 
 
+class ColorAttr(BaseModel):
+    class_: list[str] | None = Field(None, alias='class')
+    selector: str | None = None
+
+
 class Debounce(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -60,15 +65,6 @@ class Direction(Enum):
     D = 'D'
     L = 'L'
     R = 'R'
-
-
-class DiscAttr(BaseModel):
-    class_: list[str] | None = Field(None, alias='class')
-    light: float = Field(
-        ...,
-        description='Lightness the disc keeps (0–1). The face is drawn at this lightness, so the disc is a slice of the\nspace, not the whole of it.',
-    )
-    selector: str | None = None
 
 
 class Draggable(BaseModel):
@@ -318,22 +314,6 @@ class Canvas(BaseModel):
     type: Literal['canvas'] = 'canvas'
 
 
-class Disc(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    attrs: DiscAttr | None = None
-    id: str | None = None
-    source: Source | None = Field(
-        None, description='The current value, in the triple spelling above.'
-    )
-    tag: str | None = Field(
-        None,
-        description="The field's name inside an enclosing loom (same rule as `input`).",
-    )
-    type: Literal['disc'] = 'disc'
-
-
 class Emit(RootModel[Debounce | Throttle]):
     root: Debounce | Throttle = Field(
         ...,
@@ -527,6 +507,26 @@ class TilesAttr(BaseModel):
     )
 
 
+class Color(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    attrs: ColorAttr | None = None
+    emit: Emit | None = Field(
+        None,
+        description="The field's own clock (ADR 0032 §8). A drag is continuous, so one window is one frame rather than one\nframe per pointer event; absent = `{debounce: 250}`, the same as a text field.",
+    )
+    id: str | None = None
+    source: Source | None = Field(
+        None, description='The current value, in the triple spelling above.'
+    )
+    tag: str | None = Field(
+        None,
+        description="The field's name inside an enclosing loom (same rule as `input`).",
+    )
+    type: Literal['color'] = 'color'
+
+
 class ForceGraph(BaseModel):
     attrs: SizeAttr | None = None
     id: str | None = None
@@ -622,15 +622,15 @@ class Tiles(BaseModel):
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Disc | Text | Stamp], Field(discriminator='type')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Color | Text | Stamp], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
 Accept.model_rebuild()
 ButtonAttr.model_rebuild()
 ClassAttr.model_rebuild()
+ColorAttr.model_rebuild()
 Debounce.model_rebuild()
-DiscAttr.model_rebuild()
 Draggable.model_rebuild()
 FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
@@ -648,7 +648,6 @@ Throttle.model_rebuild()
 Window.model_rebuild()
 Button.model_rebuild()
 Canvas.model_rebuild()
-Disc.model_rebuild()
 ForceGraphStyle.model_rebuild()
 Image.model_rebuild()
 Input.model_rebuild()
@@ -657,6 +656,7 @@ PanelAttr.model_rebuild()
 Path.model_rebuild()
 Text.model_rebuild()
 TilesAttr.model_rebuild()
+Color.model_rebuild()
 ForceGraph.model_rebuild()
 Entry.model_rebuild()
 Frame.model_rebuild()

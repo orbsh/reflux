@@ -217,7 +217,7 @@ class TestThePage(unittest.TestCase):
         tags = [
             node.get("tag")
             for node in self.walk(self.drawn())
-            if node.get("type") in ("input", "select", "disc")  # picked, not typed: discs, words, sizes
+            if node.get("type") in ("input", "select", "color")  # picked, not typed: colours, words, sizes
         ]
         self.assertEqual(sorted(tags), sorted(settings.MEMBERS))
 

@@ -5,8 +5,8 @@ The unit tests (`tests/test_settings.py`) own the server's half: unpacking the g
 ranges, the throttled write, and the three tables agreeing. What only a browser can answer is the half
 ADR 0001 decided: that `scope: both` writes locally, that fluxen mirrors the members onto the document
 root as `data-*`, that `TOKENS` in `www/static/reflux.js` turns those into `:root` custom properties
-(colours composed as `oklch` from `L C H`), that the disc's face sets and shows the choice — its angle and
-radius are two of oklch's three terms, and the shape of the click is what the renderer owns — and that the
+(colours composed as `oklch` from `L C H`), that the colour field's panel sets and shows the choice — the three
+sliders are oklch's three terms, and the shape of that control is what the renderer owns — and that the
 renderer's `sketch` member draws borders.
 
 Controls are addressed by position within their kind (the renderer does not put a field node's `id` on
@@ -36,7 +36,7 @@ from examples.zh import demo_settings  # noqa: E402
 PAGE = "/settings"
 
 # What the page draws, in order: the sketch switch, then one row per token in table order. Every colour is a
-# disc in the oklch plane, and the border style is a row of words.
+# colour field (a swatch with a panel behind it), and the border style is a row of words.
 COLOURS = [name for name, kind in demo_settings.TOKENS.items() if kind == "color"]
 LENGTHS = [name for name, kind in demo_settings.TOKENS.items() if kind == "length"]
 SELECTS = [name for name, kind in demo_settings.TOKENS.items() if kind == "keyword"]
@@ -44,11 +44,12 @@ INPUTS = ["sketch", *LENGTHS]
 CONTROLS = len(INPUTS) + len(SELECTS) + len(COLOURS)
 
 START = {"sketch": False, "accent": "0.7 0.12 200"}  # what the server already remembers
-PICKED_HUE = 250.0  # the angle this gate clicks on the accent disc
-PICKED_CHROMA = 0.2  # half way to the rim, so the value is exactly representable
-LIGHT = demo_settings.LIGHT["accent"]
-PICKED = f"{LIGHT} {PICKED_CHROMA:.2f} {int(PICKED_HUE)}"  # what the disc should pack
-GREY = f"{demo_settings.LIGHT['bg']} 0.00"  # a click on bg's centre: the grey axis
+# The three terms this gate types into the accent field's panel. Lightness moves too — the whole point of the
+# panel is that the third axis is reachable from the page, which the disc could not do.
+PICKED_LIGHT = 0.55
+PICKED_CHROMA = 0.2
+PICKED_HUE = 250.0
+PICKED = f"{PICKED_LIGHT:.2f} {PICKED_CHROMA:.2f} {int(PICKED_HUE)}"  # what the field should pack
 
 
 def wait_for(predicate, timeout: float = 6.0):
@@ -78,7 +79,7 @@ def custom(cdp, name: str) -> str:
 def controls(cdp) -> int:
     """How many controls the page drew: inputs plus selects (a `select` is a list of tiles, not an input)."""
     return (
-        cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .select, #settings-page .disc').length")
+        cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .select, #settings-page .color').length")
         or 0
     )
 
@@ -132,23 +133,52 @@ def click_tile(cdp, name: str, index: int):
     )
 
 
-def click_disc(cdp, name: str, hue: float, chroma: float):
-    """Click the disc at (hue, chroma): a real MouseEvent at that point, so the widget's own maths runs.
+def set_color(cdp, name: str, light: float, chroma: float, hue: float):
+    """Open the field's panel and type the three terms into it (ADR 0052).
 
-    The face is polar — the angle is the hue, the radius the chroma — and the rim is the validator's cap
-    (0.4), so `chroma / 0.4` of the radius is where that chroma sits.
+    The panel is what the field is now: a swatch and a literal in the row, three sliders behind it. Typing the
+    number boxes is the same write a drag makes (both go through one path), and it is exact — no pixel-rounding
+    to allow for. The panel is closed again on the way out, so its click-outside layer does not sit over the
+    controls the rest of this gate drives.
     """
-    disc = COLOURS.index(name)
+    index = COLOURS.index(name)
+    opened = cdp.eval(
+        "(() => {"
+        f"const el = document.querySelectorAll('#settings-page .color')[{index}];"
+        "if (!el) return null;"
+        "el.click();"
+        "return true;"
+        "})()"
+    )
+    if not opened:
+        return None
+    # The panel is a reactive node: it lands a beat after the click, not inside it.
+    ready = wait_for(
+        lambda: bool(
+            cdp.eval(
+                "(() => {"
+                f"const el = document.querySelectorAll('#settings-page .color')[{index}];"
+                "return !!(el && el.querySelector('.color-panel'));"
+                "})()"
+            )
+        )
+    )
+    if not ready:
+        return None
     return cdp.eval(
         "(() => {"
-        f"const el = document.querySelectorAll('#settings-page .disc')[{disc}];"
-        "if (!el) return null;"
-        "const r = el.getBoundingClientRect();"
-        f"const rad = ({hue} - 90) * Math.PI / 180;"
-        f"const reach = ({chroma} / 0.4) * (r.width / 2);"
-        "const x = r.left + r.width / 2 + Math.cos(rad) * reach;"
-        "const y = r.top + r.height / 2 + Math.sin(rad) * reach;"
-        "el.dispatchEvent(new MouseEvent('click', {clientX: x, clientY: y, bubbles: true}));"
+        f"const el = document.querySelectorAll('#settings-page .color')[{index}];"
+        "const panel = el && el.querySelector('.color-panel');"
+        "if (!panel) return null;"
+        "const boxes = panel.querySelectorAll('input[type=number]');"
+        f"const want = [{light}, {chroma}, {hue}];"
+        "for (let k = 0; k < 3 && k < boxes.length; k++) {"
+        "boxes[k].value = String(want[k]);"
+        "boxes[k].dispatchEvent(new Event('input', {bubbles: true}));"
+        "}"
+        # Close it again: an open panel adds six inputs to the page, and the checks below address the
+        # remaining controls by position within their kind.
+        "panel.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));"
         "return true;"
         "})()"
     )
@@ -192,38 +222,29 @@ def main() -> int:
                 )
             )
 
-            # 2. the disc: a point in, the whole triple out, and nothing else moves. The angle the widget
-            #    computes is the angle of the point the browser reported, so it lands within a degree of the
-            #    one asked for — that is the claim, not an exact equality.
+            # 2. the colour field: three terms in, the whole triple out, and nothing else moves. Lightness is
+            #    one of the three — reaching it is the reason the panel replaced the disc.
             bg_before = custom(cdp, "bg")
-            wrote = click_disc(cdp, "accent", PICKED_HUE, PICKED_CHROMA)
-            local = wait_for(lambda: len((root_attr(cdp, "accent") or "").split()) == 3)
+            wrote = set_color(cdp, "accent", PICKED_LIGHT, PICKED_CHROMA, PICKED_HUE)
+            local = wait_for(lambda: root_attr(cdp, "accent") == PICKED)
             picked = root_attr(cdp, "accent") or ""
-            parts = picked.split()
-            # A pixel is 1/64 of the radius, i.e. ~0.006 of chroma, and the browser reports whole pixels: the
-            # point lands within a couple of hundredths, not exactly on the request.
-            near = (
-                len(parts) == 3
-                and abs(int(parts[2]) - int(PICKED_HUE)) <= 1
-                and abs(float(parts[1]) - PICKED_CHROMA) <= 0.02
-            )
             checks.append(
                 (
-                    "a disc click packs the triple its light and its point name",
-                    bool(wrote and local and near)
+                    "the panel packs the exact triple it was given, lightness included",
+                    bool(wrote and local)
                     and custom(cdp, "accent") == f"oklch({norm(picked)})"  # Chromium writes the property back normalised
                     and custom(cdp, "bg") == bg_before,
-                    f"data-accent={picked!r} --accent={custom(cdp, 'accent')!r} asked={PICKED_HUE}/{PICKED_CHROMA}",
+                    f"data-accent={picked!r} --accent={custom(cdp, 'accent')!r} asked={PICKED!r}",
                 )
             )
 
-            # 2b. every token uses the same disc, so a token whose default is grey gets its grey from the centre
-            greyed = click_disc(cdp, "bg", PICKED_HUE, 0.0)
+            # 2b. every token uses the same field, and a chroma of zero is the grey axis
+            greyed = set_color(cdp, "bg", 1.0, 0.0, 0.0)
             neutral = wait_for(lambda: (root_attr(cdp, "bg") or "").split()[1:2] in (["0"], ["0.00"]))
             grey = root_attr(cdp, "bg") or ""
             checks.append(
                 (
-                    "the centre of a disc is grey — a neutral token is reached there too",
+                    "a chroma of zero is grey — a neutral token is reached through the same panel",
                     bool(greyed and neutral) and float(grey.split()[1]) == 0.0 and custom(cdp, "bg") == f"oklch({norm(grey)})",
                     f"data-bg={grey!r} --bg={custom(cdp, 'bg')!r}",
                 )

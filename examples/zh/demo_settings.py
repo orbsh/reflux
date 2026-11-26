@@ -120,21 +120,9 @@ CORE: dict[str, str] = {
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# 十个颜色令牌都用同一个**色盘**：盘面是 oklch 的两个自由度——角度是色相、半径是彩度（圆心是灰），
-# 第三个（亮度）盘面放不下，按令牌钉住，取各自缺省的那个数。盘打包的就是 `L C H` 三元组，所以成员值、
-# 校验器、浏览器那侧都不必知道有个盘。
-LIGHT: dict[str, float] = {
-    "fg": 0.18,
-    "bg": 1.0,
-    "surface": 0.965,
-    "accent": 0.7,
-    "primary": 0.98,
-    "secondary": 0.93,
-    "disabled": 0.6,
-    "warn": 0.84,
-    "error": 0.63,
-    "border-color": 0.93,  # 缺省是 `var(--secondary)`，跟它同一个亮度
-}
+# 十个颜色令牌共用一个**方片**：行内只站一块色块和它的 `oklch()` 字面量，悬浮才展开三根滑块
+# （L、C、H 各一根，各带一个数字框）。字段打包的就是 `L C H` 三元组，所以成员值、校验器、浏览器那侧
+# 都不必知道有个控件。亮度也在这三根里——这一版没有「按令牌钉住」的常量了。
 
 WORDS_SLOT = "palettes.words"
 
@@ -328,13 +316,13 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     色块自己读变量（`background: var(--fg)`），所以它显示的就是这一刻生效的颜色——不需要第二份状态。
     字段的 `tag` 就是成员名，组的出口按它打包。
 
-    颜色都在同一个人色盘上点（角度=色相、半径=彩度、圆心是灰），线型是点出来的词——这一页没有"自己填"
-    的控件。盘与词表都是字段，出口在它们所在的组：点一下 = 一次 `change`。
+    颜色是一个方片加一块可复制的字面量，悬浮展开三根滑块（L、C、H），线型是点出来的词——这一页没有
+    "自己填"的裸数字框，滑块旁边那个框是给手改用的。两者都是字段，出口在它们所在的组：改一次 = 一次
+    `change`（拖动按字段自己的窗口合并）。
     """
     if kind == "color":
-        control: Accrete = h.disc(
+        control: Accrete = h.color(
             tag=name,
-            light=LIGHT[name],
             source=Source(default=value),
             id=f"cfg-{name}",
         )

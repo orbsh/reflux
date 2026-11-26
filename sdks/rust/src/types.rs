@@ -658,12 +658,9 @@ pub fn select(dir: Option<Value>, expand: Option<bool>, multiple: Option<bool>, 
     Value::Object(node)
 }
 
-/// Build a `disc` node (the wire type `disc`).
-pub fn disc(light: Option<f64>, selector: Option<&str>, source: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
+/// Build a `color` node (the wire type `color`).
+pub fn color(selector: Option<&str>, source: Option<Source>, emit: Option<Value>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
-    if let Some(v) = light {
-        put(&mut attrs, "light", Value::from(v));
-    }
     if let Some(v) = selector {
         put(&mut attrs, "selector", s(v));
     }
@@ -671,6 +668,9 @@ pub fn disc(light: Option<f64>, selector: Option<&str>, source: Option<Source>, 
     let mut node = Map::new();
     if !attrs.is_empty() {
         put(&mut node, "attrs", Value::Object(attrs));
+    }
+    if let Some(v) = emit {
+        put(&mut node, "emit", v.clone());
     }
     if let Some(v) = id {
         put(&mut node, "id", s(v));
@@ -681,7 +681,7 @@ pub fn disc(light: Option<f64>, selector: Option<&str>, source: Option<Source>, 
     if let Some(v) = tag {
         put(&mut node, "tag", s(v));
     }
-    put(&mut node, "type", s("disc"));
+    put(&mut node, "type", s("color"));
     Value::Object(node)
 }
 
