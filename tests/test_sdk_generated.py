@@ -97,7 +97,7 @@ class UnionTest(unittest.TestCase):
     def test_the_regression_the_codegen_had(self):
         """`{"type": "panel"}` used to land on a synthesised copy; the tag is what makes this true."""
         for const, cls in (("frame", "Frame"), ("panel", "Panel"), ("tiles", "Tiles"),
-                           ("select", "Select"), ("entry", "Entry"), ("svg", "Svg")):
+                           ("picker", "Picker"), ("entry", "Entry"), ("svg", "Svg")):
             with self.subTest(type=const):
                 node = sdk.parse({"type": const, "children": []})
                 self.assertEqual(type(node).__name__, cls)
@@ -239,7 +239,7 @@ class ProfileTest(unittest.TestCase):
         # it holds is named by `tag`, its exit is the loom's, and its kind is `kind`.
         self.assertEqual(sdk.dump(sdk.input(tag="name", source=Slot("prefill")))["source"],
                          {"scope": "remote", "slot": "prefill"})
-        typed = sdk.dump(sdk.input(tag="password", kind=sdk.JsType.password))
+        typed = sdk.dump(sdk.input(tag="password", kind="password"))
         self.assertEqual(typed["kind"], "password")
         self.assertNotIn("sink", typed)
         with self.assertRaises(TypeError):
@@ -253,7 +253,7 @@ class ProfileTest(unittest.TestCase):
         # A local landing is the loom's too: one draw, one write, the reset still applies.
         local = sdk.dump(sdk.loom(sink=sdk.Sink(dest="__CONFIG__", scope="local", path="/")))
         self.assertEqual(local["sink"], {"dest": "__CONFIG__", "path": "/", "scope": "local"})
-        self.assertEqual(sdk.dump(sdk.select(options=Slot("rows")))["options"],
+        self.assertEqual(sdk.dump(sdk.picker(options=Slot("rows")))["options"],
                          {"scope": "remote", "slot": "rows"})
         self.assertEqual(sdk.dump(sdk.input(placeholder="写点什么"))["placeholder"],
                          {"default": "写点什么", "scope": "remote"})

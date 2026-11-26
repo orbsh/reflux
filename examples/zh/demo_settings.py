@@ -330,7 +330,7 @@ def field(name: str, kind: str, value: Any) -> Accrete:
         # 一个 `select` 的选项行由它的 `source` 那个槽给（这一版渲染器读的是 `source`，不是 `options`；
         # 见 ADR 0001 §9）。值不从这里来：`tag` 让它在组里有自己的一份，组负责打包与上行。
         # 折起来的一个：页面上只站当前那个词，点开才是五个（`expand`，ADR 0049）。
-        control = h.select(
+        control = h.picker(
             tag=name,
             selector="cfg",
             expand=True,
@@ -340,10 +340,9 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     else:
         control = h.input(
             tag=name,
-            # 一个长度就是一个**有区间的数**（ADR 0050）：`min`/`max`/`step` 一起挂到元素上，所以越界在打字的
-            # 地方就被拒，而不是先收下、存进状态、再在最后一步丢掉。空值不再是 0——空着打包 `null`，
-            # 校验器读成"不设"。
-            kind={"type": "number", "min": 0, "max": 64, "step": 1},
+            # 长度是数字，但不是一个区间（ADR 0050）：`input` 的 kind 只说形式，上下限属于滑块那个
+            # 组件（`picker`）。空值不再是 0——空着打包 `null`，校验器读成"不设"。
+            kind="number",
             selector="cfg",
             source=Source(default=value),
             placeholder=CORE.get(name, ""),

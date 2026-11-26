@@ -289,11 +289,13 @@ RADARS: dict[str, Any] = {
 
 # the review table's rows: key / field type / initial value / name / dept / daily avg / note. One of each field
 # kind (number / bool / text) — the initial value is what that cell shows, the type is how the reader changes it.
-REVIEW: tuple[tuple[str, str, Any, str, str, str, str], ...] = [
+# The score says "number" and nothing about 0–5: an `input`'s kind names a form (ADR 0050), bounds belong to the
+# slider component, and this page's host only displays — a real host is free to validate.
+REVIEW: tuple[tuple[str, Any, Any, str, str, str, str], ...] = (
     ('zw', 'number', 4.13, 'Zhang Wei', 'R&D', '4.13', 'falls in the second half'),
     ('cj', 'bool', False, 'Chen Jing', 'Marketing', '4.24', 'most volatile'),
     ('sy', 'text', 'reviewed', 'Sun Yue', 'Operations', '4.28', 'ends high'),
-]
+)
 
 # the graph on the left: this system itself. The dots are crates / components / external modules, the lines are
 # "who renders whom, who mounts whom"; `weight` sets a dot's size and `strength` an edge's thickness. 33 dots / 42 lines —

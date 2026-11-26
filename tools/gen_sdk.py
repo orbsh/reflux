@@ -248,29 +248,6 @@ def repair(src: str, schema: dict, profile: dict) -> str:
     return "\n".join(parts) + "\n"
 
 
-# Filled from the schema by `assemble`, so `annotation` can look a `$ref` up instead of guessing from its name.
-DEFS: dict[str, dict] = {}
-
-
-def wire_shapes(name: str, depth: int = 2) -> set[str]:
-    """The JSON shapes a `$def` resolves to, following the aliases this schema uses (one or two levels deep).
-
-    A union of unions (`Candidates` → `Bare` | `Stated` → `Stated1` | `Stated2`) reaches an actual `type` only
-    through its leaves, and the leaves are what a person writes.
-    """
-    target = DEFS.get(name) or {}
-    shapes: set[str] = set()
-    if isinstance(target.get("type"), str):
-        shapes.add(target["type"])
-    for sub in (target.get("anyOf") or []) + (target.get("oneOf") or []):
-        if "$ref" in sub:
-            if depth:
-                shapes |= wire_shapes(sub["$ref"].rsplit("/", 1)[1], depth - 1)
-        elif isinstance(sub.get("type"), str):
-            shapes.add(sub["type"])
-    return shapes
-
-
 def annotation(node: dict) -> str:
     """A JSON-Schema fragment → a Python annotation (only the shapes this schema uses).
 
@@ -278,14 +255,7 @@ def annotation(node: dict) -> str:
     what a person writes (`kind="text"`, `kind={"type": "number", …}`), and the model still validates it.
     """
     if "$ref" in node:
-        name = node["$ref"].rsplit("/", 1)[1]
-        shapes = wire_shapes(name)
-        extra = []
-        if "string" in shapes:
-            extra.append("str")
-        if "object" in shapes:
-            extra.append("dict[str, Any]")
-        return " | ".join([name, *extra]) if extra else name
+        return node["$ref"].rsplit("/", 1)[1]
     for key in ("anyOf", "oneOf"):
         if key in node:
             return " | ".join(annotation(sub) for sub in node[key])
@@ -401,8 +371,6 @@ def assemble() -> dict[pathlib.Path, str]:
     not from the copy on disk — one run takes a schema change all the way to both languages.
     """
     schema = vocabulary.load(vocabulary.SCHEMA_PATH)
-    DEFS.clear()
-    DEFS.update(schema.get("$defs") or {})
     profile = vocabulary.load(vocabulary.PROFILE_PATH)
     with tempfile.TemporaryDirectory() as tmp:
         raw = pathlib.Path(tmp) / "raw_models.py"

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, conint
 # ADR 0031 §1: where a value is authoritative is a closed enumeration, not a namespace.
 Scope = Literal['remote', 'local', 'both']
 
-__all__ = ["Accept", "Align", "Bare", "ButtonAttr", "ClassAttr", "ColorAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "ResetMode", "SelectAttr", "Sink", "SizeAttr", "Source", "Stamp", "Stated1", "Stated2", "Stated", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Candidates", "Canvas", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "Text", "TilesAttr", "Color", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Select", "Svg", "Tiles", "Accrete", "Scope"]
+__all__ = ["Accept", "Align", "ButtonAttr", "ClassAttr", "ColorAttr", "Debounce", "Dir", "Direction", "Draggable", "FieldModel", "FrameAttr", "Header", "ImageAttr", "InputKind", "LinkShape1", "LinkShape", "PanelPlace", "PanelState", "PickerAttr", "PickerBare", "PickerStated1", "PickerStated2", "PickerStated", "ResetMode", "Sink", "SizeAttr", "Source", "Stamp", "Step1", "Step2", "Step", "SubmitMode", "SubmitSet", "TextAttr", "Theme1", "Theme", "Throttle", "Window", "Wrap1", "Wrap", "Button", "Canvas", "Emit", "ForceGraphStyle", "Image", "Input", "LoomAttr", "PanelAttr", "Path", "PickerKind", "Text", "TilesAttr", "Color", "ForceGraph", "Entry", "Frame", "Loom", "Panel", "Picker", "Svg", "Tiles", "Accrete", "Scope"]
 
 
 
@@ -24,12 +24,6 @@ class Align(Enum):
     start = 'start'
     center = 'center'
     end = 'end'
-
-
-class Bare(Enum):
-    text = 'text'
-    bool = 'bool'
-    password = 'password'
 
 
 class ButtonAttr(BaseModel):
@@ -132,6 +126,15 @@ class ImageAttr(BaseModel):
     width: str | None = None
 
 
+class InputKind(Enum):
+    bool = 'bool'
+    number = 'number'
+    text = 'text'
+    password = 'password'
+    button = 'button'
+    submit = 'submit'
+
+
 class LinkShape1(Enum):
     straight = 'straight'
 
@@ -154,13 +157,7 @@ class PanelState(Enum):
     bound = 'bound'
 
 
-class ResetMode(Enum):
-    keep = 'keep'
-    clear = 'clear'
-    default = 'default'
-
-
-class SelectAttr(BaseModel):
+class PickerAttr(BaseModel):
     class_: list[str] | None = Field(None, alias='class')
     dir: Dir | None = Field(
         None,
@@ -175,6 +172,35 @@ class SelectAttr(BaseModel):
         description='Whether more than one option may be chosen. A single choice is one key; several are a list of them,\nwhich is what the field then packs.',
     )
     selector: str | None = None
+
+
+class PickerBare(Enum):
+    text = 'text'
+    bool = 'bool'
+
+
+class PickerStated1(BaseModel):
+    max: float
+    min: float
+    step: float | None = None
+    type: Literal['number']
+
+
+class PickerStated2(BaseModel):
+    candidates: list[str] | None = None
+    type: Literal['text']
+
+
+class PickerStated(RootModel[PickerStated1 | PickerStated2]):
+    root: PickerStated1 | PickerStated2 = Field(
+        ..., description='The picker kinds that declare their domain.'
+    )
+
+
+class ResetMode(Enum):
+    keep = 'keep'
+    clear = 'clear'
+    default = 'default'
 
 
 class Sink(BaseModel):
@@ -213,24 +239,6 @@ class Stamp(BaseModel):
     data: dict[str, Any]
     name: str
     type: Literal['stamp'] = 'stamp'
-
-
-class Stated1(BaseModel):
-    max: float
-    min: float
-    step: float | None = None
-    type: Literal['number']
-
-
-class Stated2(BaseModel):
-    candidates: list[str] | None = None
-    type: Literal['text']
-
-
-class Stated(RootModel[Stated1 | Stated2]):
-    root: Stated1 | Stated2 = Field(
-        ..., description='The kinds that declare their domain.'
-    )
 
 
 class Step1(BaseModel):
@@ -309,13 +317,6 @@ class Button(BaseModel):
     id: str | None = None
     source: Source | None = None
     type: Literal['button'] = 'button'
-
-
-class Candidates(RootModel[Bare | Stated]):
-    root: Bare | Stated = Field(
-        ...,
-        description='What a field\'s value may be (ADR 0050). The variant is the kind, so "text with a minimum" and\n"a number with no interval" cannot be written down at all.\n\nThe wire keeps the asymmetry, because the asymmetry carries information: a kind that declares\nnothing is a bare word, and a kind that declares something is a map with a `type`.\n\n```text\nkind: bool\nkind: text\nkind: {type: number, min: 0, max: 64, step: 1}\nkind: {type: text, candidates: [solid, dashed]}\n```',
-    )
 
 
 class Canvas(BaseModel):
@@ -421,9 +422,9 @@ class Input(BaseModel):
         description="When this field's typing reaches the loom (ADR 0032 §8). Absent = `{debounce: 250}`, which is\nwhat makes a per-keystroke `submit: [change]` bearable; `{debounce: 0}` is a frame per letter.\nTiming, not addressing: `source`/`tag` say where the value lives, this says when it is heard.",
     )
     id: str | None = None
-    kind: Candidates | None = Field(
+    kind: InputKind | None = Field(
         None,
-        description="What this field's value may be — the element type, the parse, and (for a number) the interval, one\ndeclaration (ADR 0032 §2, ADR 0050). Named `kind` because `type` is the node's own discriminator on\nthe wire. Absent = free text.",
+        description="What kind of field this is — the element type and the parse, one declaration (ADR 0032 §2: a field\nhas one type, and it is not the read's or the write's). Named `kind` because `type` is the node's own\ndiscriminator on the wire. Absent = text.",
     )
     multiline: bool | None = Field(
         None, description='Multi-line is a layout of the field, not a different node.'
@@ -491,6 +492,13 @@ class Path(BaseModel):
     id: str | None = None
     source: Source | None = None
     type: Literal['path'] = 'path'
+
+
+class PickerKind(RootModel[PickerBare | PickerStated]):
+    root: PickerBare | PickerStated = Field(
+        ...,
+        description='How a picker takes its value (ADR 0050). A picker is several components under one name — a menu,\na slider, a switch — so unlike `InputKind` its kind carries the domain: an interval for the\nslider, a word list for the menu, nothing at all for the switch.\n\nThe wire keeps the asymmetry, because the asymmetry carries information: a kind that declares\nnothing is a bare word, and a kind that declares something is a map with a `type`.\n\n```text\nkind: bool\nkind: text\nkind: {type: number, min: 0, max: 64, step: 1}\nkind: {type: text, candidates: [solid, dashed]}\n```',
+    )
 
 
 class Text(BaseModel):
@@ -608,13 +616,17 @@ class Panel(BaseModel):
     type: Literal['panel'] = 'panel'
 
 
-class Select(BaseModel):
+class Picker(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    attrs: SelectAttr | None = None
+    attrs: PickerAttr | None = None
     children: list[Accrete] | None = None
     id: str | None = None
+    kind: PickerKind | None = Field(
+        None,
+        description='Which component this picker is (ADR 0050): a menu of rows (absent), a slider that states its\ninterval, or a switch. The kind carries what the component itself needs; the options slot\ncarries the rows a menu shows.',
+    )
     options: Source | None = Field(
         None, description='Second value: the option rows (list plane).'
     )
@@ -623,7 +635,7 @@ class Select(BaseModel):
         None,
         description="The field's name inside an enclosing loom (same rule as `input`).",
     )
-    type: Literal['select'] = 'select'
+    type: Literal['picker'] = 'picker'
 
 
 class Svg(BaseModel):
@@ -644,7 +656,7 @@ class Tiles(BaseModel):
 
 # The root union, discriminated on `type`: each arm is one of the classes above, so a node
 # validates into its own class (no wrapper to unwrap) and an unknown `type` is refused.
-Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Select | Color | Text | Stamp], Field(discriminator='type')]
+Accrete = Annotated[Union[Frame | Canvas | ForceGraph | Panel | Loom | Svg | Path | Tiles | Entry | Button | Image | Input | Picker | Color | Text | Stamp], Field(discriminator='type')]
 
 
 # Forward references (`children: list[Accrete]`) resolve here, now that the aliases exist.
@@ -658,13 +670,13 @@ FieldModel.model_rebuild()
 FrameAttr.model_rebuild()
 Header.model_rebuild()
 ImageAttr.model_rebuild()
-SelectAttr.model_rebuild()
+PickerAttr.model_rebuild()
+PickerStated1.model_rebuild()
+PickerStated2.model_rebuild()
 Sink.model_rebuild()
 SizeAttr.model_rebuild()
 Source.model_rebuild()
 Stamp.model_rebuild()
-Stated1.model_rebuild()
-Stated2.model_rebuild()
 Step1.model_rebuild()
 Step2.model_rebuild()
 TextAttr.model_rebuild()
@@ -686,6 +698,6 @@ Entry.model_rebuild()
 Frame.model_rebuild()
 Loom.model_rebuild()
 Panel.model_rebuild()
-Select.model_rebuild()
+Picker.model_rebuild()
 Svg.model_rebuild()
 Tiles.model_rebuild()

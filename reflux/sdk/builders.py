@@ -7,7 +7,7 @@ from .types import *  # noqa: F403 — the wire's names are the SDK's names
 from .types import Accrete
 
 
-__all__ = ["button", "canvas", "color", "entry", "forcegraph", "frame", "image", "input", "loom", "panel", "path", "select", "svg", "text", "tiles"]
+__all__ = ["button", "canvas", "color", "entry", "forcegraph", "frame", "image", "input", "loom", "panel", "path", "picker", "svg", "text", "tiles"]
 
 def frame(
     *children: Accrete,
@@ -194,7 +194,7 @@ def input(
     selector: str | None = None,
     source: Any = None,
     emit: Emit | dict[str, Any] | None = None,
-    kind: Candidates | None = None,
+    kind: InputKind | str | None = None,
     multiline: bool | None = None,
     placeholder: Any = None,
     tag: str | None = None,
@@ -207,22 +207,23 @@ def input(
     return parse(drop_none(type='input', attrs=attrs, source=source, placeholder=placeholder, id=id, emit=emit, kind=kind, multiline=multiline, tag=tag), Input)
 
 
-def select(
+def picker(
     *,
     dir: Dir | str | None = None,
     expand: bool | None = None,
     multiple: bool | None = None,
     selector: str | None = None,
     source: Any = None,
+    kind: PickerKind | str | dict[str, Any] | None = None,
     options: Any = None,
     tag: str | None = None,
     id: str | None = None,
-) -> Select:
-    """Build a `select` node (the wire type `select`)."""
+) -> Picker:
+    """Build a `picker` node (the wire type `picker`)."""
     attrs = drop_none(dir=dir, expand=expand, multiple=multiple, selector=selector)
     source = as_source(source)
     options = as_source(options)
-    return parse(drop_none(type='select', attrs=attrs, source=source, options=options, id=id, tag=tag), Select)
+    return parse(drop_none(type='picker', attrs=attrs, source=source, options=options, id=id, kind=kind, tag=tag), Picker)
 
 
 def color(

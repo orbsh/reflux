@@ -275,8 +275,13 @@ def json_alt(fragment: dict, defs: dict) -> str | None:
     if fragment.get("properties") or target.get("properties"):
         return "dict[str, Any]"
     branches = target.get("anyOf") or target.get("oneOf") or []
-    if branches and all(json_alt(branch, defs) == "dict[str, Any]" for branch in branches):
+    alts = [json_alt(branch, defs) for branch in branches]
+    if branches and all(alt == "dict[str, Any]" for alt in alts):
         return "dict[str, Any]"  # `Step`'s `{timer}` / `{slot}` arms
+    if branches and all(alt in ("str", "dict[str, Any]") for alt in alts):
+        # `PickerKind`: a bare word (`bool`, `text`) or a map (`{type: number, min, max}`). Both are what
+        # a frame says, so the signature offers both and pydantic still picks the branch.
+        return " | ".join(["str", *[a for a in ("dict[str, Any]",) if a in alts]])
     t = fragment.get("type")
     if t == "array" or (isinstance(t, list) and "array" in t):
         return json_alt(fragment.get("items") or {}, defs)

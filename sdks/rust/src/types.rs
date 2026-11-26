@@ -597,8 +597,8 @@ pub fn input(horizontal: Option<bool>, selector: Option<&str>, source: Option<So
     Value::Object(node)
 }
 
-/// Build a `select` node (the wire type `select`).
-pub fn select(dir: Option<Value>, expand: Option<bool>, multiple: Option<bool>, selector: Option<&str>, source: Option<Source>, options: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
+/// Build a `picker` node (the wire type `picker`).
+pub fn picker(dir: Option<Value>, expand: Option<bool>, multiple: Option<bool>, selector: Option<&str>, source: Option<Source>, kind: Option<Value>, options: Option<Source>, tag: Option<&str>, id: Option<&str>) -> Value {
     let mut attrs = Map::new();
     if let Some(v) = dir {
         put(&mut attrs, "dir", v.clone());
@@ -621,6 +621,9 @@ pub fn select(dir: Option<Value>, expand: Option<bool>, multiple: Option<bool>, 
     if let Some(v) = id {
         put(&mut node, "id", s(v));
     }
+    if let Some(v) = kind {
+        put(&mut node, "kind", v.clone());
+    }
     if let Some(v) = options {
         put(&mut node, "options", v.clone());
     }
@@ -630,7 +633,7 @@ pub fn select(dir: Option<Value>, expand: Option<bool>, multiple: Option<bool>, 
     if let Some(v) = tag {
         put(&mut node, "tag", s(v));
     }
-    put(&mut node, "type", s("select"));
+    put(&mut node, "type", s("picker"));
     Value::Object(node)
 }
 

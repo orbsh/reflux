@@ -345,7 +345,7 @@ def field(name: str, kind: str, value: Any) -> Accrete:
         # `options` — see ADR 0001 §9). The value does not come from here: the `tag` gives it a copy inside
         # the group, and the group packs and sends it.
         # A folded one: the page shows the word in force, and a click opens the five (ADR 0049).
-        control = h.select(
+        control = h.picker(
             tag=name,
             selector="cfg",
             expand=True,
@@ -355,11 +355,10 @@ def field(name: str, kind: str, value: Any) -> Accrete:
     else:
         control = h.input(
             tag=name,
-            # A length is a **number with an interval** (ADR 0050): `min`/`max`/`step` go on the element, so an
-            # out-of-range value is refused where it is typed instead of being accepted, stored, and dropped at
-            # the last step. And an empty number is no longer zero — it packs `null`, which the validator reads
-            # as "not set".
-            kind={"type": "number", "min": 0, "max": 64, "step": 1},
+            # A length is a number, but not an interval (ADR 0050): an `input`'s kind names the form only, and
+            # bounds belong to the slider — a `picker`. And an empty number is no longer zero: it packs `null`,
+            # which the validator reads as "not set".
+            kind="number",
             selector="cfg",
             source=Source(default=value),
             placeholder=CORE.get(name, ""),

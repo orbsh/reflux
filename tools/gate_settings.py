@@ -77,9 +77,9 @@ def custom(cdp, name: str) -> str:
 
 
 def controls(cdp) -> int:
-    """How many controls the page drew: inputs plus selects (a `select` is a list of tiles, not an input)."""
+    """How many controls the page drew: inputs plus selects (a `picker` is a list of tiles, not an input)."""
     return (
-        cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .select, #settings-page .color').length")
+        cdp.eval("document.querySelectorAll('#settings-page input, #settings-page .picker, #settings-page .color').length")
         or 0
     )
 
@@ -106,26 +106,26 @@ def set_field(cdp, name: str, value: str) -> bool:
 
 
 def open_menu(cdp, name: str):
-    """Open a folded select: its face is a `.select-trigger` and the rows only exist while it is open."""
+    """Open a folded picker: its face is a `.picker-trigger` and the rows only exist while it is open."""
     select = SELECTS.index(name)
     return cdp.eval(
         "(() => {"
-        f"const box = document.querySelectorAll('#settings-page .select')[{select}];"
+        f"const box = document.querySelectorAll('#settings-page .picker')[{select}];"
         "if (!box) return null;"
-        "const trigger = box.querySelector('.select-trigger');"
+        "const trigger = box.querySelector('.picker-trigger');"
         "if (!trigger) return null; trigger.click(); return true;"
         "})()"
     )
 
 
 def click_tile(cdp, name: str, index: int):
-    """Click one row of an open menu — the rows are the `.select-menu`'s children."""
+    """Click one row of an open menu — the rows are the `.picker-menu`'s children."""
     select = SELECTS.index(name)
     return cdp.eval(
         "(() => {"
-        f"const box = document.querySelectorAll('#settings-page .select')[{select}];"
+        f"const box = document.querySelectorAll('#settings-page .picker')[{select}];"
         "if (!box) return null;"
-        "const menu = box.querySelector('.select-menu');"
+        "const menu = box.querySelector('.picker-menu');"
         "if (!menu) return null;"
         f"const tile = menu.querySelectorAll('.as-stretch')[{index}];"
         "if (!tile) return null; tile.click(); return true;"
@@ -275,16 +275,16 @@ def main() -> int:
                 )
             )
 
-            # 4. the border style is a folded select: the page holds the word in force, a click opens the five,
+            # 4. the border style is a folded picker: the page holds the word in force, a click opens the five,
             #    and choosing one closes it again (ADR 0049)
             opened = open_menu(cdp, "border-style")
-            shown = cdp.eval("document.querySelectorAll('#settings-page .select-menu').length") or 0
+            shown = cdp.eval("document.querySelectorAll('#settings-page .picker-menu').length") or 0
             click_tile(cdp, "border-style", demo_settings.KEYWORDS.index("dashed"))
             dashed = wait_for(lambda: custom(cdp, "border-style") == "dashed")
-            closed = wait_for(lambda: (cdp.eval("document.querySelectorAll('#settings-page .select-menu').length") or 0) == 0)
+            closed = wait_for(lambda: (cdp.eval("document.querySelectorAll('#settings-page .picker-menu').length") or 0) == 0)
             checks.append(
                 (
-                    "a folded select opens, takes a word, closes, and the word reaches :root",
+                    "a folded picker opens, takes a word, closes, and the word reaches :root",
                     bool(opened) and shown == 1 and bool(dashed) and bool(closed)
                     and root_attr(cdp, "border-style") == "dashed",
                     f"data-border-style={root_attr(cdp, 'border-style')!r} --border-style={custom(cdp, 'border-style')!r}",
@@ -317,23 +317,23 @@ def main() -> int:
             opened_skin = open_menu(cdp, "border-style")
             drawn = wait_for(
                 lambda: cdp.eval(
-                    "(() => {const m = document.querySelector('#settings-page .select-menu');"
+                    "(() => {const m = document.querySelector('#settings-page .picker-menu');"
                     "if (!m) return ''; return (m.getAttribute('data-rough') || '-') + '|' + m.querySelectorAll('svg.rough').length;})()"
                 )
                 == "ready|1"
             )
             edge = cdp.eval(
-                "(() => {const m = document.querySelector('#settings-page .select-menu');"
+                "(() => {const m = document.querySelector('#settings-page .picker-menu');"
                 "if (!m) return null; const cs = getComputedStyle(m);"
                 "return cs.borderTopColor + '|' + cs.backgroundColor + '|' + getComputedStyle(document.body).backgroundColor;})()"
             ) or ""
             from_skin = "rgba(0, 0, 0, 0)" in edge or "transparent" in edge
             same_panel = edge.split("|")[1:2] == edge.split("|")[2:3]  # the skin paints no panel: the page shows through
             dismissed = cdp.eval(
-                "(() => {const s = document.querySelector('#settings-page .select-scrim'); if (!s) return false;"
+                "(() => {const s = document.querySelector('#settings-page .picker-scrim'); if (!s) return false;"
                 " s.click(); return true;})()"
             )
-            shut = wait_for(lambda: (cdp.eval("document.querySelectorAll('#settings-page .select-menu').length") or 0) == 0)
+            shut = wait_for(lambda: (cdp.eval("document.querySelectorAll('#settings-page .picker-menu').length") or 0) == 0)
             checks.append(
                 (
                     "under the skin the fold is drawn, not painted",

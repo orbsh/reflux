@@ -98,7 +98,7 @@ NODES: dict[str, dict] = {
         "children": [
             field("name"),
             field("body", multiline=True, placeholder={"default": "写点什么"}),
-            {"type": "select", "tag": "kind", "options": {"slot": "opts"}, "source": {"default": "a"}},
+            {"type": "picker", "tag": "kind", "options": {"slot": "opts"}, "source": {"default": "a"}},
             BUTTON,
         ],
     },
@@ -150,8 +150,8 @@ NODES: dict[str, dict] = {
     # The option rows are a list plane: `options` is the wire's own field, and the renderer
     # currently reads the list off the primary `source` — so the fixture names the slot on both,
     # which is legal either way and lets the live gate see the rows.
-    "select": {
-        "type": "select",
+    "picker": {
+        "type": "picker",
         "options": {"slot": "opts"},
         "source": {"slot": "opts", "default": "a"},
     },
