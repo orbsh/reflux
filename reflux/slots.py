@@ -17,9 +17,11 @@ data plane. Using one as a `sink=` is the same name used as an address, which is
            sink=slots / "chat" / "send", submit="button")
                                           # and speaks to an event — one name, two directions
 
-`ctx.slot("chat/status")` and `ctx.slot / "status"` are one slot. Paths go out as
-written: hierarchical names are allowed and nothing parses the `/` yet. Declared slots land in
-`App.slots`, which `/status` lists: where a page reads and where it speaks are one namespace.
+A name is built with `/`, and the operator joins with dots — `ctx.slot / "chat" / "status"` is
+`chat.status`. The string form (`ctx.slot("chat/status")`) is taken verbatim, so it is for a name that
+already exists as a string (a constant), and its `/` is a character in the name, not a separator.
+Declared slots land in `App.slots`, which `/status` lists: where a page reads and where it speaks are one
+namespace.
 
 **A slot that owns a value.** `slots / "counter" / "count"` names one; what writes to it is a signal,
 declared with the slot as its destination:
@@ -192,9 +194,9 @@ class Slots:
     """One table, seen from two places: `app.slot` (the names a declaration comes from) and `ctx.slot`
     (the same names, bound to a delivery so the verbs can send).
 
-    Every form — `ctx.slot("chat/status")` and `ctx.slot / "status"` — resolves to the
-    same handle type, and a name is registered on the app when it is used. There is no attribute form
-    and no subscript: a dot on the table is a mistake, not a name.
+    Every form hands back the same handle type, and a name is registered on the app when it is used.
+    The string is taken verbatim (its `/` is part of the name); `/` joins segment by segment with dots.
+    There is no attribute form and no subscript: a dot on the table is a mistake, not a name.
     """
 
     def __init__(self, app: Any = None, ctx: Any = None) -> None:
@@ -202,7 +204,11 @@ class Slots:
         self._ctx = ctx
 
     def __call__(self, path: str) -> Slot:
-        """Declare a name: `ctx.slot("chat/status")` — or the sink a loom exits through."""
+        """Declare a name by string, taken verbatim — `ctx.slot("row.archive")` is one name, not two.
+
+        The `/` form is how a name is built (`ctx.slot / "row" / "archive"`); a string is a name that
+        already exists somewhere else (a constant, a deployment's setting), so it is not split.
+        """
         return self._make(path)
 
     def __truediv__(self, name: str) -> Slot:

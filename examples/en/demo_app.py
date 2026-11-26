@@ -91,10 +91,9 @@ def row_node(text: str, row_id: str) -> Accrete:
     cargo takes the width (`flex: 1 1 auto`) and the ✕ keeps its own size and centres itself in the
     height it does not fill.
     """
-    # `remove` is a verb on a slot, so this name is written with the subscript.
     return h.loom(
         h.frame(h.text(text), draggable={"tag": "row"}, accept={"tag": "row"},
-                sink=slots("row.move"), style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
+                sink=slots / "row" / "move", style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
         h.frame(h.button("Remove"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots / "row" / "remove",
@@ -301,7 +300,7 @@ def home_page(ctx, match):
                     h.frame(
                         h.text("Drag a row here to archive it"),
                         accept={"tag": "row"},
-                        sink=slots("row.archive"),
+                        sink=slots / "row" / "archive",
                         grid={"place-items": "center"},
                         style={"border": "var(--border)", "border-style": "dashed",
                                "min-height": "72px"},
@@ -381,13 +380,13 @@ def about_page(ctx, match):
 
 # --- handlers: the named landing points (identity in the page, or across it) --------------------
 
-@app.on(slots / "row" / "remove")  # `remove` is a verb: the name goes by subscript
+@app.on(slots / "row" / "remove")
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # the row's form carried its identity up
     state.rows.value = [row for row in state.rows.value if row[0] != row_id]
 
 
-@app.on(slots("row.archive"))
+@app.on(slots / "row" / "archive")
 def on_archive(ctx, frame) -> None:
     """A drop: the landing point sends `{id, tag}` — the dragged frame's own id, and its tag."""
     cargo = (frame.get("data") or {}).get("id") or ""
@@ -399,7 +398,7 @@ def on_archive(ctx, frame) -> None:
     state.rows.value = [r for r in state.rows.value if r[0] != row_id]
 
 
-@app.on(slots("row.move"))
+@app.on(slots / "row" / "move")
 def on_move(ctx, frame) -> None:
     """One row landed on another: put it where the landing row was.
 

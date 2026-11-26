@@ -78,10 +78,9 @@ def row_node(text: str, row_id: str) -> Accrete:
     两个 frame 说明这一行怎么分：loom 是一行 flex，条目都长，于是货物拿走宽度（`flex: 1 1 auto`），
     而 ✕ 保持自己的尺寸，并在它没占满的高度里居中。
     """
-    # `remove` 在槽上是动词，所以这个名字要用下标写。
     return h.loom(
         h.frame(h.text(text), draggable={"tag": "row"}, accept={"tag": "row"},
-                sink=slots("row.move"), style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
+                sink=slots / "row" / "move", style={"flex": "1 1 auto"}, id=f"{row_id}-cargo"),
         h.frame(h.button("删"),
                 style={"flex": "0 0 auto", "align-self": "center"}),
         sink=slots / "row" / "remove",
@@ -277,7 +276,7 @@ def home_page(ctx, match):
                     h.frame(
                         h.text("拖一行到这里归档"),
                         accept={"tag": "row"},
-                        sink=slots("row.archive"),
+                        sink=slots / "row" / "archive",
                         grid={"place-items": "center"},
                         style={"border": "var(--border)", "border-style": "dashed",
                                "min-height": "72px"},
@@ -358,13 +357,13 @@ def about_page(ctx, match):
 
 # --- 处理器：名字的落点（身份在页面里或跨页的那些） ---------------------------------
 
-@app.on(slots / "row" / "remove")  # `remove` 是动词：这个名字要用下标访问
+@app.on(slots / "row" / "remove")
 def on_remove(ctx, frame) -> None:
     row_id = frame.get("id")  # 这一行的表单把它的身份带了上来
     state.rows.value = [row for row in state.rows.value if row[0] != row_id]
 
 
-@app.on(slots("row.archive"))
+@app.on(slots / "row" / "archive")
 def on_archive(ctx, frame) -> None:
     """一次落点：落点发来 `{id, tag}` —— 被拖的 frame 自己的 id，和它的 tag。
     """
@@ -377,7 +376,7 @@ def on_archive(ctx, frame) -> None:
     state.rows.value = [r for r in state.rows.value if r[0] != row_id]
 
 
-@app.on(slots("row.move"))
+@app.on(slots / "row" / "move")
 def on_move(ctx, frame) -> None:
     """一行落在另一行身上：把它挪到落点那一行的位置。
 
