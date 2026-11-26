@@ -7,7 +7,7 @@ type is a legal node and reaches the page. The set itself is proven offline
 draws them all at once.
 
 How "each type drew" is measured: most components put a **role class** on their element (`frame`,
-`tiles`, `entry`, `case`, `text`, `select`, …), read off the renderer. `panel` is asserted by
+`tiles`, `entry`, `case`, `text`, `picker`, …), read off the renderer. `panel` is asserted by
 behaviour instead — an `inline` panel is a fold: it starts collapsed and its body appears on a
 click — and `button` is asserted where it renders, inside its `loom`.
 
@@ -49,7 +49,7 @@ ROLE: dict[str, str] = {
     "entry": ".entry",
     "image": "img",
     "input": "input",
-    "select": ".select",
+    "picker": ".picker",
     "text": ".text",
 }
 
@@ -65,8 +65,10 @@ PROBE = """(() => {
     d: q('.path') && q('.path').getAttribute('d'),
     input: q('input') && q('input').value,
     in_loom: all('.case input, .case textarea').length,
-    options: all('.select > div').map((d) => d.innerText.trim()),
-    selected: all('.select .selected').map((d) => d.innerText.trim()),
+    // A picker's rows hang straight on its box unless `attrs.expand` asks for the fold, and the fixture
+    // does not: `expand` is the menu form, absent is the plain one (measured against the renderer).
+    options: all('.picker > *').map((d) => d.innerText.trim()).filter(Boolean),
+    selected: all('.picker .selected').map((d) => d.innerText.trim()),
     head: all('.tiles-hcell').map((c) => c.innerText.trim()),
     rows: all('.tiles-row').length,
     buttons: all('.button').length,
@@ -214,7 +216,7 @@ def main() -> int:
         checks.append(("path draws its d", seen.get("d") == "M0 0 L1 1", f"d={seen.get('d')!r}"))
         checks.append(
             (
-                "select renders its options from a list slot and marks the bound one",
+                "a picker's menu lists its candidates from the list slot and marks the chosen one",
                 seen.get("options") == ["option-a", "option-b"] and seen.get("selected") == ["option-a"],
                 f"options={seen.get('options')} selected={seen.get('selected')}",
             )
