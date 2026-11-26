@@ -92,18 +92,15 @@ def register(app: Any) -> None:
                 count.value = 0
                 record("归零")
 
-        def set_step(value: object) -> None:
-            # 组提交的是它打包出来的对象（{字段: 值}），值是字符串 —— 所以这里既解析也拒绝。
-            raw = value.get("step") if isinstance(value, dict) else None
-            text = raw.strip() if isinstance(raw, str) else ""
-            try:
-                wanted = int(text)
-            except ValueError:
-                refusal.value = f"「{text}」不是整数，步长还是 {step.value}"
+        def set_step(value: dict) -> None:
+            # 交上来的是解析好的数（`kind="number"` 由渲染器解析）—— 这里只剩页面自己的规矩：1–10 的整数。
+            wanted = value.get("step")
+            if wanted is None:  # 空着回车：没有一个数
+                refusal.value = f"没有输入，步长还是 {step.value}"
                 return
             with signals.batch():
-                step.value = min(max(wanted, 1), 10)
-                refusal.value = ""  # 合法输入了，那句拒绝就退场
+                step.value = min(max(round(wanted), 1), 10)
+                refusal.value = ""  # 收下了，那句拒绝就退场
 
         return (
             h.frame(
@@ -131,7 +128,7 @@ def register(app: Any) -> None:
                     h.text("步长", variant="muted"),
                     # 输入框的出口是它所在的组：`tag` 是它打包时的键，`submit` 决定何时发。
                     h.loom(
-                        h.input(tag="step", placeholder="1–10，回车生效", id="counter-step"),
+                        h.input(tag="step", kind="number", placeholder="1–10，回车生效", id="counter-step"),
                         sink=set_step,
                         submit=["enter"],
                         id="counter-step-form",

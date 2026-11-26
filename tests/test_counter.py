@@ -62,22 +62,24 @@ class ThePage(unittest.TestCase):
 
     def test_the_step_multiplies_the_press(self) -> None:
         app, device = build()
-        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "5"}}))
+        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": 5}}))
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "5")
         click(app, device, "down")
         self.assertEqual(writes(device, "counter.count")[-1], "0")
 
-    def test_a_step_that_is_not_a_number_is_refused_out_loud(self) -> None:
+    def test_an_empty_step_is_refused_out_loud(self) -> None:
+        # The wire carries what the renderer parsed: a number box with nothing in it parses to null, and
+        # nothing else reaches the handler — parsing is the field's `kind`, not this page's job.
         app, device = build()
-        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "five"}}))
-        self.assertIn("five", writes(device, "counter.hint")[-1], "the reader is told what was wrong")
+        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": None}}))
+        self.assertIn("没有输入", writes(device, "counter.hint")[-1], "the reader is told what was wrong")
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "1", "and the step did not move")
 
     def test_the_step_is_clamped(self) -> None:
         app, device = build()
-        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": "99"}}))
+        run_sync(app.dests.dispatch(device, {"dest": f"{demo_counter.PAGE}.set_step", "data": {"step": 99}}))
         click(app, device, "up")
         self.assertEqual(writes(device, "counter.count")[-1], "10")
 

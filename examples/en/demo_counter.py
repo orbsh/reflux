@@ -99,18 +99,15 @@ def register(app: Any) -> None:
                 count.value = 0
                 record("reset")
 
-        def set_step(value: object) -> None:
-            # A loom submits the object it packed ({field: value}), and the value is a string — so this
-            # both parses it and refuses it.
-            raw = value.get("step") if isinstance(value, dict) else None
-            text = raw.strip() if isinstance(raw, str) else ""
-            try:
-                wanted = int(text)
-            except ValueError:
-                refusal.value = f"“{text}” is not a whole number; the step is still {step.value}"
+        def set_step(value: dict) -> None:
+            # What arrives is already parsed (`kind="number"` is the renderer's job) — only this page's own
+            # rule is left: a whole number from 1 to 10.
+            wanted = value.get("step")
+            if wanted is None:  # Enter with the box empty: there is no number
+                refusal.value = f"nothing typed; the step is still {step.value}"
                 return
             with signals.batch():
-                step.value = min(max(wanted, 1), 10)
+                step.value = min(max(round(wanted), 1), 10)
                 refusal.value = ""  # a good input retires the refusal
 
         return (
@@ -140,7 +137,7 @@ def register(app: Any) -> None:
                     h.text("Step", variant="muted"),
                     # A field's exit is the group it sits in: `tag` is the key it packs under, `submit` the timing.
                     h.loom(
-                        h.input(tag="step", placeholder="1–10, Enter to apply", id="counter-step"),
+                        h.input(tag="step", kind="number", placeholder="1–10, Enter to apply", id="counter-step"),
                         sink=set_step,
                         submit=["enter"],
                         id="counter-step-form",
