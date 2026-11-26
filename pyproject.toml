@@ -14,6 +14,13 @@ dependencies = [
     "aiohttp>=3.9",
 ]
 
+[project.optional-dependencies]
+# A backend is the deployment's choice, so none of them is a dependency of the library: `memory` (the
+# default) and `sqlite` (the standard library) are always there, and a store you name must be installed
+# by the deployment that names it. `stores.make_store` says which package is missing.
+redis = ["redis>=5"]
+fjall = ["pyfjall>=0.1"]
+
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"

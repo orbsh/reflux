@@ -122,7 +122,7 @@ fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把�
 - 声明写在页函数头部，一行一条：`Signal(0).bind(slot).view(fn)`、`Computed(fn).bind(slot).view(fn)`、`Signal([]).keyed(render).bind(slot)`、`Signal(v).store(key)`。`Slot` 不再有 `.signal`／`.computed`／`.keyed`／`.value` —— 值只在信号上，槽是地址加动词。
 - 身份：`.bind(slot)` 一个槽名一个信号（`ctx.data`），重画拿回同一个、首值只种一次；`.store(key)` 一个 key 一个信号 —— 匿名连接存在这条连接的数据里，`ctx.user` 有值时存在 `app.store`（按 user id），换连接／设备接着来。
 - 首写推迟到绘制结束（`signals.drawing`），所以 `.view` 写在 `.bind` 之后也不再要求调用者记顺序；`keyed` 的首写是它的行，不是列表本身。
-- 存储是接口：`reflux/stores.py` 的 `Store` 两个方法 `load(user, key)`／`save(user, key, value)`，默认 `MemoryStore`，`SqliteStore` 是 SQL 示例；值是 JSON，节点存不进去（会当场报错）。Redis／KV 引擎照这个形状接，不改页面。
+- 存储是接口：`reflux/stores.py` 的 `Store` 两个方法 `load(user, key)`／`save(user, key, value)`，值是 JSON，节点存不进去（会当场报错）。后端按名字挂：`app.set_store("sqlite", {"path"})`、`fjall`（`{"path"}`，`pip install reflux[fjall]`）、`kv`（`{"client"}`，任何有 `get`/`set` 的客户端），默认 `memory`；`redis` 也收但排在最后（容忍，不推荐 —— 值是内存里的一个数，不该隔一层网络去取）。`KvStore` 把 Redis 与 KV 引擎收成同一个适配器，`FjallStore` 用 fjall 自己的绑定（一个库、一个 keyspace、`durable=True` 时每次写 `sync_all`）。
 - 名字仍然只由 `/` 拼（两侧留空格，与 `pathlib` 一致），点只到句柄自己的东西（动词、`view`、`name`）；点号子名与 `__getitem__` 都删了，`/` 不查属性，所以叫 `remove`／`value` 的槽直接写。名字不走常量表（不做 `names.py`／`Literal`）：可读性优先，拼错靠 `AttributeError` 与 `/status`。
 - `demo_counter` 两棵树：`State` 类与 `state()` 缓存删除，五条声明在页函数头部（三条 `.store`、两条上线 + `.keyed`），视图提成 `_count_node`／`_hint_node`；`tests/test_slots.py::TheValue` 与 `tests/test_signals.py::TestTheAdapters` 改成新 API，新增 `tests/test_stores.py` 九例（匿名/用户/跨 app 的 sqlite/三条拒绝）。
 - 验证：全量 426 例、`probe_counter` 真 Chromium 一次点击 0→1。

@@ -91,7 +91,7 @@ from .sdk.markers import PAGE_ID, token_marker
 from .sdk.types import Accrete
 from .slots import Slot, Slots
 from .signals import drawing
-from .stores import MemoryStore
+from .stores import MemoryStore, make_store
 from .server import CHANNEL, Response, make_server
 
 class Landing:
@@ -642,7 +642,9 @@ class App:
         self.views: dict[str, Callable[[Any], Any]] = {}
         # Where a signal's `.store(key)` keeps a value past its connection: one row per (user, key). A
         # deployment swaps it (SQL, KV, Redis) without touching a page — the interface is `load`/`save`.
-        self.store: Any = store if store is not None else MemoryStore()
+        self.store: Any = MemoryStore()
+        if store is not None:
+            self.set_store(store)
         # The route table is the app's own and nobody else's: no shared default, so two apps in one
         # process cannot write into the same table by omission (`create_app()` is how a test gets a
         # second one). `app.routes` stays readable — the CLI prints it.
@@ -965,6 +967,16 @@ class App:
         if isinstance(name, Slot):
             name = name.name
         self.views[name] = render
+
+    def set_store(self, backend: Any, config: dict[str, Any] | None = None, **kwargs: Any) -> "App":
+        """Point stored values at a backend: `app.set_store("redis", {"host": "…", "port": 6379})`.
+
+        A `Store` object goes in as itself; a name goes through `stores.make_store`, so the deployment
+        says `("fjall", {"path": …})` and no page learns which one it got. Returns the app, so it can sit
+        on the same line as construction. Stores already open are the deployment's to close.
+        """
+        self.store = backend if not isinstance(backend, str) else make_store(backend, config, **kwargs)
+        return self
 
     def _seam(self, name: str, event: str | None = None) -> Callable[[Callable], Callable]:
         """Register a handler for one seam — the machinery behind `app.hooks.<name>`.

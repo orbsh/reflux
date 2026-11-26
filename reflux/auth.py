@@ -31,7 +31,7 @@ from typing import Any, Callable, Protocol
 
 from .protocol import LOGIN, SIGNUP
 from .sdk import builders as h
-from .sdk.types import Accrete, JsType
+from .sdk.types import Accrete
 
 __all__ = ["Auth", "TokenStore", "Tokens", "credentials_of", "default_view", "DEFAULT_IDLE_WINDOW"]
 
@@ -147,7 +147,7 @@ def default_view(ctx: Any, state: str) -> Accrete:
         *lines,
         h.loom(
             h.input(tag="username", id="auth-user"),
-            h.input(tag="password", kind=JsType.password, id="auth-pass"),
+            h.input(tag="password", kind="password", id="auth-pass"),
             h.button("继续"),
             sink=ctx.slot(verb),
             submit=["enter", "button"],

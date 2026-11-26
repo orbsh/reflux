@@ -347,6 +347,15 @@ for an anonymous connection, and in `app.store` by user id once the connection h
 step = Signal(1).store("counter.step")   # survives a redraw; a signed-in user keeps it across devices
 ```
 
+Where those values live is the deployment's call — `app.set_store("sqlite", {"path": …})`,
+`("fjall", {"path": …})`, `("kv", {"client": …})`, or the default `memory`. `("redis", {"host": …, "port": …})`
+is accepted because deployments have it; it is a network hop in front of a number that outlives a redraw,
+so it is the tolerated backend, not the recommended one.
+The interface is two calls (`load(user, key)`, `save(user, key, value)`), so a KV engine, Redis and SQL
+are three shapes of the same thing and no page changes. A named backend is an extra, not a dependency:
+`pip install reflux[fjall]` or `reflux[redis]` — the library itself stays `memory` plus the standard
+library's `sqlite`.
+
 `@app.on(slot)` stays for the landing points whose name must exist before any page is drawn: a slot
 with **several sources**, an identity that belongs to a row rather than to the page, the framework's own
 verbs (`reflux:login`), and events that outlive a page. A gate rides the landing point rather than the

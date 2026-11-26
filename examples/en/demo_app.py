@@ -53,7 +53,7 @@ from reflux.application import Context, gated
 from reflux.protocol import AUTH_SLOT, LOGIN, LOGOUT, ROUTES_SLOT
 from reflux.server import Request, Response
 from reflux.sdk import h
-from reflux.sdk.types import Accrete, JsType, Source
+from reflux.sdk.types import Accrete, Source
 from reflux.site import app  # this process's site: declarations hang on it, the demo builds nothing
 from reflux.slots import Slot
 
@@ -171,7 +171,7 @@ def demo_view(ctx, state):
         *lines,
         h.loom(
             h.input(tag="user", id="auth-user"),
-            h.input(tag="pass", kind=JsType.password, id="auth-pass"),
+            h.input(tag="pass", kind="password", id="auth-pass"),
             h.button("Sign in"),
             sink=slots(LOGIN),
             submit=["enter", "button"],
@@ -326,7 +326,7 @@ def home_page(ctx, match):
                 h.loom(
                     h.frame(
                         h.input(tag="user", id="f-user"),
-                        h.input(tag="pass", kind=JsType.password, id="f-pass"),
+                        h.input(tag="pass", kind="password", id="f-pass"),
                         grid={"grid-template-rows": "auto auto", "gap": "8px"},
                         id="login-fields",
                     ),

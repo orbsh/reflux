@@ -16,7 +16,7 @@
 use reflux_sdk::landings::Landings;
 use reflux_sdk::markers;
 use reflux_sdk::types::{
-    loom, button, frame, input, text, tiles, FrameVariant, JsType, Sink, Source, TextVariant,
+    loom, button, frame, input, text, tiles, FrameVariant, Sink, Source, TextVariant,
 };
 use reflux_sdk::wire::{append, create, draw, move_row, remove, set};
 use serde_json::{json, Value};
@@ -46,8 +46,11 @@ fn remote_sink(dest: &str) -> Sink {
 }
 
 /// A field's own type — the element and the parse, one declaration (`kind`), not a channel.
-fn field_kind(kind: JsType) -> Option<Value> {
-    Some(Value::String(kind.token().to_string()))
+///
+/// A kind that declares nothing is a bare word on the wire (ADR 0050); one that declares its domain is
+/// a map with a `type`. This page only uses words, so the helper takes the word itself.
+fn field_kind(word: &str) -> Option<Value> {
+    Some(Value::String(word.to_string()))
 }
 
 /// The page's own vals plane, one level in (`path: "/data"` out of the emitted wrapper).
@@ -243,7 +246,7 @@ fn home() -> Value {
                     frame(
                         &[
                             input(None, None, None, None, None, None, None, Some("user"), Some("f-user")),
-                            input(None, None, None, None, field_kind(JsType::Password), None, None,
+                            input(None, None, None, None, field_kind("password"), None, None,
                                   Some("pass"), Some("f-pass")),
                         ],
                         None,
@@ -455,7 +458,7 @@ fn login_surface() -> Value {
                         None,
                         None,
                         None, None,
-                        field_kind(JsType::Password),
+                        field_kind("password"),
                         None,
                         None,
                         Some("pass"),

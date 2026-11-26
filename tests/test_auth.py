@@ -268,9 +268,8 @@ class TheLoginSurface(unittest.TestCase):
 
     def test_the_password_field_carries_its_kind_and_no_sink(self) -> None:
         from reflux.sdk import dump, h
-        from reflux.sdk.types import JsType
 
-        node = h.input(tag="pass", kind=JsType.password, id="auth-pass")
+        node = h.input(tag="pass", kind="password", id="auth-pass")
         wire = dump(node)
         self.assertNotIn("sink", wire, "a field has no exit of its own")
         self.assertEqual(wire["kind"], "password")
