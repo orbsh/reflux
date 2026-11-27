@@ -185,23 +185,18 @@ MEMBERS: dict[str, Any] = {"sketch": _bool, **{name: _BY_KIND[kind] for name, ki
 
 
 def flatten(payload: Any) -> dict:
-    """把渲染器打包的一组字段摊成 `{成员: 值}`。
+    """把组打包的对象摊成 `{成员: 值}`：载荷是 `{tag: value}`（ADR 0032 §2），值就是值、没有包装层。
 
-    组的出口把每个字段送出时带着它自己那份记录（`{字段: {"data": 值, ...}}`，聊天页的 `prompt_of`
-    拆的是同一个形状），而这一页要的是成员本身——那一层是渲染器的，不是协议的一部分，所以拆包在这里，
-    而且拆得全：畸形的帧给出 `{}`，绝不抛异常。
+    成员的值是标量（字符串 / 数字 / 布尔）；`None` 是"这个成员没有值"，对象是畸形——两者都不进状态。
+    载荷本身不是对象时给出 `{}`，绝不抛异常。
     """
     if not isinstance(payload, dict):
         return {}
-    out: dict[str, Any] = {}
-    for name, entry in payload.items():
-        if isinstance(entry, dict):
-            if "data" not in entry:  # 没有值的那份记录是畸形，不是一个对象成员
-                continue
-            entry = entry["data"]
-        if entry is not None:
-            out[name] = entry
-    return out
+    return {
+        name: value
+        for name, value in payload.items()
+        if value is not None and not isinstance(value, dict)
+    }
 
 
 def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:

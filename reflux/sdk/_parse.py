@@ -4,8 +4,8 @@ The generated builders call into this module. Two jobs:
 
 - `parse` / `dump`: validate a built node against the wire's types and turn it back into the wire's
   dict. Refusal is loud (a pydantic `ValidationError`) and "no value" is `None`, never a sentinel.
-- `as_source` / `as_sink`: turn what a caller passed to a channel into the wire's `Bind` shape —
-  ADR 0031's one value, one address, one closed scope.
+- `as_source` / `as_sink`: turn what a caller passed to a channel into the wire's `Source` / `Sink`
+  shape — ADR 0031's one value, one address, one closed scope (ADR 0039 split the one `Bind`).
 
 Why `drop_none` rather than emitting `null`s: accrete's serde skips absent fields and a `null` value
 is meaningless on this wire, so the SDK's shape is "absent means None". An empty dict collapses to
@@ -139,7 +139,7 @@ def as_source(value: Any = None, *, default: Any = None, constants: bool = True)
 
     `default` is the type's positional `value` folded in: a slot with a fallback is exactly what the
     wire means by `{slot, default}`, so giving both is one value, not a contradiction. An explicit
-    `default` on a `Bind` wins over the positional one.
+    `default` on a `Source` wins over the positional one.
     """
     entry = _address(_source_of(value), "source", Source, "slot", constant=constants)
     if default is not None and "default" not in entry:

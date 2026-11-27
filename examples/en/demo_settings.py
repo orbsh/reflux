@@ -195,24 +195,18 @@ MEMBERS: dict[str, Any] = {"sketch": _bool, **{name: _BY_KIND[kind] for name, ki
 
 
 def flatten(payload: Any) -> dict:
-    """Unpack the group the renderer sends into `{member: value}`.
+    """Unpack the group's object into `{member: value}`: the payload is `{tag: value}` (ADR 0032 §2), with no wrapper.
 
-    The group's outlet sends each field with its own record (`{field: {"data": value, ...}}` — the shape the
-    chat page's `prompt_of` unpacks), and this page wants the member itself: that layer is the renderer's,
-    not part of the protocol, so it is unpacked here — and fully: a malformed frame yields `{}` and never
-    raises.
+    A member's value is a scalar (string / number / bool); `None` means "no value", and an object is
+    malformed — neither becomes state. A payload that is not an object yields `{}` and never raises.
     """
     if not isinstance(payload, dict):
         return {}
-    out: dict[str, Any] = {}
-    for name, entry in payload.items():
-        if isinstance(entry, dict):
-            if "data" not in entry:  # a record with no value is malformed, not an object member
-                continue
-            entry = entry["data"]
-        if entry is not None:
-            out[name] = entry
-    return out
+    return {
+        name: value
+        for name, value in payload.items()
+        if value is not None and not isinstance(value, dict)
+    }
 
 
 def merge(state: dict, patch: dict) -> tuple[dict, list[str]]:

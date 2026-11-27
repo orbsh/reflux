@@ -259,11 +259,11 @@ class Frames(unittest.TestCase):
         self.assertEqual([route.path for route in demo_app.app.routes], ["/", "/about", "/chat", "/counter", "/demo", "/settings"])
         self.assertIsNone(demo_app.app.routes.match("/nope"))
 
-    def test_prompt_unwraps_the_renderers_field_shape(self):
-        self.assertEqual(chat.prompt_of({"data": {"text": {"data": "你好"}}}), "你好")
-        self.assertEqual(chat.prompt_of({"data": {"text": "你好"}}), "你好")  # a bare field
+    def test_prompt_reads_the_packed_value(self):
+        self.assertEqual(chat.prompt_of({"data": {"text": "你好"}}), "你好")
         self.assertIsNone(chat.prompt_of({"data": {}}))
-        self.assertIsNone(chat.prompt_of({"data": {"text": {"data": 3}}}))
+        self.assertIsNone(chat.prompt_of({"data": {"text": 3}}))
+        self.assertIsNone(chat.prompt_of({"data": {"text": None}}))
         self.assertIsNone(chat.prompt_of({}))
 
 

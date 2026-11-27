@@ -147,13 +147,12 @@ def page(ctx: Context, match) -> None:
 
 def prompt_of(frame: dict) -> str | None:
     """从 `chat.send` 帧里取出输入框的文本；帧里没有可用内容时是 None。
-    
-        表单提交带的是 `{字段: {"data": 值, ...}}` —— 这个形状来自渲染器而不是我们，所以拆包放在这里，
-        并且是全的：畸形的帧给出 None，绝不抛异常。
+
+    组的载荷是 `{tag: value}`（ADR 0032 §2）——值就是值，没有包装层；不是字符串就当没有，
+    畸形的帧给出 None，绝不抛异常。
     """
     data = frame.get("data")
-    entry = data.get("text") if isinstance(data, dict) else None
-    value = entry.get("data") if isinstance(entry, dict) else entry
+    value = data.get("text") if isinstance(data, dict) else None
     return value if isinstance(value, str) else None
 
 

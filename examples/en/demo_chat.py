@@ -153,12 +153,11 @@ def page(ctx: Context, match) -> None:
 def prompt_of(frame: dict) -> str | None:
     """The composer's text out of a `chat.send` frame, or None when the frame carries nothing usable.
 
-    A form's submit carries `{field: {"data": value, ...}}` — that shape comes from the renderer, not
-    from us, so the unwrapping lives here and is total: a malformed frame yields None, never a raise.
+    A group's payload is `{tag: value}` (ADR 0032 §2) — the value is the value, with no wrapper; anything
+    that is not a string counts as nothing, and a malformed frame yields None, never a raise.
     """
     data = frame.get("data")
-    entry = data.get("text") if isinstance(data, dict) else None
-    value = entry.get("data") if isinstance(entry, dict) else entry
+    value = data.get("text") if isinstance(data, dict) else None
     return value if isinstance(value, str) else None
 
 

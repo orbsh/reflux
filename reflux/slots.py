@@ -3,7 +3,8 @@
 Both are names on the wire (a slot is a place in the page, an event is a handler on the host — ADR 0023)
 and both are handled the same way: as a handle from one table, never as a string at the point of use.
 `source="status"` next to a `slot.set(...)` is the same name written twice, kept in step by eye; the
-particular kind of address is the `Bind`'s business — slot, scope, default, path, type (ADR 0031) —
+particular kind of address belongs to the shape it travels in — `Source{slot, default, scope, path}` for
+a read, `Sink{dest, scope, path}` for a write (ADR 0031; ADR 0039 split the one `Bind`) —
 not the caller's. So there is one table (`ctx.slot`), one type (`Slot`), and both `source=` and
 `sink=` refuse strings.
 

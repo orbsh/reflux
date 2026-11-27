@@ -29,11 +29,14 @@ def body(device: FakeDevice) -> dict:
 
 
 class TestFlatten(unittest.TestCase):
-    def test_the_renderers_field_shape_is_unwrapped(self):
+    def test_the_pack_is_tag_to_value(self):
         self.assertEqual(
-            settings.flatten({"sketch": {"data": True}, "round": {"data": 8}}),
+            settings.flatten({"sketch": True, "round": 8}),
             {"sketch": True, "round": 8},
         )
+
+    def test_an_empty_field_is_not_a_member(self):
+        self.assertEqual(settings.flatten({"sketch": None, "round": 8}), {"round": 8})
 
     def test_bare_values_pass_through(self):
         self.assertEqual(settings.flatten({"accent": "#ffffff"}), {"accent": "#ffffff"})
@@ -132,7 +135,7 @@ class TestStore(unittest.TestCase):
 
     def test_a_change_is_written_once(self):
         # No loop here (a plain test), so `save_soon` writes at once instead of scheduling.
-        self.store.apply({"round": {"data": 6}})
+        self.store.apply({"round": 6})
         self.assertEqual(self.store.state["round"], "6")
         self.assertEqual(self.store.writes, 1)
         self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["round"], "6")
@@ -152,9 +155,9 @@ class TestStore(unittest.TestCase):
     def test_the_write_is_throttled_to_the_last_change(self):
         async def burst() -> int:
             self.store.delay = 0.05
-            self.store.apply({"round": {"data": 4}})
-            self.store.apply({"round": {"data": 5}})
-            self.store.apply({"round": {"data": 6}})
+            self.store.apply({"round": 4})
+            self.store.apply({"round": 5})
+            self.store.apply({"round": 6})
             self.assertEqual(self.store.writes, 0, "nothing hits the disk inside the window")
             await asyncio.sleep(0.12)
             return self.store.writes
@@ -162,7 +165,7 @@ class TestStore(unittest.TestCase):
         self.assertEqual(run_sync(burst()), 1, "three changes in one window, one write")
 
     def test_the_file_is_replaced_atomically(self):
-        self.store.apply({"accent": {"data": "0.7 0.1 200"}})
+        self.store.apply({"accent": "0.7 0.1 200"})
         self.store.flush()
         leftovers = [p.name for p in self.path.parent.iterdir()]
         self.assertEqual(leftovers, ["settings.json"], "no .tmp survives a successful write")
@@ -185,7 +188,7 @@ class TestSeed(unittest.TestCase):
         with tempfile.TemporaryDirectory() as where:
             settings.settings.path = Path(where) / "s.json"
             settings.settings.state = dict(settings.DEFAULTS)
-            settings.settings.apply({"round": {"data": 21}})
+            settings.settings.apply({"round": 21})
             device = FakeDevice(app=create_app())
             settings.seed(device.app.context(device))
             landed = body(device)[settings.CONFIG]
@@ -231,7 +234,7 @@ class TestTheUplink(unittest.TestCase):
             ctx = app.context(device)
             run_sync(
                 settings.on_config(
-                    ctx, {"dest": settings.CONFIG, "data": {"accent": {"data": "red"}, "round": {"data": 9}}}
+                    ctx, {"dest": settings.CONFIG, "data": {"accent": "red", "round": 9}}
                 )
             )
             note = body(device)["settings.note"]
