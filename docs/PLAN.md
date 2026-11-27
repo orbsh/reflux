@@ -72,15 +72,16 @@
 - [x] 步长框改成 `kind="number"`：解析归渲染器（`42` → number，空盒 → null），`set_step` 只剩页面自己的 1–10 规则；`probe_counter` 从页面快照变成一条真检查（按一下得 1、输入 `3` 回车、再按得 4，否则非零退出）
 - [x] 门：`gate_t4` 10/10（含"无 `tag` 的字段回车什么都不发、也不清空"、"包里是裸值，没有 `{data, payload}` 包装"）、`gate_t10` 9/9 逐字节、`gate_t3` 16/16（2026-11-27 复跑）
 
-## 设置页（ADR 0001，2026-11-25/26，已落地；控件的最后一半仍在上游）
+## 设置页（ADR 0001，2026-11-25/27，已落地；控件的最后一半仍在上游）
 
-决定在 `docs/adr/0001-page-options-and-the-settings-page.md`（§2 值怎么走、§3–4 `TOKENS` 表与它的边界、§5 持久化、§8 整个令牌面、§9 颜色字段）。
+决定在 `docs/adr/0001-page-options-and-the-settings-page.md`（§2 值怎么走、§3–4 `TOKENS` 表与它的边界、§5 持久化、§8 导出面——就是 core.css `@layer options` 的十三个叶子、`tokens` 层的派生/成对在 `DERIVED` 里逐条说明、§9 颜色字段）。
 
-- [x] 一页、一个组：`demo_settings.py` 按 `TOKENS` 表生成十个颜色、三个长度、一个线型，加 `sketch`；出口 `sink=Sink(dest="__CONFIG__", scope="both", path="/")`、`submit=["change"]`、`reset="keep"`；`demo_app.py` 注册 `/settings` 路由、第七个导航项与 `on_go` 的一行。槽里放"无形状"的 `frame`（`source.default` 是 fluxen 读成员的地方）
+- [x] 一页、一个组：`demo_settings.py` 按 `TOKENS` 表生成三段——调色板（六个颜色）、形式（两个圆角、边框宽、线型）、字（焦点环宽、字号、字体栈）——加 `sketch`；出口 `sink=Sink(dest="__CONFIG__", scope="both", path="/")`、`submit=["change"]`、`reset="keep"`；`demo_app.py` 注册 `/settings` 路由、第七个导航项与 `on_go` 的一行。槽里放"无形状"的 `frame`（`source.default` 是 fluxen 读成员的地方）
 - [x] 上行与持久化：`on_config` → `Store.apply`（`flatten` 拆包、白名单、值域：颜色 `L C H`、长度 0–64、线型五个词、`sketch` 只收 bool）、`save_soon` 节流（`loop.call_later`）、`flush` 原子写（`.tmp` + `replace`）、`--settings <path>`（缺省 `./.demo-settings.json`，入 `.gitignore`）、启动 `load()`；外框每台设备第一次被画时写进槽（`seed`），新连接第一帧即生效
-- [x] 上色：`www/static/reflux.js` 的 `TOKENS` 表（白名单 + 种类：颜色十、长度三、线型一），颜色存 `L C H` 由表合成 `oklch()`，长度补 `px`；空值撤掉那条自定义属性、交回样式表缺省（成对的 `light-dark` 也在里面）
-- [x] 控件跟到上游：长度是 `kind="number"` 的输入框、`sketch` 是 `kind="bool"` 的勾选框、线型是折起来的 `picker`（`expand`，ADR 0049）；颜色是 `color` 字段（一块方片 + 可复制的 `oklch()` 字面量，悬浮展开 L/C/H 三根滑块），十个颜色令牌共用它（fluxen ADR 0052）— 2026-11-25/26
-- [x] 门：`gate_settings` 13/13（真 Chromium：首帧带已存选项、`TOKENS` 落成 `:root` 属性、一次点击只动一个成员、`round` 10→18、越界回落缺省、折起的词表选中即收起、`--border` 跟着拼它的三样、`sketch` 镜像给渲染器、手绘模式下浮层是描出来的、上行合并、刷新仍是存下的值）；`tests/test_settings.py` 27 例
+- [x] 上色：`www/static/reflux.js` 的 `TOKENS` 表（白名单 + 种类：颜色六、长度五、线型一、字体一），颜色存 `L C H` 由表合成 `oklch()`，长度补 `px`；空值撤掉那条自定义属性、交回样式表缺省（成对的 `light-dark` 也在里面）；表外的 `:root` 令牌逐条列在 `DERIVED`，测试要求"每个令牌要么在 `TOKENS`、要么在 `DERIVED`"
+- [x] 控件跟到上游：长度是 `kind="number"` 的输入框、`sketch` 是 `kind="bool"` 的勾选框、线型是折起来的 `picker`（`expand`，ADR 0049）；字体栈是文本框（校验只收单个值）；颜色是 `color` 字段（一块方片 + 可复制的 `oklch()` 字面量，悬浮展开 L/C/H 三根滑块），六个颜色令牌共用它（fluxen ADR 0052）— 2026-11-25/26
+- [x] 令牌面按 core 的 `@layer options` 重排（2026-11-27，fluxen ADR 0055）：表就是那一层的十三个叶子——调色板六个、形式四个（两个圆角、边框宽、线型）、字三个（焦点环宽、字号、字体栈）；`fg`/`bg`/`surface`/`wash`/`ring`/`border-color`/`ink`/`gloss`/`shadow-color`/`shadow-ink` 进 `DERIVED`；`reflux.js`、`TOKENS` 与两棵树同步；`gate_settings` 的第二个颜色从 `bg` 换成 `secondary`，新增"字"一条
+- [x] 门：`gate_settings` 14/14（十四个控件；真 Chromium：首帧带已存选项、`TOKENS` 落成 `:root` 属性、一次编辑只动一个成员、`round` 10→18、越界回落缺省、折起的词表选中即收起、`--border` 跟着拼它的三样、字号与字体栈到达 `:root`、`sketch` 镜像给渲染器、手绘模式下浮层是描出来的、上行合并、刷新仍是存下的值）；`tests/test_settings.py` 29 例
 - [ ] 值的手势还剩上游一半：`picker` 的滑块与开关尚未画出（fluxen ADR 0050 的「还没做」）。本仓这一侧已经跟到位——`kind` 用上了、服务端也认数字与布尔两种形状；上游画出来之后，本页若出现数字/布尔选项再换控件
 
 ## 服务端搬到 asyncio（ADR 0002，2026-11-25，已落地）
@@ -106,6 +107,6 @@
 
 ## 复核与门的现状（2026-11-27）
 
-- [x] 全量 439 例、`tools/gen_sdk.py --check` 在同步态；十二道门全绿（t0 7／t2 12／t3 16／t4 10／t6 8／t7 4／t8 5／t10 9／ingest 12／chat 12／demo 19／settings 13）；`probe_counter` 通过
-- [x] 渲染器钉在 `42f28d4`，本地 vendor 树与 `versions.json` 逐字节一致（见上节）
+- [x] 全量 441 例、`tools/gen_sdk.py --check` 在同步态；十二道门全绿（t0 7／t2 12／t3 16／t4 10／t6 8／t7 4／t8 5／t10 9／ingest 12／chat 12／demo 19／settings 14）；`probe_counter` 通过。**一条红**：`tests/test_packaging.py` 要求 `versions.json` 的 rev 是一个干净的哈希，本地包记的是 `e9515ea-dirty`（本地构建），发布件不会有这个后缀
+- [x] 渲染器本地包是 fluxen `e9515ea` 的本地构建（`versions.json` 记 `e9515ea-dirty`）：core.css 分成 `@layer options`（十三个宿主可换的叶子，含 `--focus-width`／`--font-size`／`--font-family`）与 `tokens`（成对端点与派生，含新增的 `--wash`／`--ring`／`--ink`／`--gloss`／两条阴影）——设置页按这张新面重排（见上节）。四个文件与清单逐字节一致；上一件发布件是 `42f28d4`（见变更记录）
 - [ ] `gate_t9` 15/17 里两项红（#11 退出不撤销、#14 后退的帧带着 `token`）：同一个因——渲染器在「已登录的 auth 子树换成登录面」那一帧 panic（`Tried to access a reactive value that has already been disposed`），DOM 冻在旧状态，空标记到不了浏览器，存下的 token 因此还在。已排除空文本标记、`request_draw`、重复写同一块登录面三种嫌疑。这是 fluxen 侧的账（它的 `dd1765d` 已写明「the panic T9 reports」仍在），本仓等那边修好后重取 vendor、回跑十三道门。

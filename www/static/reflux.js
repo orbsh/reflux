@@ -27,20 +27,19 @@ const TOKEN_KEY = "reflux:token";
 // core.css 的 `:root` 令牌面 -> 种类。表是白名单：成员不在表里，就不上色。变量名由成员名加 `--` 得到，
 // 所以没有第二张对照表；加一个令牌是加一行（服务端那张表是同一份事实，测试钉着两边相等）。
 const TOKENS = {
-  fg: "color",
-  bg: "color",
-  surface: "color",
   accent: "color",
   primary: "color",
   secondary: "color",
   disabled: "color",
   warn: "color",
   error: "color",
-  "border-color": "color",
   round: "length",
   "input-round": "length",
   "border-width": "length",
   "border-style": "keyword",
+  "focus-width": "length",
+  "font-size": "length",
+  "font-family": "font",
 };
 
 const KEYWORDS = new Set(["solid", "dashed", "dotted", "double", "none"]);
@@ -61,6 +60,11 @@ function tokenValue(kind, raw) {
   if (kind === "length") {
     const value = Number(text.replace(/px$/i, ""));
     return Number.isFinite(value) && value >= 0 && value <= 64 ? `${value}px` : null;
+  }
+  if (kind === "font") {
+    // A font stack is one value: no rule separators, no braces, one line, bounded length.
+    if (text.length > 120 || /[{};<>]/.test(text) || /[\r\n]/.test(text)) return null;
+    return text.replace(/\s*,\s*/g, ", ");
   }
   const keyword = text.toLowerCase();
   return KEYWORDS.has(keyword) ? keyword : null;

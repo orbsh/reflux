@@ -98,6 +98,15 @@ class TestMerge(unittest.TestCase):
         self.assertEqual(settings.merge(self.base(), {"border-style": "DASHED"})[0]["border-style"], "dashed")
         self.assertEqual(settings.merge(self.base(), {"border-style": "wavy"})[1], ["border-style"])
 
+    def test_a_font_stack_is_one_value(self):
+        merged, rejected = settings.merge(self.base(), {"font-family": '"Helvetica Neue",  Arial ,sans-serif'})
+        self.assertEqual(rejected, [])
+        self.assertEqual(merged["font-family"], '"Helvetica Neue", Arial, sans-serif', "separators normalise")
+        for bad in ("Arial; color: red", "Arial {", "x" * 121, "Arial\nsans-serif"):
+            self.assertEqual(settings.merge(self.base(), {"font-family": bad})[1], ["font-family"])
+        # An empty box is "not set", not a mistake (the group packs every field on each frame).
+        self.assertEqual(settings.merge(self.base(), {"font-family": "  "})[1], [])
+
     def test_an_empty_value_clears_the_member(self):
         """Clearing a field is "not set", not an error: core's default (and its light-dark pair) returns."""
         merged, rejected = settings.merge({"accent": "0.7 0.1 200"}, {"accent": "   "})
@@ -246,28 +255,38 @@ class TestTheUplink(unittest.TestCase):
 class TestTheTables(unittest.TestCase):
     """One fact, three readers: the page's fields, the browser's table, and core.css's `:root` block.
 
-    These cases are the only thing keeping "all of core's tokens are exported" honest: a token added to the
-    stylesheet by a renderer bump shows up as a missing row here, and a member the browser table forgot shows
-    up as a mismatch between two lists that have no other way to agree.
+    These cases are the only thing keeping "every token is either a setting or documented as derived" honest:
+    a token added to the stylesheet by a renderer bump shows up as a missing row here, and a member the browser
+    table forgot shows up as a mismatch between two lists that have no other way to agree.
     """
 
-    def root_block(self) -> str:
+    def layer_root(self, name: str) -> str:
         css = (Path(__file__).resolve().parent.parent / "www/static/vendor/fluxen/assets/core.css").read_text(encoding="utf-8")
-        start = css.index("@layer tokens {")  # the block, not the layer list at the top of the file
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)  # the doc comments carry `:root { … }` examples
+        start = css.index(f"@layer {name} {{")
         begin = css.index(":root {", start)
         return css[begin : css.index("}", begin)]
 
-    def root_tokens(self) -> set[str]:
-        names = set(re.findall(r"--([a-z-]+)\s*:", self.root_block()))
+    def token_names(self) -> set[str]:
+        # Two layers since fluxen ADR 0055: `options` holds the leaves a host may swap, `tokens` what they compute.
+        names: set[str] = set()
+        for layer in ("options", "tokens"):
+            names |= set(re.findall(r"--([a-z-]+)\s*:", self.layer_root(layer)))
         return names - {"border"}  # `--border` is composed from width, style and colour
 
-    def test_every_root_token_is_exported(self):
-        self.assertEqual(sorted(self.root_tokens()), sorted(settings.TOKENS))
+    def test_every_token_is_a_setting_or_documented_as_derived(self):
+        # A token the renderer adds must land in exactly one of the two tables: a setting, or a documented
+        # reason why it is not one. The options layer itself is checked against TOKENS alone, so a swapped-out
+        # leaf cannot hide in DERIVED.
+        root = self.token_names()
+        self.assertEqual(sorted(root), sorted(set(settings.TOKENS) | set(settings.DERIVED)))
+        options = set(re.findall(r"--([a-z-]+)\s*:", self.layer_root("options")))
+        self.assertEqual(sorted(options), sorted(settings.TOKENS), "the options layer is the table")
 
     def test_the_browser_table_is_the_server_table(self):
         script = (Path(__file__).resolve().parent.parent / "www/static/reflux.js").read_text(encoding="utf-8")
         block = script[script.index("const TOKENS = {") : script.index("};", script.index("const TOKENS = {"))]
-        pairs = re.findall(r'"?([a-z-]+)"?:\s*"(color|length|keyword)"', block)
+        pairs = re.findall(r'"?([a-z-]+)"?:\s*"(color|length|keyword|font)"', block)
         self.assertEqual(dict(pairs), settings.TOKENS, "reflux.js and the page must name the same tokens")
 
     def test_both_trees_export_the_same_tokens(self):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Settings gate — core.css's whole token surface over a real browser, and the server remembering it.
+"""Settings gate — core.css's settable token surface over a real browser, and the server remembering it.
 
 The unit tests (`tests/test_settings.py`) own the server's half: unpacking the group, the whitelist, the
 ranges, the throttled write, and the three tables agreeing. What only a browser can answer is the half
@@ -35,12 +35,14 @@ from examples.zh import demo_settings  # noqa: E402
 
 PAGE = "/settings"
 
-# What the page draws, in order: the sketch switch, then one row per token in table order. Every colour is a
-# colour field (a swatch with a panel behind it), and the border style is a row of words.
+# What the page draws, in order: the sketch switch, then one row per token in table order. The palette is six
+# colour fields (a swatch with a panel behind it), form is three number boxes and a folded picker, and type is a
+# number box plus a text box (the font stack) — the thirteen leaves `@layer options` names.
 COLOURS = [name for name, kind in demo_settings.TOKENS.items() if kind == "color"]
 LENGTHS = [name for name, kind in demo_settings.TOKENS.items() if kind == "length"]
+FONTS = [name for name, kind in demo_settings.TOKENS.items() if kind == "font"]
 SELECTS = [name for name, kind in demo_settings.TOKENS.items() if kind == "keyword"]
-INPUTS = ["sketch", *LENGTHS]
+INPUTS = ["sketch", *LENGTHS, *FONTS]
 CONTROLS = len(INPUTS) + len(SELECTS) + len(COLOURS)
 
 START = {"sketch": False, "accent": "0.7 0.12 200"}  # what the server already remembers
@@ -238,15 +240,15 @@ def main() -> int:
                 )
             )
 
-            # 2b. every token uses the same field, and a chroma of zero is the grey axis
-            greyed = set_color(cdp, "bg", 1.0, 0.0, 0.0)
-            neutral = wait_for(lambda: (root_attr(cdp, "bg") or "").split()[1:2] in (["0"], ["0.00"]))
-            grey = root_attr(cdp, "bg") or ""
+            # 2b. every colour uses the same field, and a chroma of zero is the grey axis
+            greyed = set_color(cdp, "secondary", 1.0, 0.0, 0.0)
+            neutral = wait_for(lambda: (root_attr(cdp, "secondary") or "").split()[1:2] in (["0"], ["0.00"]))
+            grey = root_attr(cdp, "secondary") or ""
             checks.append(
                 (
                     "a chroma of zero is grey — a neutral token is reached through the same panel",
-                    bool(greyed and neutral) and float(grey.split()[1]) == 0.0 and custom(cdp, "bg") == f"oklch({norm(grey)})",
-                    f"data-bg={grey!r} --bg={custom(cdp, 'bg')!r}",
+                    bool(greyed and neutral) and float(grey.split()[1]) == 0.0 and custom(cdp, "secondary") == f"oklch({norm(grey)})",
+                    f"data-secondary={grey!r} --secondary={custom(cdp, 'secondary')!r}",
                 )
             )
 
@@ -301,6 +303,20 @@ def main() -> int:
                 )
             )
 
+            # 5b. type reaches :root: the size is a length, the stack is one text value
+            typed = set_field(cdp, "font-size", "24")
+            sized = wait_for(lambda: custom(cdp, "font-size") == "24px")
+            stacked = set_field(cdp, "font-family", '"Courier New", monospace')
+            faced = wait_for(lambda: '"Courier New"' in custom(cdp, "font-family"))
+            reads = cdp.eval("getComputedStyle(document.documentElement).fontSize") or ""
+            checks.append(
+                (
+                    "the type knobs reach :root — size as a length, the stack as one value",
+                    bool(typed and sized and stacked and faced) and reads == "24px",
+                    f"--font-size={custom(cdp, 'font-size')!r} --font-family={custom(cdp, 'font-family')!r} root={reads!r}",
+                )
+            )
+
             # 6. sketch is the renderer's member: the mirror moves, the browser draws borders
             toggled = click_field(cdp, "sketch")
             mirrored = wait_for(lambda: root_attr(cdp, "sketch") == "true")
@@ -350,9 +366,11 @@ def main() -> int:
                     "the uplink reached the server and was merged",
                     bool(
                         waited
-                        and state.get("bg") == norm(grey)
+                        and state.get("secondary") == norm(grey)
                         and state.get("round") == "18"
                         and state.get("border-style") == "dashed"
+                        and state.get("font-size") == "24"
+                        and state.get("font-family") == '"Courier New", monospace'
                         and state.get("sketch") is True
                     ),
                     f"state={state}",

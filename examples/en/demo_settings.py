@@ -21,14 +21,18 @@ can be set on their own, and what kind each one is. The page generates the contr
 is picked by kind, and the browser table checks by kind too — so the three places share one fact (the name,
 i.e. the variable without `--`, and the kind), and adding a token is one row, not three edits.
 
+**The table is `@layer options`**: core keeps the leaves a host may replace whole in that layer — **thirteen**
+of them: six palette names (three say what a thing IS: `accent` / `primary` / `secondary`; three say what it
+MEANS: `disabled` / `warn` / `error`), four form knobs (`round` / `input-round` / `border-width` /
+`border-style`), and three type knobs (`focus-width` / `font-size` / `font-family`). The paired endpoints and
+derivatives in `tokens` are not in the table but in `DERIVED`: `fg` / `bg` are `light-dark(a, b)` pairs (one
+member can carry one value, so setting one decides for both schemes), `surface` / `wash` / `ring` /
+`border-color` are mixed from them, and `ink` / `gloss` / `shadow-color` / `shadow-ink` are the two absolutes
+a shadow is built from.
+
 **Colours are `oklch` triples**: a member holds `L C H` (three numbers) and `oklch(...)` is composed exactly
 once, in `reflux.js` — so the colour space is one decision instead of a string in every default. An empty
 value means "not set", which hands the token back to core.css (including its paired `light-dark(a, b)`).
-
-**Setting one pins both colour schemes**: `fg` / `bg` / `surface` are `light-dark(light, dark)` pairs in core,
-and one member can only carry one value. Setting one of them chooses that colour for both schemes; clearing
-it brings the pair back. That is the trade decided on 2026-11-25 (the other road — one member per scheme —
-can be opened when something needs it).
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ __all__ = [
     "CONFIG",
     "CORE",
     "DEFAULTS",
+    "DERIVED",
     "GROUPS",
     "KEYWORDS",
     "LABELS",
@@ -64,72 +69,100 @@ __all__ = [
 
 CONFIG = "__CONFIG__"  # fluxen's page-options slot: `#main` has no `data-config`, so this is the default name
 
-# core.css's `:root` token surface: name (after `--`) → kind. The two derived ones are not here:
-# `--border-color` defaults to `var(--secondary)`, and `--border` is composed from width/style/colour — they
-# follow the members in this table.
+# `@layer options` in core.css is the list that counts: **thirteen** leaves a host may replace whole — six
+# palette names, four form knobs, three type knobs. The order is the order of the page's controls. Everything
+# else lives in `tokens` (paired endpoints and derivatives) and is listed in `DERIVED`.
 TOKENS: dict[str, str] = {
-    "fg": "color",
-    "bg": "color",
-    "surface": "color",
     "accent": "color",
     "primary": "color",
     "secondary": "color",
     "disabled": "color",
     "warn": "color",
     "error": "color",
-    "border-color": "color",
     "round": "length",
     "input-round": "length",
     "border-width": "length",
     "border-style": "keyword",
+    "focus-width": "length",
+    "font-size": "length",
+    "font-family": "font",
 }
 
-# How the page groups them: layout only, no part of the checks.
+# The `tokens` layer, with why each is not a setting: paired endpoints or values computed from the options.
+# The form only offers choices a person makes directly. `--border` is not here: it is the composition of
+# width, style and colour, and the test excludes it by name.
+DERIVED: dict[str, str] = {
+    "fg": "a light-dark pair: one member can carry one value",
+    "bg": "a light-dark pair: one member can carry one value",
+    "surface": "a step mixed from bg and fg",
+    "border-color": "var(--secondary): the line follows the secondary colour",
+    "wash": "12% of fg: the hover ground",
+    "ring": "18% of fg: the focus ring's colour",
+    "ink": "the absolute black of a shadow",
+    "gloss": "the absolute white of glass",
+    "shadow-color": "var(--ink)",
+    "shadow-ink": "10% of shadow-color",
+}
+
+# How the page groups them: layout only, no part of the checks. Three sections follow the options layer's own
+# split — what a thing is / means, form, type. Order matches `TOKENS` (the gate addresses by position within a
+# kind); colours are one group, the four form knobs are named here, and every other non-colour is the third.
+FORM = ["round", "input-round", "border-width", "border-style"]
 GROUPS: list[tuple[str, str, list[str]]] = [
-    ("Colours · oklch triples (L C H)", "color", [n for n, k in TOKENS.items() if k == "color"]),
-    ("Sizes · numbers (pixels)", "length", [n for n, k in TOKENS.items() if k == "length"]),
-    ("Border style", "keyword", [n for n, k in TOKENS.items() if k == "keyword"]),
+    (
+        "palette",
+        "Palette · six colours (oklch triples L C H)",
+        [n for n, k in TOKENS.items() if k == "color"],
+    ),
+    (
+        "form",
+        "Form · radii, border width and style",
+        FORM,
+    ),
+    (
+        "type",
+        "Type and focus · ring width, size, family",
+        [n for n in TOKENS if n not in FORM and TOKENS[n] != "color"],
+    ),
 ]
 
 LABELS: dict[str, str] = {
-    "fg": "Foreground / text",
-    "bg": "Background",
-    "surface": "Surface (cards)",
     "accent": "Accent",
     "primary": "Primary",
     "secondary": "Secondary",
     "disabled": "Disabled",
     "warn": "Warning",
     "error": "Error",
-    "border-color": "Border colour",
     "round": "Corner radius",
     "input-round": "Input radius",
     "border-width": "Border width",
     "border-style": "Border style",
+    "focus-width": "Focus ring width",
+    "font-size": "Font size",
+    "font-family": "Font stack",
 }
 
 # core.css's defaults, used only as the inputs' placeholders and as documentation: the real default lives in
 # the stylesheet, and this file never writes it.
 CORE: dict[str, str] = {
-    "fg": "0.18 0 0 / dark 0.98 0 0",
-    "bg": "1 0 0 / dark 0.15 0 0",
-    "surface": "0.965 0 0 / dark 0.205 0 0",
     "accent": "0.7 0.12 182.49",
     "primary": "0.98 0.06 107.14",
     "secondary": "0.93 0 0",
     "disabled": "0.6 0 0",
     "warn": "0.84 0.12 92.82",
     "error": "0.63 0.19 23.03",
-    "border-color": "var(--secondary)",
     "round": "10",
-    "input-round": "5.6 (0.35em)",
+    "input-round": "0.35em (about 5.6px)",
     "border-width": "1",
     "border-style": "solid",
+    "focus-width": "max(2px, 0.15em)",
+    "font-size": "20 (1.25rem)",
+    "font-family": "Helvetica Neue, Tahoma, Arial, PingFangSC-Regular, Hiragino Sans GB, Microsoft Yahei, sans-serif",
 }
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# All ten colour tokens share one **swatch**: the row holds a colour square and its `oklch()` literal, and a
+# All six colour tokens share one **swatch**: the row holds a colour square and its `oklch()` literal, and a
 # hover opens three sliders (L, C, H, each with a number box). What the field packs is the `L C H` triple, so
 # the member, the validators and the browser never learn that a control was involved. Lightness is one of the
 # three now — there is no per-token constant pinning it any more.
@@ -189,7 +222,22 @@ def _keyword(value: Any) -> str | None:
     return text if text in KEYWORDS else None
 
 
-_BY_KIND = {"color": _color, "length": _length, "keyword": _keyword}
+def _font(value: Any) -> str | None:
+    """A font stack: comma-separated names, quoted where needed.
+
+    This value is written into `--font-family` as it stands, so it has to be **one value**: empty, longer
+    than 120, multi-line, or carrying `;` / braces / angle brackets is refused — those characters make it
+    read like a declaration rather than a font name.
+    """
+    text = value.strip() if isinstance(value, str) else ""
+    if not text or len(text) > 120:
+        return None
+    if len(text.splitlines()) != 1 or any(ch in "{};<>" for ch in text):
+        return None
+    return re.sub(r"\s*,\s*", ", ", text)
+
+
+_BY_KIND = {"color": _color, "length": _length, "keyword": _keyword, "font": _font}
 
 MEMBERS: dict[str, Any] = {"sketch": _bool, **{name: _BY_KIND[kind] for name, kind in TOKENS.items()}}
 
@@ -321,12 +369,14 @@ def seed(ctx: Context) -> None:
 def field(name: str, kind: str, value: Any) -> Accrete:
     """One token row: a label, a control, and (for colours) a live preview.
 
-    The preview reads the variable itself (`background: var(--fg)`), so it shows the colour in force at that
-    moment — no second copy of the state. A field's `tag` is the member name; the group's outlet packs by it.
+    The preview reads the variable itself (`background: var(--accent)`, spelled from the name), so it shows
+    the colour in force at that moment — no second copy of the state. A field's `tag` is the member name; the
+    group's outlet packs by it.
 
-    A colour is a swatch with a copyable literal, and a hover opens the three sliders (L, C, H); the border
-    style is a word to click. Both are fields whose exit is the group they sit in, so one change is one
-    `change` — a drag coalesces on the field's own window.
+    A colour is a swatch with a copyable literal, and a hover opens the three sliders (L, C, H); form is three
+    number boxes and a word to click; type is a size (number box) and a font stack (text box). All are fields
+    whose exit is the group they sit in, so one change is one `change` — a drag coalesces on the field's own
+    window.
     """
     if kind == "color":
         control: Accrete = h.color(
@@ -344,6 +394,17 @@ def field(name: str, kind: str, value: Any) -> Accrete:
             selector="cfg",
             expand=True,
             source=Source(slot=WORDS_SLOT),
+            id=f"cfg-{name}",
+        )
+    elif kind == "font":
+        # A font stack is one value, not a word list: a text box, checked once on the server and once in the
+        # browser (it may only be a single value).
+        control = h.input(
+            tag=name,
+            kind="text",
+            selector="cfg",
+            source=Source(default=value),
+            placeholder=CORE.get(name, ""),
             id=f"cfg-{name}",
         )
     else:
@@ -397,22 +458,22 @@ def page(ctx: Context, match) -> Accrete:
         for word in KEYWORDS:
             words.append(h.text(word, id=word))
     groups: list[Accrete] = []
-    for title, kind, names in GROUPS:
+    for key, title, names in GROUPS:
         groups.append(
             h.frame(
                 h.text(title, variant="heading-3"),
-                *[field(name, kind, now.get(name, "")) for name in names],
+                *[field(name, TOKENS[name], now.get(name, "")) for name in names],
                 grid={"grid-template-rows": f"auto repeat({len(names)}, auto)", "gap": "8px"},
                 variant="card",
-                id=f"group-{kind}",
+                id=f"group-{key}",
             )
         )
     return h.frame(
         h.text("Settings", variant="heading-1"),
         h.text(
-            "core.css's token surface: every colour is picked on the same disc — its face is oklch's hue (the "
-            "angle) and chroma (the radius), the centre is grey, and lightness is pinned per token to its own "
-            "default. Sizes are numbers (pixels) and the border style is a click. What travels is an oklch triple "
+            "core.css's options layer: the palette is **six colours**, each a swatch with a copyable "
+            "`oklch()` literal — a hover opens the L / C / H sliders; form is numbers (radii, border width) and "
+            "a style to click; type is a size (number) and a font stack (text). What travels is an oklch triple "
             "`L C H` (lightness 0–1, chroma 0–0.4, hue 0–360). A change takes effect locally at once and goes up "
             "to the server to be remembered (ADR 0001).",
             variant="muted",

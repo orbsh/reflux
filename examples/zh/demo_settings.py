@@ -11,17 +11,20 @@
 3. **起始值**：每台设备第一次被画时，外框把已存对象先 `set` 进这个槽，所以新连接、刷新、换设备的第一帧
    就带着用户的选择。
 
-**导出的是一张表，不是一个一个字段**：`TOKENS` 说"core 的 `:root` 上有哪些可独立设置的令牌、各自是
-什么种类"，页面按它生成控件、校验按种类选，浏览器侧那张表也按种类查。三处于是只有一份事实——名字
+**导出的是一张表，不是一个一个字段**：`TOKENS` 说"core 的 `:root` 上有哪些可独立设置的令牌、各自是什
+么种类"，页面按它生成控件、校验按种类选，浏览器侧那张表也按种类查。三处于是只有一份事实——名字
 （去掉 `--` 就是 `:root` 上的变量名）与种类；加一个令牌是往表里加一行，不是改三处。
+
+**表就是 `@layer options`**：core 把宿主能整体替换的叶子放在那一层，一共**十三个**——六个调色板名字（三个
+说"是什么"：`accent`／`primary`／`secondary`；三个说"什么意思"：`disabled`／`warn`／`error`）、四个形式
+（`round`／`input-round`／`border-width`／`border-style`）、三个字（`focus-width`／`font-size`／`font-family`）。
+`tokens` 层里的成对端点与派生不在表里，列在 `DERIVED`：`fg`／`bg` 是 `light-dark(a, b)` 成对值（一个成员
+只能带一个值，设置它就是替两套配色一起做决定），`surface`／`wash`／`ring`／`border-color` 从它们混出来，
+`ink`／`gloss`／`shadow-color`／`shadow-ink` 是阴影的两个绝对色。
 
 **颜色是 `oklch` 三元组**：成员值存 `L C H`（三个数），`oklch(...)` 只在 `reflux.js` 里合成为一次——
 于是"颜色空间"是一个决定，不是散在十几个值里的字符串。空值 = 不设 = core 的缺省（成对的
 `light-dark(a, b)` 也一起回来）。
-
-**一设就两种配色模式都钉住**：`fg`／`bg`／`surface` 在 core 里是 `light-dark(浅, 深)` 成对值，而一个
-成员只能带一个值。设置它们就等于替两种模式选同一个颜色；清空即回到成对缺省。这是 2026-11-25 定下的
-取舍（另一条路是每种模式一个成员，真有那需求再开）。
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ __all__ = [
     "CONFIG",
     "CORE",
     "DEFAULTS",
+    "DERIVED",
     "GROUPS",
     "KEYWORDS",
     "LABELS",
@@ -57,70 +61,96 @@ __all__ = [
 
 CONFIG = "__CONFIG__"  # fluxen 的页面选项槽：`#main` 上没有 `data-config`，就是缺省名
 
-# core.css 的 `:root` 令牌面：名字（`--` 之后那一段）→ 种类。派生的两个不在这里：`--border-color` 缺省
-# 是 `var(--secondary)`、`--border` 由宽／线型／色拼出来 —— 它们跟着表里的成员走。
+# core.css 的 `@layer options` 是权威清单：**十三个**宿主可以整体替换的叶子——六个调色板名字、四个形式、
+# 三个字。顺序就是页面上控件的顺序。表外的令牌都在 `tokens` 层（成对端点与派生），逐条列在 `DERIVED`。
 TOKENS: dict[str, str] = {
-    "fg": "color",
-    "bg": "color",
-    "surface": "color",
     "accent": "color",
     "primary": "color",
     "secondary": "color",
     "disabled": "color",
     "warn": "color",
     "error": "color",
-    "border-color": "color",
     "round": "length",
     "input-round": "length",
     "border-width": "length",
     "border-style": "keyword",
+    "focus-width": "length",
+    "font-size": "length",
+    "font-family": "font",
 }
 
-# 页面上的分组：只是排版，不参与校验。
+# `tokens` 层的那批，逐个说清为什么不是一个设置项：它们是成对端点或从选项算出来的值。设置页只做"人能
+# 直接做的选择"。`--border` 不在这里：它是宽／线型／色的拼装，测试单独把它排除。
+DERIVED: dict[str, str] = {
+    "fg": "light-dark 成对值：一个成员只能带一个值",
+    "bg": "light-dark 成对值：一个成员只能带一个值",
+    "surface": "从 bg / fg 混出来的层",
+    "border-color": "var(--secondary)：边框色跟着次色走",
+    "wash": "fg 的 12% 覆盖：指针停留的底色",
+    "ring": "fg 的 18% 覆盖：焦点环的颜色",
+    "ink": "阴影的绝对黑",
+    "gloss": "玻璃的绝对白",
+    "shadow-color": "var(--ink)",
+    "shadow-ink": "shadow-color 的 10% 覆盖",
+}
+
+# 页面上的分组：只是排版，不参与校验。三段跟着 options 层自己的分法——是什么／什么意思，形式，字。
+# 顺序与 `TOKENS` 一致（门按种类的位置寻址）；颜色一组、形式四个写在这里，剩下非颜色的都归第三段。
+FORM = ["round", "input-round", "border-width", "border-style"]
 GROUPS: list[tuple[str, str, list[str]]] = [
-    ("颜色 · oklch 三元组（L C H）", "color", [n for n, k in TOKENS.items() if k == "color"]),
-    ("尺寸 · 数字（像素）", "length", [n for n, k in TOKENS.items() if k == "length"]),
-    ("边框线型", "keyword", [n for n, k in TOKENS.items() if k == "keyword"]),
+    (
+        "palette",
+        "调色板 · 六个颜色（oklch 三元组 L C H）",
+        [n for n, k in TOKENS.items() if k == "color"],
+    ),
+    (
+        "form",
+        "形式 · 圆角、边框宽与线型",
+        FORM,
+    ),
+    (
+        "type",
+        "字与焦点 · 焦点环宽、字号、字族",
+        [n for n in TOKENS if n not in FORM and TOKENS[n] != "color"],
+    ),
 ]
 
 LABELS: dict[str, str] = {
-    "fg": "前景 / 文字",
-    "bg": "背景",
-    "surface": "表面（卡片）",
     "accent": "强调色",
     "primary": "主色",
     "secondary": "次色",
     "disabled": "禁用",
     "warn": "警告",
     "error": "错误",
-    "border-color": "边框色",
     "round": "圆角",
     "input-round": "输入框圆角",
     "border-width": "边框宽",
     "border-style": "边框线型",
+    "focus-width": "焦点环宽",
+    "font-size": "字号",
+    "font-family": "字体栈",
 }
 
 # core.css 里的缺省，只用来当输入框的占位与页面上的说明：真正的缺省在样式表里，这里从不写它。
 CORE: dict[str, str] = {
-    "fg": "0.18 0 0 / 深色 0.98 0 0",
-    "bg": "1 0 0 / 深色 0.15 0 0",
-    "surface": "0.965 0 0 / 深色 0.205 0 0",
     "accent": "0.7 0.12 182.49",
     "primary": "0.98 0.06 107.14",
     "secondary": "0.93 0 0",
     "disabled": "0.6 0 0",
     "warn": "0.84 0.12 92.82",
     "error": "0.63 0.19 23.03",
-    "border-color": "var(--secondary)",
     "round": "10",
-    "input-round": "5.6（0.35em）",
+    "input-round": "0.35em（≈5.6px）",
     "border-width": "1",
     "border-style": "solid",
+    "focus-width": "max(2px, 0.15em)",
+    "font-size": "20（1.25rem）",
+    "font-family": "Helvetica Neue, Tahoma, Arial, PingFangSC-Regular, Hiragino Sans GB, Microsoft Yahei, sans-serif",
 }
 
 KEYWORDS = ("solid", "dashed", "dotted", "double", "none")
 
-# 十个颜色令牌共用一个**方片**：行内只站一块色块和它的 `oklch()` 字面量，悬浮才展开三根滑块
+# 六个颜色令牌共用一个**方片**：行内只站一块色块和它的 `oklch()` 字面量，悬浮才展开三根滑块
 # （L、C、H 各一根，各带一个数字框）。字段打包的就是 `L C H` 三元组，所以成员值、校验器、浏览器那侧
 # 都不必知道有个控件。亮度也在这三根里——这一版没有「按令牌钉住」的常量了。
 
@@ -179,7 +209,21 @@ def _keyword(value: Any) -> str | None:
     return text if text in KEYWORDS else None
 
 
-_BY_KIND = {"color": _color, "length": _length, "keyword": _keyword}
+def _font(value: Any) -> str | None:
+    """一个字体栈：逗号分隔的名字，可以带引号。
+
+    这个值会被原样写进 `--font-family`，所以它只能是**一个值**：空、超长（>120）、带 `;`／花括号／
+    尖括号／换行的都不收——那些字符能让它看起来像一段声明而不是一个字体名字。
+    """
+    text = value.strip() if isinstance(value, str) else ""
+    if not text or len(text) > 120:
+        return None
+    if len(text.splitlines()) != 1 or any(ch in "{};<>" for ch in text):
+        return None
+    return re.sub(r"\s*,\s*", ", ", text)
+
+
+_BY_KIND = {"color": _color, "length": _length, "keyword": _keyword, "font": _font}
 
 MEMBERS: dict[str, Any] = {"sketch": _bool, **{name: _BY_KIND[kind] for name, kind in TOKENS.items()}}
 
@@ -308,12 +352,12 @@ def seed(ctx: Context) -> None:
 def field(name: str, kind: str, value: Any) -> Accrete:
     """一个令牌一行：说明、控件、（颜色的）实时色块。
 
-    色块自己读变量（`background: var(--fg)`），所以它显示的就是这一刻生效的颜色——不需要第二份状态。
-    字段的 `tag` 就是成员名，组的出口按它打包。
+    色块自己读变量（`background: var(--accent)` 那一行按名字拼），所以它显示的就是这一刻生效的颜色——
+    不需要第二份状态。字段的 `tag` 就是成员名，组的出口按它打包。
 
-    颜色是一个方片加一块可复制的字面量，悬浮展开三根滑块（L、C、H），线型是点出来的词——这一页没有
-    "自己填"的裸数字框，滑块旁边那个框是给手改用的。两者都是字段，出口在它们所在的组：改一次 = 一次
-    `change`（拖动按字段自己的窗口合并）。
+    颜色是一个方片加一块可复制的字面量，悬浮展开三根滑块（L、C、H）；形式是三个数字框加一个点出来的词，
+    字是字号（数字框）与字体栈（文本框）。它们都是字段，出口在它们所在的组：改一次 = 一次 `change`
+    （拖动按字段自己的窗口合并）。
     """
     if kind == "color":
         control: Accrete = h.color(
@@ -330,6 +374,16 @@ def field(name: str, kind: str, value: Any) -> Accrete:
             selector="cfg",
             expand=True,
             source=Source(slot=WORDS_SLOT),
+            id=f"cfg-{name}",
+        )
+    elif kind == "font":
+        # 字体栈是一个值，不是一个词表：文本框，校验在服务端与浏览器侧各一次（只能是单个值）。
+        control = h.input(
+            tag=name,
+            kind="text",
+            selector="cfg",
+            source=Source(default=value),
+            placeholder=CORE.get(name, ""),
             id=f"cfg-{name}",
         )
     else:
@@ -380,22 +434,22 @@ def page(ctx: Context, match) -> Accrete:
         for word in KEYWORDS:
             words.append(h.text(word, id=word))
     groups: list[Accrete] = []
-    for title, kind, names in GROUPS:
+    for key, title, names in GROUPS:
         groups.append(
             h.frame(
                 h.text(title, variant="heading-3"),
-                *[field(name, kind, now.get(name, "")) for name in names],
+                *[field(name, TOKENS[name], now.get(name, "")) for name in names],
                 grid={"grid-template-rows": f"auto repeat({len(names)}, auto)", "gap": "8px"},
                 variant="card",
-                id=f"group-{kind}",
+                id=f"group-{key}",
             )
         )
     return h.frame(
         h.text("设置", variant="heading-1"),
         h.text(
-            "core.css 的令牌面：颜色都在**同一个色盘**上点——盘面是 oklch 的色相（角度）与彩度（半径），"
-            "圆心是灰；亮度按令牌钉住（取各自缺省）。尺寸填数字（像素），线型点一下。存的是 oklch 三元组 "
-            "`L C H`（亮度 0–1、彩度 0–0.4、色相 0–360）。值一变本机立刻生效，同时上行到服务端记住（ADR 0001）。",
+            "core.css 的 options 层：调色板是**六个颜色**，每个都是一块方片加可复制的 `oklch()` 字面量——"
+            "悬浮展开 L／C／H 三根滑块；形式填数字（圆角、边框宽）与一个线型；字是字号（数字）与字体栈（文本）。"
+            "存的是 oklch 三元组 `L C H`（亮度 0–1、彩度 0–0.4、色相 0–360）。值一变本机立刻生效，同时上行到服务端记住（ADR 0001）。",
             variant="muted",
         ),
         h.loom(

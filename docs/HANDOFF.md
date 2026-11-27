@@ -21,12 +21,12 @@
   `app.start(...)` / `app.stop()`（嵌入与测试：自己拥有 server，可重复停）；`app.http` 是服务期的共享
   `ClientSession`，`@app.startup` / `@app.shutdown` 建与关。手写的 WebSocket 编解码（`accept_key`／`is_upgrade`／
   `upgrade`／`Channel`）随旧传输删除，`channel.py` 只剩 `WsChannel` 这个包装。
-- 设置页已落地（ADR 0001）：`/settings` 导出 core.css 的整个令牌面（`TOKENS`：十个颜色、三个长度、一个线型）加 `sketch`，
+- 设置页已落地（ADR 0001）：`/settings` 导出 core.css 的 `@layer options`——十三个叶子（六个调色板名字、四个形式、三个字）——加 `sketch`，
   走页面选项槽 `__CONFIG__`——组的出口 `Sink(dest="__CONFIG__", scope="both", path="/")` 让改本地立刻生效、同时上行；
   `www/static/reflux.js` 的 `TOKENS` 表把渲染器镜像的 `data-*` 落到 `:root` 的 `--*`（名字加 `--` 即变量名，闭集 + 按种类校验，
-  颜色成员存 `L C H`、由这里合成 `oklch()`；空值或非法值就撤掉那条属性）。页面上的颜色都是同一个颜色字段（`color`：一块方片加可复制的 `oklch()` 字面量，悬浮出 L/C/H 三根滑块），线型是五个词（ADR 0001 §9）。服务端 `on_config` 做白名单与值域、节流原子落盘
+  颜色成员存 `L C H`、由这里合成 `oklch()`；空值或非法值就撤掉那条属性）。页面上的六个颜色都是同一个颜色字段（`color`：一块方片加可复制的 `oklch()` 字面量，悬浮出 L/C/H 三根滑块），线型是一个折起来的 `picker`，字是字号（数字框）与字体栈（文本框）（ADR 0001 §9）；`tokens` 层的成对端点与派生逐条列在 `DERIVED` 里、不设（ADR 0001 §8）。服务端 `on_config` 做白名单与值域、节流原子落盘
   （`--settings <path>`，缺省 `./.demo-settings.json`，已入 `.gitignore`），每台设备第一次被画时把已存对象写进槽。
-  `tools/gate_settings.py` 十三条真浏览器门。
+  `tools/gate_settings.py` 十四条真浏览器门（十四个控件）。
 - **渲染器的引导契约（2026-11-25 换 rev 撞到的）**：`window.fluxen.send` 是渲染器**第一次渲染时**才发布的（`mount_to` 排队），
   所以 `www/index.html` 在 `mount()` 之后要等这个把手出现再 `start()` 客户端 runtime——不等就会抛
   「window.fluxen.send is missing」并且整页静默空白。渲染器本版还会在 bool 字段上打一条 `<svg> viewBox` 警告（Chromium），
@@ -38,7 +38,7 @@
 ```
 python3 tools/vendor.py fetch                    # 先装渲染器包（不入库；离线用 build --fluxen <path>）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 439 例
+python3 -m unittest discover -s tests -t .       # 441 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -51,7 +51,7 @@ python3 tools/gate_t9.py                         # 17 条（15 绿）：参考�
 python3 tools/gate_t10.py                        # 9 条：Rust SDK 的八帧与 Python 逐字节相等（要 cargo）
 python3 tools/gate_chat.py                       # 12 条：聊天页的后端（9 条真 socket + 3 条真浏览器）
 python3 tools/gate_demo.py                       # 19 条：走查页（一域一槽、悬浮按钮四态、播放按连接）
-python3 tools/gate_settings.py                   # 13 条：设置页（令牌面、颜色字段、折起的词表、持久化）
+python3 tools/gate_settings.py                   # 14 条：设置页（options 层、颜色字段、折起的词表、字体栈、持久化）
 python3 tools/probe_counter.py                   # 计数器页的一次真实点击（按一下 1、步长 3、再按 4）
 curl -s localhost:8000/v1/inspect | jq        # 应用自己声明的表（需要先注册 @app.hooks.inspect）
 python3 tools/serve.py --port 0                  # 手工起页面（不动应用；用来对着 DOM 试帧）
@@ -167,7 +167,7 @@ tests/test_page.py             清单 ↔ 磁盘 ↔ 页面三方对拍；根挂
 tests/test_cli_dests.py        `reflux` 的落点表与目标解析（inspect 的那份声明里能看到的）
 tests/test_app.py              路由解析、内置 404、demo 的种子与导航提交
 tests/test_chat_example.py     聊天页后端 27 例：窗口、两道门、流式、停止、失败、SSE（本地 stub）
-tests/test_settings.py         设置页 27 例：白名单与值域、节流、原子写、首帧 seed
+tests/test_settings.py         设置页 29 例：白名单与值域、节流、原子写、首帧 seed
 tests/test_signals.py          信号与声明链 17 例
 tests/test_stores.py           存储 22 例：匿名／用户／sqlite 跨 app／拒绝／KV／按名字
 tools/gate_chat.py             聊天页的门：真 socket 的九条 + 真浏览器的三条
@@ -176,7 +176,7 @@ tools/gate_chat.py             聊天页的门：真 socket 的九条 + 真浏�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（439 例 + 十三道门，十二绿；`gate_t9` 15/17，两项等 fluxen 修；`gate_t10` 需要 cargo，浏览器门需要 chromium）
+1. 跑一遍第二节的全套，确认基线（441 例 + 十三道门，十二绿；一条红是本地包的 `-dirty` rev，发布件不会；`gate_t9` 15/17，两项等 fluxen 修；`gate_t10` 需要 cargo，浏览器门需要 chromium）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节那条门缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
