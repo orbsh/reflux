@@ -22,6 +22,54 @@ The wire between them is one dialect: accrete's eight actions, and a frame **is*
 no envelope (the renderer decodes nothing else). `reflux/wire.py` is that layer, and it is the only
 place a frame is built.
 
+## Why the page is drawn here
+
+Interaction is the hard half of a UI. Drawing a document is a pure function; keeping a live screen
+in agreement with a live model — while it changes from clicks, timers, a socket, a database — is
+where applications rot. Every framework answers one question: when the model changes, what redraws,
+and who decides?
+
+The answer here is **dependency tracking**, in the MVVM sense: a value records who read it (a
+`Computed` or an effect subscribes by reading), and a change re-runs exactly those readers; a value
+bound to a slot writes that slot, and the renderer redraws the nodes reading it. Two fine-grained
+hops, and neither of them is a tree diff: nothing declares its dependencies, so nothing can declare
+them wrong — no dependency array drifting away from the code, no virtual DOM to reconcile, no "and
+remember to update the label too". An equal write is not a change, so a draw that writes the same
+value sends nothing at all. A list keeps its identity by row id, so a reorder is one `move`
+operation, not a rebuild.
+
+What is unusual is where that machinery runs: **in the backend.** The page owns nodes and slots, not
+your domain, so there is no client-side model to keep in agreement with the server's. A handler sits
+next to the model it changes and can do what that side can do — query, call a model, walk a graph —
+then write the values it just read:
+
+```python
+@app.on(slots / "row" / "remove")
+async def remove(ctx, frame):
+    await items.delete(frame["id"])    # `items` is yours: a repository, a session, an HTTP client
+    rows.value = await items.all()     # whatever reads `rows` redraws; nothing else is told
+```
+
+The familiar alternative is a client application plus an API between the halves. It works, but the
+interaction problem does not go away — it becomes keeping two models in agreement: a JSON shape per
+screen, a translation from the domain object into it, another into view state, and a second place
+where "what the screen shows" can be wrong. The split also decides *where* an interaction can be
+answered: what the server remembers needs a round trip through that contract, and what already sits
+on the client is a copy that can drift.
+
+Here there is no copy. The screen is a projection of this connection's state, the state is the
+application's own objects, and the function that answers a click is the function that changes them.
+
+What it costs, plainly:
+
+- one round trip per interaction — no optimistic update unless you write one, and no offline
+- the screen freezes while the connection is down: the heartbeat notices, a reconnect redraws
+- the renderer is a pinned wasm with a fixed vocabulary, and the interface is built from what it draws
+- each interaction is a Python call — `async` (ADR 0002) and cheap, but a slow query is still slow
+
+The trade is one state, one language, and one place where an interaction is answered. The decision
+is recorded in `docs/adr/0006-the-page-is-the-backend.md`.
+
 ## Install
 
     pip install reflux            # or: uv add reflux
@@ -430,7 +478,7 @@ A module that is not on disk draws a line saying where the page looked, not an e
 ## Verify
 
 ```
-python3 -m unittest discover -s tests -t .     # 305 tests, no browser
+python3 -m unittest discover -s tests -t .     # 443 tests, no browser
 python3 tools/gate_ingest.py                   # the two boundaries, over a real socket
 python3 tools/gate_t0.py                       # the page's request set and asset hashes
 python3 tools/gate_t2.py                       # every action, asserted in a real browser
@@ -442,6 +490,8 @@ python3 tools/gate_t8.py                       # what a bad frame does (and does
 python3 tools/gate_t9.py                       # the reference app end to end, auth included
 python3 tools/gate_t10.py                      # Rust vs Python frames (needs cargo)
 python3 tools/gate_chat.py                     # the chat page, over a socket and in a browser
+python3 tools/gate_demo.py                     # the walkthrough page (charts, viewers, editor)
+python3 tools/gate_settings.py                 # the options page: tokens, colour fields, persistence
 python3 tools/measure.py                       # bytes, DOM changes, first paint, CPU
 ```
 
@@ -474,4 +524,5 @@ docs/              design and decision record (in Chinese)
 | `docs/DESIGN.md` | the design, including why each rejected shape was rejected |
 | `docs/PLAN.md` | the ledger: what actually landed, and how each piece is re-verified |
 | `docs/HANDOFF.md` | where things stand, what is deliberately missing, pitfalls already hit |
+| `docs/adr/` | the decisions, one file each (in Chinese), including what each one rejected |
 | `docs/PERF.md` | one measured run: frame bytes, DOM changes, first paint, server CPU |

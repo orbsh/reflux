@@ -28,7 +28,7 @@
 - [x] T11 — 测量：四段数字进 `docs/PERF.md`；这一轮不改设计、不加缓存 — 2026-10-20
 - [x] T10 — Rust SDK，第二个语言：五帧字节对拍 — 2026-10-20
 
-## 变更记录（2026-10-20 … 2026-11-26）
+## 变更记录（2026-10-20 … 2026-11-27）
 
 - [x] 标记糖 `reflux:path` / `reflux:title` 有名字了：第二个消费者到齐才做 — 2026-10-20
 - [x] `reflux events`——事件名注册表，目标写法 `module:attr` — 2026-10-20
@@ -93,6 +93,7 @@
 - [x] P3 生命周期与入口 —— `@app.startup` / `@app.shutdown`、`app.http` 共享 `ClientSession`、`App.start/stop/serve/serve_forever`、`app.loop` 公开、`web.AppKey`；`Server.shutdown` 关掉自己的 loop；`tests/test_lifecycle.py` 十例
 - [x] P4 聊天页 async 迭代 —— `Model.reply` → `AsyncIterator[str]`；`OpenAI` 走 `app.http`，`urllib` 与它的阻塞读退场；`parse_sse` / `parse_sse_async` 共用一条行判据；流式线程 → task（`launch()` 这一个测试缝），`threading.Event`/`Lock` → `asyncio.Event`，`time.sleep` → `asyncio.sleep`；断开时 cancel 那条 task
 - [x] P5 删死代码 + 文档 —— `channel.py` 只剩 `WsChannel`，手写编解码与握手（连同 8 例字节级测试）删除；`ChannelClosed` 留下并统一翻译 aiohttp 的三种死法；`grep -rn threading reflux/` 只剩三处真线程；DESIGN 加「并发模型」，HANDOFF 记三个入口与 `app.http`
+- [x] 定位写成 ADR 0006：交互是依赖追踪、页面就在后端（`docs/adr/0006-the-page-is-the-backend.md`），README 新增「Why the page is drawn here」一节并为它列出四条代价 — 2026-11-27
 
 ## 槽的值：信号与存储（ADR 0005，2026-11-26，已落地）
 
