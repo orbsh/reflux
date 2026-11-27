@@ -202,6 +202,22 @@ class TestTheDemoApp(unittest.TestCase):
         run_sync(app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}}))
         self.assertEqual([op["action"] for op in drawn(device)], ["set"])
 
+    def test_a_page_turn_ends_the_previous_pages_landings(self) -> None:
+        """The table is the drawn page's: a name the client no longer has a button for goes with the page.
+
+        The about page declares no closures, so the whole table goes empty — before this, the walk
+        returned early on a tree with no closures and the previous page's names stayed dispatchable.
+        """
+        app = demo.app
+        device = FakeDevice(app=app)
+        run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
+        self.assertEqual(sorted(device.landings), ["/.add_row", "/.echo", "/.reveal"])
+        run_sync(app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/about"}}))
+        self.assertEqual(sorted(device.landings), [], "a page without closures ends the previous ones")
+        self.assertFalse(run_sync(app.dests.dispatch(device, {"dest": "/.add_row", "data": {}})))
+        run_sync(app.dests.dispatch(device, {"dest": "reflux:nav", "data": {"path": "/"}}))
+        self.assertEqual(sorted(device.landings), ["/.add_row", "/.echo", "/.reveal"])
+
     def _drop(self, app: App, device: FakeDevice, dragged: str, target: str) -> bool:
         """A drop onto a row: the landing frame reports `id` (itself) and `data.id` (the cargo)."""
         return run_sync(

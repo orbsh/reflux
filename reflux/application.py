@@ -1160,6 +1160,9 @@ class App:
         and `#2`, `#3` for a second and third binding of the same function in one draw — and the
         table is the device's, replaced on every draw.
         """
+        # A page turn replaces the table whatever the tree looks like: a tree with no closures still
+        # ends the previous page's, or a name the client no longer has a button for stays dispatchable.
+        device.landings.clear()
         if not isinstance(tree, (dict, list)):
             return tree, False
         seen: dict[str, int] = {}
@@ -1209,7 +1212,6 @@ class App:
                 node.children = walk(list(children))
             return node
 
-        device.landings.clear()
         return walk(tree), bool(named)
 
     # --- the device table -----------------------------------------------------------------

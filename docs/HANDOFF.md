@@ -38,7 +38,7 @@
 ```
 python3 tools/vendor.py fetch                    # 先装渲染器包（不入库；离线用 build --fluxen <path>）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 441 例
+python3 -m unittest discover -s tests -t .       # 442 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -177,7 +177,7 @@ tools/gate_chat.py             聊天页的门：真 socket 的九条 + 真浏�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（441 例 + 十三道门，十二绿；一条红是本地包的 `-dirty` rev，发布件不会；`gate_t9` 15/17，两项等 fluxen 修；`gate_t10` 需要 cargo，浏览器门需要 chromium）
+1. 跑一遍第二节的全套，确认基线（442 例 + 十三道门，十二绿；一条红是本地包的 `-dirty` rev，发布件不会；`gate_t9` 15/17，两项等 fluxen 修；`gate_t10` 需要 cargo，浏览器门需要 chromium）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节那条门缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件
