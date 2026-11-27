@@ -108,6 +108,6 @@
 
 ## 复核与门的现状（2026-11-27）
 
-- [x] 全量 441 例、`tools/gen_sdk.py --check` 在同步态；十二道门全绿（t0 7／t2 12／t3 16／t4 10／t6 8／t7 4／t8 5／t10 9／ingest 12／chat 12／demo 19／settings 14）；`probe_counter` 通过。**一条红**：`tests/test_packaging.py` 要求 `versions.json` 的 rev 是一个干净的哈希，本地包记的是 `e9515ea-dirty`（本地构建），发布件不会有这个后缀
+- [x] 全量 441 例、`tools/gen_sdk.py --check` 在同步态；十二道门全绿（t0 7／t2 12／t3 16／t4 10／t6 8／t7 4／t8 5／t10 9／ingest 12／chat 12／demo 19／settings 14）；`probe_counter` 通过。这一组是 2026-11-27 修完 `gate_chat` 之后复跑的数——那七条从 `5fae42d` 起就是红的（门还在发 `{text: {data: …}}` 的旧包装，`48e2004` 改回裸值），所以「十二道门全绿」此前只对当时跑过的那几道成立。**一条红**：`tests/test_packaging.py` 要求 `versions.json` 的 rev 是一个干净的哈希，本地包记的是 `e9515ea-dirty`（本地构建），发布件不会有这个后缀
 - [x] 渲染器本地包是 fluxen `e9515ea` 的本地构建（`versions.json` 记 `e9515ea-dirty`）：core.css 分成 `@layer options`（十三个宿主可换的叶子，含 `--focus-width`／`--font-size`／`--font-family`）与 `tokens`（成对端点与派生，含新增的 `--wash`／`--ring`／`--ink`／`--gloss`／两条阴影）——设置页按这张新面重排（见上节）。四个文件与清单逐字节一致；上一件发布件是 `42f28d4`（见变更记录）
 - [ ] `gate_t9` 15/17 里两项红（#11 退出不撤销、#14 后退的帧带着 `token`）：同一个因——渲染器在「已登录的 auth 子树换成登录面」那一帧 panic（`Tried to access a reactive value that has already been disposed`），DOM 冻在旧状态，空标记到不了浏览器，存下的 token 因此还在。已排除空文本标记、`request_draw`、重复写同一块登录面三种嫌疑。这是 fluxen 侧的账（它的 `dd1765d` 已写明「the panic T9 reports」仍在），本仓等那边修好后重取 vendor、回跑十三道门。
