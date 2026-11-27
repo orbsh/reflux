@@ -89,22 +89,20 @@ def row_node(text: str, row_id: str) -> Accrete:
     )
 
 
-class State:
-    """一次访问留下的东西 —— 演示的全部业务状态。
+SEED_ROWS: list[tuple[str, str]] = [("row-1", "第一行"), ("row-2", "第二行")]
 
-    放在模块级，因为处理器也是模块级的声明（`@app.on(...)`），而一条连接一页意味着一个对象就够了：
-    真正多用户的写法会把它挂在设备上（`ctx.data`），下面的 `rows_seeded` 就是这么做的。
+
+def rows_of(ctx: Context) -> signals.Signal:
+    """这条连接的行：页里声明（和计数器一页同一个形状），值挂在设备上。
+
+    行是这一页的业务状态，所以它属于连接：声明写在页函数里，`ctx.data` 存着它，连接结束就跟着走。
+    这样写而不是放在模块级，是因为一条连接的增删不该让另一条看见；而 ✕ 与落点两个处理器是按名字调用
+    的（行的身份在帧的 `id` 里，闭包拿不到），它们就从这里取同一张信号。
     """
-
-    def __init__(self) -> None:
-        self.echo = ""
-        # 行是一张信号：改它就够，槽由 `signals.keyed` 跟着写（增、删、换位各一种 op）。
-        # 每行是 `(id, 文本)`：身份在数据里，`keyed` 与渲染函数都用这一份，不看位置。
-        self.rows = signals.Signal([("row-1", "第一行"), ("row-2", "第二行")])
-        self.next_row = 3
-
-
-state = State()
+    held = ctx.data.get("rows")
+    if not isinstance(held, signals.Signal):
+        held = ctx.data["rows"] = signals.Signal(list(SEED_ROWS))
+    return held
 
 
 @app.hooks.shell()
@@ -211,31 +209,30 @@ def home_page(ctx, match):
     """
     slots = slots_of(ctx)
 
+    # 声明写在头部，和计数器那一页同一个形状：一个值、它往哪条槽写、它长什么样，都在一行里。重画这一页
+    # 时 `bind` 交回同一条信号（身份就是槽名），所以槽不会被推回起点，行也不会被 append 第二遍 —— 不需要
+    # 自己记一个"订阅过没有"的标记。
+    echo_text = signals.Signal("").bind(slots / "echo").view(lambda text: h.text(text))
+    secret = signals.Signal("").bind(slots / "secret").view(lambda text: h.text(text))
+    rows = rows_of(ctx).keyed(row_node).bind(slots / "rows")
+
     def echo(value: object) -> None:
         # 一个组提交的是它打包出来的对象：{字段: 值}。帧从外面来，所以不认识的东西给空串，不炸。
         text = value.get("name") if isinstance(value, dict) else None
-        state.echo = text if isinstance(text, str) else ""
-        (slots / "echo").set(h.text(state.echo))
+        echo_text.value = text if isinstance(text, str) else ""
 
     def add_row(value: object) -> None:
-        row = (f"row-{state.next_row}", f"第 {state.next_row} 行")
-        state.next_row += 1
-        state.rows.value = state.rows.value + [row]  # 槽不在这里写：`keyed` 跟着信号补一条 append
+        number = 1 + max((int(row_id.split("-")[-1]) for row_id, _ in rows.value), default=0)
+        rows.value = rows.value + [(f"row-{number}", f"第 {number} 行")]  # 槽不写：`keyed` 补一条 append
 
     def reveal(value: object) -> None:
         # 只有已登录的点击能到这里：其余的在闭包之前就被门答掉了（`gated`）。
-        ctx.data["may_see_secret"] = True
-        (slots / "secret").set(h.text("机密内容"))
+        secret.value = "机密内容"
 
-    # 行由 `signals.keyed` 与 `state.rows` 对齐：这条连接第一次画这一页时它把现有的行全部 append 上去，
-    # 之后只跟着信号走增删与换位。槽活得比一次 `create` 长（树被替换，数据面不会），所以这张订阅只建
-    # 一次 —— 第二次进来再建一遍就会把同样的行 append 两次。
-    if ctx.data.get("rows_keyed") is None:
-        ctx.data["rows_keyed"] = signals.keyed(state.rows, slots / "rows", row_node)
-    # The same rule cuts the other way for the secret: the slot would outlive a `退出`, so the draw
-    # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把它清掉 ——
-    if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        (slots_of(ctx) / "secret").set(h.text(""))
+    # 同一条规矩对私密那格反过来用：槽会活得比一次 `退出` 长，所以画面把这条值写回空。相等写不发帧
+    # （`Signal` 的规则），所以每次匿名绘制都写也只在真有内容时多一帧 —— 「我看过它」不用另记一个标记。
+    if not ctx.data.get("user") and secret.value:
+        secret.value = ""
     return (
         h.frame(
             h.frame(
@@ -359,21 +356,23 @@ def about_page(ctx, match):
 
 @app.on(slots / "row" / "remove")
 def on_remove(ctx, frame) -> None:
+    rows = rows_of(ctx)
     row_id = frame.get("id")  # 这一行的表单把它的身份带了上来
-    state.rows.value = [row for row in state.rows.value if row[0] != row_id]
+    rows.value = [row for row in rows.value if row[0] != row_id]
 
 
 @app.on(slots / "row" / "archive")
 def on_archive(ctx, frame) -> None:
     """一次落点：落点发来 `{id, tag}` —— 被拖的 frame 自己的 id，和它的 tag。
     """
+    rows_signal = rows_of(ctx)
     cargo = (frame.get("data") or {}).get("id") or ""
     row_id = cargo.removesuffix("-cargo")
-    row = next((r for r in state.rows.value if r[0] == row_id), None)
+    row = next((r for r in rows_signal.value if r[0] == row_id), None)
     if row is None:
         return
     (slots_of(ctx) / "archived").set(h.text(f"已归档：{row[1]}"))
-    state.rows.value = [r for r in state.rows.value if r[0] != row_id]
+    rows_signal.value = [r for r in rows_signal.value if r[0] != row_id]
 
 
 @app.on(slots / "row" / "move")
@@ -385,14 +384,15 @@ def on_move(ctx, frame) -> None:
     """
     target = (frame.get("id") or "").removesuffix("-cargo")
     dragged = ((frame.get("data") or {}).get("id") or "").removesuffix("-cargo")
-    rows = state.rows.value
+    rows_signal = rows_of(ctx)
+    rows = rows_signal.value
     ids = [row[0] for row in rows]
     if not dragged or dragged == target or dragged not in ids or target not in ids:
         return  # 落在自己身上，或有一头已经不在表里：什么都没发生
     moving = rows[ids.index(dragged)]
     rest = [row for row in rows if row[0] != dragged]
     rest.insert([row[0] for row in rest].index(target), moving)  # 落在谁身上，就排到谁前面
-    state.rows.value = rest
+    rows_signal.value = rest
 
 
 @app.on(slots(GO_HOME.name))

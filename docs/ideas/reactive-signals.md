@@ -405,10 +405,10 @@ def list_tiles(self, items: Signal[list[T]], render_item: Callable[[T, str], Any
 
 计数器前后的差别（这就是"能简化多少"的答案）：`slots.hint.set(...)` 从三处收成一处 `Computed`；`counter_seeded` 那个"只种一次"的守卫不需要了（`bound` 只在构造时写）；`State.ids` 那本账交给 `keyed`；处理器从"改值 + 写槽"变成"改值"。层数没有变多：页面仍然读 `h.text(source=slots.count)`，`app.view` 仍然决定值长什么样——`signals` 只决定**谁**去写。
 
-## 九、第二个使用者：演示页的列表（模块级信号 + 每条连接一份订阅）
+## 九、第二个使用者：演示页的列表（每连接一张表）
 
-参考应用的「列表 · 拖拽」那格原来是三套写法并存：处理器 `slots.rows.append(...)`、`remove(id)`、落点里 `remove(id)`，再加一个 `rows_seeded` 只种一次的守卫。现在列表是 `state.rows = Signal([(id, 文本)])`，四种动作全是改这张表：加一行 `+ [row]`、✕ 与归档 `[... if id != ...]`、拖到另一行身上则重排 `rest.insert(index, moving)`；槽由 `signals.keyed(ctx, "rows", state.rows, row_node)` 对齐，`rows_seeded` 随之消失（订阅本身就是"种一次"：`ctx.data` 里放着，第二次画这页不再建）。
+参考应用的「列表 · 拖拽」那格原来是三套写法并存：处理器 `slots.rows.append(...)`、`remove(id)`、落点里 `remove(id)`，再加一个 `rows_seeded` 只种一次的守卫。现在列表是这条连接自己的 `Signal([(id, 文本)])`（`rows_of(ctx)` 按 `ctx.data` 取，页里用 `.keyed(row_node).bind(slots / "rows")` 声明，和计数器一页同一个形状），四种动作全是改这张表：加一行 `+ [row]`、✕ 与归档 `[... if id != ...]`、拖到另一行身上则重排 `rest.insert(index, moving)`；`rows_seeded` 随之消失（`bind` 按槽名记在 `ctx.data` 里，第二次画这页交回同一条信号，不再种）。
 
-这一格同时是那份设计稿里「作用域」一条的实证：**信号在模块级 = 广播**。`state.rows` 不属于任何连接，而 `keyed` 订下的效果每条连接一份、持有那条连接自己的 `Slot` —— 所以 A 标签页加一行，B 标签页的列表也会跟着长。连接死了以后它的效果还在订阅表里，写过去只是进 `Device.outbox`（有界、无读者时不报错），所以广播不需要登记表也不需要清理回调。
+这一格同时说明了「作用域」那条：**信号在页函数里 = 这条连接的**。`rows_of` 把值挂在 `ctx.data` 上，所以 ✕／落点这两个按名字调用的处理器拿得到同一张表，而另一条连接看不见它 —— 共享列表的写法（`signals.keyed(rows, slot, render)`，模块级一张表、每条连接一份订阅）留在库里，参考应用不再需要它：一条连接的增删不该让另一条看见。
 
 拖拽那半是 `move` 的第一个页面级使用者：行自己那个 `frame` 同时是 `draggable`（货物）和 `accept` + `sink=slots("row.move")`（落点），于是落点报上来的 `id` 说"落在哪一行"、`data.id` 说"哪一行被拖"，一次 drop 两样都有，处理器只重排列表，线上是一帧 `move`（67 B，不带节点）。`gate_t9` 的第 6 条就是这么验的：真浏览器里把最后一行拖到第一行身上，DOM 顺序变了，而这一轮里只多了一帧 `move`。

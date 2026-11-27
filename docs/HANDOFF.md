@@ -104,7 +104,8 @@ T11 的数字在 `docs/PERF.md`，T10 的判据在 `tools/gate_t10.py`。那一�
 - **`position` 的域外只有渲染器判得了**（它要知道列表多长）；我们只校验「是整数」。同一帧里同一个列表槽的行 id
   出现两次才是我们能判的——那条在入站整帧拒收。
 - **槽里的种子是一次性的**：`create` 换树，数据平面（槽）不换，所以「页面每次重画都 append 一遍种子行」会把行
-  翻倍。`demo_app.frame_for` 用 `session.rows_seeded` 只种一次——生产者计数，这就是 DESIGN「操作」里认下的代价。
+  翻倍。这条现在归信号层：`Signal(v).keyed(fn).bind(slot)` 的首写是它的行、之后的绘制 `bind` 交回同一条信号
+  （按槽名记在 `ctx.data` 里），页面自己不必记一个「种过没有」的标记。
 - **fluxen 的装配必须在 `mount_to` 的闭包里**：`Ctx::new` 用 Leptos 的 executor，提前会 panic（白屏 + 一条
   `spawn_local before a global executor was initialized`）。
 - **不碰 fluxen 的帧形状**：宿主 API 只有 `#main` 的 `data-path`/`data-codec` 与 `window.fluxen.send`

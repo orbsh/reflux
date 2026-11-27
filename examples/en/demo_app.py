@@ -102,23 +102,22 @@ def row_node(text: str, row_id: str) -> Accrete:
     )
 
 
-class State:
-    """What a turn leaves behind — the demo's whole business state.
+SEED_ROWS: list[tuple[str, str]] = [("row-1", "First row"), ("row-2", "Second row")]
 
-    Module-level, because the handlers are module-level declarations too (`@app.on(...)`), and one
-    page per connection means one object is enough: a real multi-user app would hang this on the
-    device (`ctx.data`) instead, which is what the `keyed` subscription below does.
+
+def rows_of(ctx: Context) -> signals.Signal:
+    """This connection's rows: declared in the page (the counter page's shape), kept on the device.
+
+    The rows are this page's business state, so they belong to a connection: the declaration sits in the
+    page function, `ctx.data` holds it, and it goes when the connection does. Not at module level, because
+    one connection's add or delete must not be visible to another; the ✕ and the landing are named handlers
+    (a row's identity arrives in the frame's `id`, which a closure cannot see), so they read the same signal
+    from here.
     """
-
-    def __init__(self) -> None:
-        self.echo = ""
-        # Each row is `(id, text)`: identity lives in the data, and both `keyed` and the render
-        # function use that one copy — never the position.
-        self.rows = signals.Signal([("row-1", "First row"), ("row-2", "Second row")])
-        self.next_row = 3
-
-
-state = State()
+    held = ctx.data.get("rows")
+    if not isinstance(held, signals.Signal):
+        held = ctx.data["rows"] = signals.Signal(list(SEED_ROWS))
+    return held
 
 
 @app.hooks.shell()
@@ -230,33 +229,33 @@ def home_page(ctx, match):
     """
     slots = slots_of(ctx)
 
+    # Declared at the top, in the shape the counter page uses: one value, the slot it writes, and what it
+    # looks like — all on one line. A redraw hands back the same signal (`bind` keys it by the slot's name),
+    # so the slot is not pushed back to its start and the rows are not appended twice; no "already
+    # subscribed" flag of our own is needed.
+    echo_text = signals.Signal("").bind(slots / "echo").view(lambda text: h.text(text))
+    secret = signals.Signal("").bind(slots / "secret").view(lambda text: h.text(text))
+    rows = rows_of(ctx).keyed(row_node).bind(slots / "rows")
+
     def echo(value: object) -> None:
         # A loom submits the object it packed: {field: value}. A frame comes from outside, so
         # anything unrecognised becomes the empty string instead of an exception.
         text = value.get("name") if isinstance(value, dict) else None
-        state.echo = text if isinstance(text, str) else ""
-        (slots / "echo").set(h.text(state.echo))
+        echo_text.value = text if isinstance(text, str) else ""
 
     def add_row(value: object) -> None:
-        row = (f"row-{state.next_row}", f"Row {state.next_row}")
-        state.next_row += 1
-        state.rows.value = state.rows.value + [row]  # no slot write here: `keyed` adds the append
+        number = 1 + max((int(row_id.split("-")[-1]) for row_id, _ in rows.value), default=0)
+        rows.value = rows.value + [(f"row-{number}", f"Row {number}")]  # no slot write: `keyed` appends
 
     def reveal(value: object) -> None:
         # Only a signed-in click gets here: the gate answered the rest before the closure ran.
-        ctx.data["may_see_secret"] = True
-        (slots / "secret").set(h.text("Classified content"))
+        secret.value = "Classified content"
 
-    # The rows are kept equal to `state.rows` by `signals.keyed`: on this connection's first draw it
-    # appends every row there is, and after that it follows the signal through adds, removes and moves.
-    # A slot outlives a `create` (the tree is replaced, the data planes are not), so this subscription
-    # is made once — making it again on the next visit would append the same rows twice.
-    if ctx.data.get("rows_keyed") is None:
-        ctx.data["rows_keyed"] = signals.keyed(state.rows, slots / "rows", row_node)
-    # The same rule cuts the other way for the secret: the slot would outlive a `Log out`, so the draw
-    # clears it — only when this app wrote something (`may_see_secret` is its own memory of doing so).
-    if not ctx.data.get("user") and ctx.data.pop("may_see_secret", False):
-        (slots_of(ctx) / "secret").set(h.text(""))
+    # The same rule cuts the other way for the secret: the slot outlives a `Log out`, so the draw writes this
+    # value back to empty. An equal write sends nothing (`Signal`'s rule), so writing it on every anonymous
+    # draw costs a frame only when there was something — no "did I show it" flag of our own.
+    if not ctx.data.get("user") and secret.value:
+        secret.value = ""
     return (
         h.frame(
             h.frame(
@@ -382,20 +381,22 @@ def about_page(ctx, match):
 
 @app.on(slots / "row" / "remove")
 def on_remove(ctx, frame) -> None:
+    rows = rows_of(ctx)
     row_id = frame.get("id")  # the row's form carried its identity up
-    state.rows.value = [row for row in state.rows.value if row[0] != row_id]
+    rows.value = [row for row in rows.value if row[0] != row_id]
 
 
 @app.on(slots / "row" / "archive")
 def on_archive(ctx, frame) -> None:
     """A drop: the landing point sends `{id, tag}` — the dragged frame's own id, and its tag."""
+    rows = rows_of(ctx)
     cargo = (frame.get("data") or {}).get("id") or ""
     row_id = cargo.removesuffix("-cargo")
-    row = next((r for r in state.rows.value if r[0] == row_id), None)
+    row = next((r for r in rows.value if r[0] == row_id), None)
     if row is None:
         return
     (slots_of(ctx) / "archived").set(h.text(f"Archived: {row[1]}"))
-    state.rows.value = [r for r in state.rows.value if r[0] != row_id]
+    rows.value = [r for r in rows.value if r[0] != row_id]
 
 
 @app.on(slots / "row" / "move")
@@ -408,14 +409,15 @@ def on_move(ctx, frame) -> None:
     """
     target = (frame.get("id") or "").removesuffix("-cargo")
     dragged = ((frame.get("data") or {}).get("id") or "").removesuffix("-cargo")
-    rows = state.rows.value
+    signal = rows_of(ctx)
+    rows = signal.value
     ids = [row[0] for row in rows]
     if not dragged or dragged == target or dragged not in ids or target not in ids:
         return  # landed on itself, or one end is already gone: nothing happened
     moving = rows[ids.index(dragged)]
     rest = [row for row in rows if row[0] != dragged]
     rest.insert([row[0] for row in rest].index(target), moving)  # land on a row, sit before it
-    state.rows.value = rest
+    signal.value = rest
 
 
 @app.on(slots(GO_HOME.name))

@@ -175,17 +175,24 @@ class TestTheDemoApp(unittest.TestCase):
         )
 
     def test_the_demo_page_sends_its_slot_seed_before_the_page(self) -> None:
-        """The rows are a send (`ctx.emit`), so they leave as their own frames, before the page."""
+        """What a page declares arrives as its own frames (`ctx.emit`), before the page's `create`."""
         app = demo.app
         device = FakeDevice()
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
         frames = device.frames
         self.assertEqual(device.frames[-1][0]["action"], "create")
         seeds = [frame for frame in frames[:-1]]
-        # Three sends precede the page: the page's two rows (its handler runs first), then the shell's
-        # page-options seed. What matters is that all three are in before the page's `create`.
-        self.assertEqual([op["action"] for frame in seeds for op in frame], ["append", "append", "set"])
-        self.assertEqual([op["slot"] for frame in seeds for op in frame], ["rows", "rows", "__CONFIG__"])
+        # Five sends precede the page: the two rows the keyed list appends, then the three values the page
+        # and the shell declare at their tops (echo, secret, the page options) — the counter page's shape.
+        # What matters is that all five are in before the page's `create`.
+        self.assertEqual(
+            [op["action"] for frame in seeds for op in frame],
+            ["append", "append", "set", "set", "set"],
+        )
+        self.assertEqual(
+            [op["slot"] for frame in seeds for op in frame],
+            ["rows", "rows", "echo", "secret", "__CONFIG__"],
+        )
 
     def test_a_second_visit_does_not_seed_the_rows_again(self) -> None:
         """A slot outlives a page turn, so the seed is once per device — not once per turn."""
@@ -207,30 +214,28 @@ class TestTheDemoApp(unittest.TestCase):
     def test_a_row_dropped_on_another_row_is_one_move(self) -> None:
         """The reorder path: the drop says both ends, the list changes, and the wire says one `move`."""
         app = demo.app
-        before = list(demo.state.rows.value)
-        self.addCleanup(setattr, demo.state.rows, "value", before)  # module state: put it back
         device = FakeDevice(app=app)
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
+        before = list(demo.rows_of(device).value)
         device.frames.clear()
 
         self._drop(app, device, dragged=before[1][0], target=before[0][0])
 
-        self.assertEqual([row[0] for row in demo.state.rows.value], [before[1][0], before[0][0]])
+        self.assertEqual([row[0] for row in demo.rows_of(device).value], [before[1][0], before[0][0]])
         operations = [operation for frame in device.frames for operation in frame]
         self.assertEqual([operation["action"] for operation in operations], ["move"], "one op, not a rebuild")
         self.assertEqual(operations[0]["slot"], "rows")
 
     def test_a_row_dropped_on_itself_changes_nothing(self) -> None:
         app = demo.app
-        before = list(demo.state.rows.value)
-        self.addCleanup(setattr, demo.state.rows, "value", before)
         device = FakeDevice(app=app)
         run_sync(app.dests.dispatch(device, {"dest": "reflux:hello", "data": {"path": "/"}}))
+        before = list(demo.rows_of(device).value)
         device.frames.clear()
 
         self._drop(app, device, dragged=before[0][0], target=before[0][0])
 
-        self.assertEqual(demo.state.rows.value, before)
+        self.assertEqual(demo.rows_of(device).value, before)
         self.assertEqual([operation for frame in device.frames for operation in frame], [], "nothing to say")
 
     def test_the_demo_page_carries_the_two_markers(self) -> None:

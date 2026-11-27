@@ -103,6 +103,7 @@
 - [x] `reflux/stores.py`：`Store` 两个方法 `load(user, key)` / `save(user, key, value)`，值是 JSON（节点存不进去，当场报错）；`MemoryStore` 缺省、`SqliteStore`（SQL 的例子）、`KvStore`（任何有 `get`/`set` 的客户端）、`FjallStore`（`durable=True` 时每次 `sync_all`）；后端按名字挂（`app.set_store("sqlite", {"path"})`、`create_app(store=…)`），`redis`/`valkey` 收但排在最后（`reflux[redis]`，容忍不推荐）
 - [x] 槽的值退场：`Slot.signal` / `.computed` / `.keyed` / `.value` 与 `signals.bound` / `into` / `own` / `mirror` / `keep` 删除；名字只由 `/` 拼、点号只到句柄自己的东西、点号子名与 `__getitem__` 一起删除
 - [x] 两棵树的 `demo_counter`：`State` 类与 `state()` 缓存删除，五条声明放在页函数头部（三条 `.store`、两条上线 + `.keyed`），视图提成 `_count_node` / `_hint_node`
+- [x] 两棵树的 `demo_app`：`State` 类与 `state` 删除，值改在页函数头部声明（和计数器一页同一个形状）——回声与私密各一条 `signals.Signal(...).bind(...)`，行是 `rows_of(ctx)` 挂在 `ctx.data` 上的那条表，页里 `.keyed(row_node).bind(...)`；`next_row`／`rows_seeded`／`may_see_secret` 三个标记删除，下一个行号从行 id 算；✕／落点／换位三个按名字调用的处理器从 `rows_of(ctx)` 取同一张表（一条连接的增删不让另一条看见）；`tests/test_app.py`、`tools/gate_t10.py`、`tools/measure.py` 跟着改 — 2026-11-27
 - [x] 测试：`tests/test_signals.py`、`tests/test_slots.py::TheValue` 改成新 API，新增 `tests/test_stores.py` 22 例（匿名/用户/sqlite 跨 app/四条拒绝/KV 客户端/后端按名字）；`probe_counter` 真 Chromium 一次点击 0→1
 
 ## 复核与门的现状（2026-11-27）

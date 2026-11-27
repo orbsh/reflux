@@ -77,7 +77,7 @@ def seed_frame() -> list[dict]:
     """The frame a fresh page gets: the structure, plus the rows the slot it reads needs."""
     return wire.draw(
         wire.create(*_page_nodes("/")),
-        *[wire.append("rows", demo.row_node(text, row_id)) for row_id, text in demo.state.rows.value],
+        *[wire.append("rows", demo.row_node(text, row_id)) for row_id, text in demo.SEED_ROWS],
     )
 
 

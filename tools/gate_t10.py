@@ -66,7 +66,7 @@ def python_turns() -> list[tuple[str, dict]]:
             "page turn",
             wire.draw(
 wire.create(*_page_nodes("/")),  # the app's own page root: markers and all
-                *[wire.append("rows", demo.row_node(text, row_id)) for row_id, text in demo.state.rows.value]),
+                *[wire.append("rows", demo.row_node(text, row_id)) for row_id, text in demo.SEED_ROWS]),
         ),
         # The second page, through the same sugar: it proves `markers.page` on both sides and
         # covers a page whose node mix is not the reference page's.
