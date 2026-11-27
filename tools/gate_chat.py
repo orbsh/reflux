@@ -99,7 +99,8 @@ def read_until(ws: Socket, marker: str, *, limit: float = 25.0) -> list[dict]:
 
 
 def send(ws: Socket, text: str) -> None:
-    ws.send({"dest": "chat.send", "id": "send", "data": {"text": {"data": text}}})
+    # A group's payload is `{tag: value}` (ADR 0032 §2): the value is the value, no wrapper.
+    ws.send({"dest": "chat.send", "id": "send", "data": {"text": text}})
 
 
 def stop(ws: Socket) -> None:
