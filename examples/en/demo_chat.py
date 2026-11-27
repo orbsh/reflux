@@ -113,6 +113,12 @@ def page(ctx: Context, match) -> None:
     something to more than the one device that asked (a broadcast, a nudge from a timer) says it the
     same way.
 
+    The status line is **not** a signal the page declares either (`signals.Signal(...).bind(...)`):
+    `send` / `stop` / the streaming coroutine are other deliveries, and `ctx.turn()` gathers the slots of
+    the current delivery only — a declared signal holds the slot of the delivery that drew the page, so a
+    write through it lands outside that batch and the two rows, the bubble and the status stop being one
+    frame (ADR 0005).
+
     The address and the title come from the declaration above — the framework builds the markers — so
     the handler passes its content and nothing else.
     """
