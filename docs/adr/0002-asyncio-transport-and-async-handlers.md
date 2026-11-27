@@ -1,6 +1,6 @@
 # 0002 — 服务端搬到 asyncio（aiohttp），处理器就是 `async def`
 
-Status: **Accepted**（2026-11-25），**已落地**：P1–P5 全绿（`docs/PLAN.md` 同一节逐阶段记账）。
+Status: **Accepted**（2026-11-25），**已落地**：P1–P5 全绿（§13 是五个阶段与各自的证明）。
 
 ## 1. 需求
 
@@ -67,7 +67,7 @@ Status: **Accepted**（2026-11-25），**已落地**：P1–P5 全绿（`docs/PL
 - `channel.py`：帧编解码删除；`accept_key` / `is_upgrade` 随 aiohttp 的握手一起删，只留 `Channel` 适配器。
 - `server.py`：`SimpleHTTPRequestHandler` 与挂载表 → `web.Application` 的路由（静态 + index 兜底）；`serve_forever` 的位置由 `App.serve()` 接。
 - `app.py`：`handle` → 一条连接 task；`_pump` / `flush_device` / `await_frames` / `outbox` → `asyncio.Queue` + `drain`；看门狗 → 一个 task；`Device.emit` 从"唤醒线程"变成"入队，必要时调度一次写"。
-- `cli.py`：跑 `App.serve()`。
+- `cli.py`：跑 `App.serve()`。这一项随后在 `efe8627`（hooks 改成属性）里随 CLI 一起退场——今天没有 `reflux` 子命令，起应用就是 `App.serve()`／`serve_forever()`（`tools/serve.py` 是那一行）。
 - `examples/{zh,en}/chat_model.py`：`Iterator[str]` → `AsyncIterator[str]`；SSE 腿用 `app.http` 的 `ClientSession`（`urllib` 与它的阻塞读一起退场），同步读器与异步读器共用一条行判据。`demo_chat.py` 的流式线程 → task，`threading.Event`/`Lock` → `asyncio.Event`（一个 loop 上一次投递，`busy` 的翻转不需要锁）；设备走了，`disconnect` 的处理器 cancel 那条 task。
 - 文档：`docs/DESIGN.md:70` 那句 "`channel.py`（HTTP 升级 + 文本帧编解码，stdlib）" 改写；`HANDOFF` 记 `serve()` 与 `start()` 的分工、`to_thread` 是唯一跨界点。
 - 测试夹具：后台起服务的形状保留（`start()`/`stop()`），断言不变；门是端到端的，仍走真实端口。
@@ -85,3 +85,17 @@ Status: **Accepted**（2026-11-25），**已落地**：P1–P5 全绿（`docs/PL
 - 不引 ORM、模板引擎或别的框架：那些是应用的事。
 - 不把 `ctx` 变成需要 await 的对象：词表对写页面的人保持同步。
 - 不在框架里替同步处理器做并发扩张：`to_thread` 一次占一个池位，池的大小是部署的事。
+
+## 13. 五个阶段，各自的证明
+
+**一条硬约束**：`app.make_server(port)` 继续返回同形状的对象（`.server_address` / `.serve_forever()` / `.shutdown()` / `.close()`），内部是"后台线程跑 loop + `AppRunner`/`TCPSite`"。迁移当时的六个 harness 调用点（`tools/cdp.py`、`gate_t7`、`gate_demo`、`gate_ingest`、`tools/serve.py`、`tests/test_page.py`）一行不改——传输被换掉，门与探针的观测面不动，红了才分得清是谁的账。今天同一形状上的调用点是 `tools/cdp.py`、`gate_t7`、`gate_demo`、`gate_ingest`、`tools/measure.py`、`tests/test_page.py`；`tools/serve.py` 后来改成 `app.serve_forever()` 一行（§7）。
+
+| 阶段 | 改什么 | 证明 |
+|:--|:--|:--|
+| P1 传换 | `server.py` → `web.Application`（每个 mount 一条 `web.static` + index 兜底 + `no-store`）；`/ws` → `WebSocketResponse`；`channel.py` 只留适配器；`App.handle` → `async`；`Device.emit` → `asyncio.Queue` + 每设备 writer task（`await ws.drain()`）；watchdog → task | 十门 + 全量测试；重点 `t7`、`demo`、`chat` |
+| P2 可 await | `dests._call`/`_call_local` → `async`（`await maybe(...)`，同步走 `to_thread`）；`_draw`/`shell`/`view` 渲染器/`Auth.verify` 可 await；`App(handler_timeout=30.0)`；`CancelledError` 不吞 | 全门 + 6 条新例（async on/page/view/verify、超时、取消、同设备不交错） |
+| P3 生命周期 | `@app.startup`/`@app.shutdown`、`app.http`、`App.serve()`、`start()`/`stop()`、`cli.py` | 门走老形状仍绿；CLI 起得来 |
+| P4 聊天页 | `ChatModel.reply` → `AsyncIterator[str]`；流式线程 → task；SSE 腿用 `app.http` | `gate_chat` |
+| P5 收尾 | 删 `_pump`/`_wake`/`await_frames`/`flush_device` 残留、`channel.py` 帧编解码、`accept_key`/`is_upgrade`、`threading`；DESIGN 加「并发模型」；HANDOFF 记 `serve()`/`start()` | 全绿 + `grep -rn threading reflux/` 收口 |
+
+每个阶段一个 commit、全门绿才进下一个。P1 里先加一条守卫：处理器返回协程时抛 `TypeError`（P2 之前不支持），不许静默丢弃。P2 的真正工作量在夹具：`tests/fakes.py` 加 `run_sync(coro)`，17 处 `app._draw(...)` 与 5+ 处 `app.handle(channel)` 跟着改形状。

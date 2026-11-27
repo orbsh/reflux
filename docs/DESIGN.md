@@ -85,17 +85,28 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 粗组件的字段少而封闭：
 
 ```
-{"id": "pw",                                                                        // 节点身份：键控列表的行、需要跨结构变动存活的节点
- "sink": {"scope": "remote", "slot": "reflux:login", "type": "password"},           // 写：上行落点（`scope` 说这份值在哪一边作主）
- "type": "input"}                                                                   // 取自词表
+{"id": "pw",                                    // 节点身份：键控列表的行、需要跨结构变动存活的节点
+ "kind": "password",                            // 字段自己的类型（`InputKind`），不是读的、也不是写的
+ "tag": "password",                             // 成员身份：所在的 `loom` 按它打包
+ "type": "input"}                               // 取自词表
 ```
 
-这一段是 `wire.draw(wire.create(h.input(sink=Bind(slot="reflux:login", type="password"), id="pw")))` 真打出来的（字段顺序也是线上的顺序）：没有 `attrs`、没有 `children`，是因为这个类型没用上它们——省略就等于默认值。
+这一段是 `wire.draw(wire.create(h.input(tag="password", kind="password", id="pw")))` 真打出来的（字段顺序也是线上的顺序，外面是一份操作数组）：没有 `attrs`、没有 `children`，也没有 `sink`——字段没有自己的出口，省略就等于默认值。出口在组上：
+
+```
+{"attrs": {"submit": ["button"]},
+ "children": [{"attrs": {"oneshot": false}, "source": {"default": "登录", "scope": "remote"}, "type": "button"}],
+ "id": "form",
+ "sink": {"dest": "login", "scope": "remote"},
+ "type": "loom"}
+```
+
+`h.loom(h.button("登录"), sink=Sink(dest="login"), submit=["button"], id="form")` 打出来的就是它。
 
 - **`attrs` 是每类型的白名单**（accrete 那份的形状），取值是枚举或受限值域；reflux 的 profile 在它上面选与设默认。生产端见不到自由 class 字符串——变体的闭集合由 profile 落成 class 令牌；accrete 的线上是允许 class 的，收窄落在 profile 与 SDK 上（见「组件词表」）。
-- **`source` 与 `sink` 是组件与事件流之间的两个方向**：线上各是一条 `Bind`（`{default, path, scope, slot, type}`）——`source` 是值进来的地方（`slot` 指向一个数据槽，`path` 从槽内节点里取子值，`type` 是 js-kind），`sink` 是值出去的地方（上行的落点）；`scope` 说这份值在哪一边作主（`remote` 在会话那一侧、`local` 在页面的值平面、`both` 本地赋值再镜像上去，缺省 `remote`）；没有 `slot` 的 `Bind` 是字面量，`default` 就是值。I4 的落点就在这一行：**要什么状态，组件随事件自己带上来**——`payload` 那张「这次上行带哪几件本地态」的声明表随旧规格退场，送什么由组件的实现定。
+- **`source` 与 `sink` 是组件与事件流之间的两个方向**：线上是两个形状——`source` 是值进来的地方（`Source{slot, default, scope, path}`，`slot` 指向一个数据槽，`path` 从槽内节点里取子值），`sink` 是值出去的地方（`Sink{dest, scope, path}`，`dest` 是上行的落点）；`scope` 说这份值在哪一边作主（`remote` 在会话那一侧、`local` 在页面的值平面、`both` 本地赋值再镜像上去，缺省 `remote`）；没有 `slot` 的 `source` 是字面量，`default` 就是值。字段自己的类型不在这两个形状上：它在字段的 `kind` 里（`InputKind`，`picker` 另有 `PickerKind`）。I4 的落点就在这一行：**要什么状态，组件随事件自己带上来**——`payload` 那张「这次上行带哪几件本地态」的声明表随旧规格退场，送什么由组件的实现定。
   - `source` 怎么用由组件语义定：叶把它当自己的值画出来（`text` 的文字、`image` 的 src……），输入从 js-kind 的默认值起手（槽值它不读，见「组件词表」），容器把槽值当子节点挂（一轮数组＝列表槽，单个节点＝片段）。槽还没写过时回退到默认值，所以「先出结构、再补数据」和「一帧里都发」都成立。
-  - **上行由 `loom` 的 `attrs.submit` 点名**：`button`／`enter`／`change` 三种时机，一次带上它打包的全部字段——字段自己没有出口（ADR 0039 §2）。`select` 的一次选项点击就是一次 `change`；`canvas` 模块从 `host.send` 发，`forcegraph` 走 `node-click`。生产端能声明的部分在字段上：`input.emit`（`{debounce: ms}`／`{throttle: ms}`，缺省 250ms 静默）说的是**一次击键多快被 loom 听见**，因此 `submit: [change]` 一秒钟能发几帧由它定；缺省值让"打字即发"变成"停顿即发"，`{debounce: 0}` 是回到每键一帧的写法。Enter 与按钮不等窗口：一次发送先取消挂起的窗口，再打包屏幕上的值。
+  - **上行由 `loom` 的 `attrs.submit` 点名**：`button`／`enter`／`change` 三种时机，一次带上它打包的全部字段——字段自己没有出口（ADR 0039 §2）。`picker` 的一次选项点击就是一次 `change`；`canvas` 模块从 `host.send` 发，`forcegraph` 走 `node-click`。生产端能声明的部分在字段上：`input.emit`（`{debounce: ms}`／`{throttle: ms}`，缺省 250ms 静默）说的是**一次击键多快被 loom 听见**，因此 `submit: [change]` 一秒钟能发几帧由它定；缺省值让"打字即发"变成"停顿即发"，`{debounce: 0}` 是回到每键一帧的写法。Enter 与按钮不等窗口：一次发送先取消挂起的窗口，再打包屏幕上的值。
 - **链路的死活有两个心跳，分工写在 ADR 0044**：服务端的 `watch()` 用协议级 ping（10s 一次、30s 静默判死换算）证明"客户端还在"，浏览器替页面回 pong，所以页面主线程卡住也不影响；页面的 `LiveWs` 用应用级 `__ping__`/`__pong__`（5s 静默问一次、10s 静默自己关掉重连）证明"服务端还在"。`dispatch` 在分派前回 `__pong__`——它不进 handler、不计 refused、不写日志，因为探针不是应用说的话。顺序上客户端先放手、服务端窗口是它的三倍，避免"服务端先判死一个正要重连的页面"或"重连后同一页面留两个设备"。
 - **上行帧是 `{dest, id, data}`**：`id` 取认领该上行落点的那个节点自己的 id（不是祖先）——行的身份要上行，就把行的 id 给行里那个交互节点；`data` 是组件随事件送上来的那份本地态（送什么由组件定，`payload` 那张声明表已退场）。
 - **不需要 id 也能更新**：数据的地址是槽名，不是节点名。id 只为身份存在（行身份、跨结构变动的存活）。
@@ -160,7 +171,7 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
     rows  = Signal([]).keyed(_row).bind(slots / "counter" / "history")
 
 - **三种信号，一条规则**：`Signal` 是值（读 = 订阅，写 = 通知，相等的写不算变）；读写口就是 `.value` 这一个属性，为什么是属性、为什么不换成 Solid 那套 `()`／`set()`，见 ADR 0003；`Computed` 是派生（脏了才重算，答案相等就不再往下传）；`Effect` 是"读过这些东西的代码"（立刻跑一次，之后依赖变了再跑）。`with batch():` 把一轮传播收在一起 —— 一次按下改两个值，页面只写一轮。
-- **信号是主语，槽是它的去处**：`Signal(v).bind(slot)` 说这个值往哪条槽写（首值即一次写，之后每次变化写过去）；`.view(fn)` 说值怎么变成节点（登记在应用上，一个名字一条）；`.keyed(render)` 让列表槽按 id 对齐（增 `append`、删 `remove`、换位 `move` 最少条）；`.store(key)` 说这个值要活过连接。槽本身只是地址加动词 —— 值永远不在句柄上。
+- **信号是主语，槽是它的去处**：`Signal(v).bind(slot)` 说这个值往哪条槽写（首值即一次写，之后每次变化写过去）；`.view(fn)` 说值怎么变成节点（登记在应用上，一个名字一条）；`.keyed(render)` 让列表槽按 id 对齐（增 `append`、删 `remove`、换位 `move` 最少条）；`.store(key)` 说这个值要活过连接。槽本身只是地址加动词 —— 值永远不在句柄上。决定、存储接口与它否掉的形状见 ADR 0005。
 - **这层不写页面**：effect 与动词写的还是 `ctx.slot(name).set(...)`，所以"谁写"归信号，"写成什么样"归 `.view`。写路径没有被改道，这层因此是可选的 —— 一页可以只用一个信号，其余照旧手写。
 - **一个名字一个信号，一条连接一份**：登记在 `ctx.data` 里，所以页面重画拿回的是同一个 —— 否则每次绘制都把首值再种一遍。`keyed` 的列表在声明时就把现有的行 append 上去，之后只跟着信号走。
 - **首写等画完**：值声明在同一行，`.view` 却跟在后面，所以首次写推迟到这次绘制结束（`signals.drawing` 的收尾）—— 视图都在了，帧才是节点。顺序因此不再由调用者记着"先 view 后值"。
@@ -173,11 +184,11 @@ Reflux 是**集成 fluxen 的 web 框架**：渲染是 fluxen 的事，reflux �
 
 - 生产者侧的注册表是唯一权威：未注册的落点**拒收**并计数，绝不尝试动态派发（`getattr(模块, 线上传来的名字)` 是任意属性调用面，运行前也无法校验）。
 - 保留前缀 `reflux:` 归框架（`reflux:hello`／`reflux:nav` 由客户端 runtime 上行，两个保留 id 也在这个前缀下）；生产者把处理器注册到保留前缀上，启动即报错。
-- 落点名可打印、可核对（`reflux dests` 列出注册表）。名字里不塞业务参数——参数在 `data` 里。
+- 落点名可打印、可核对（`@app.hooks.inspect("/v1/inspect")` 把那部分声明发在 HTTP 上）。名字里不塞业务参数——参数在 `data` 里。
 
 ## 组件词表：accrete 的类型，加一份 profile
 
-词表的单一来源是 accrete 的类型（I5）：15 个根变体，每个变体自己的属性白名单、闭枚举。渲染器对**全部 15 个**都有实现（`stamp` 是个空 view），所以 profile 从整个集合里挑，不存在「声明了没实现」的坑。
+词表的单一来源是 accrete 的类型（I5）：16 个根变体，每个变体自己的属性白名单、闭枚举。渲染器对**全部 16 个**都有实现（`stamp` 是个空 view），所以 profile 从整个集合里挑，不存在「声明了没实现」的坑。
 
 profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（类型来自 schema），只记三件事：
 
@@ -187,8 +198,8 @@ profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（
 
 **令牌这一层落地的形状（2026-10-20）**：`profile.json` 的 `tokens` 是 `类型 → {变体名 → class}`（今天是 `text` 的 `heading-1/2/3`、`code`、`muted`、`danger`，与 `frame` 的 `card`）。生成器给这些类型加一个 `variant=` 关键字（值必须是那张表里的名字，错字当场报出整张表），由 `_parse.token_attrs` 低成 `attrs.class`；`reflux/sdk/closed.py` 因此把 `class` 从「一律隐藏」改成「只在这些类型上、且每个元素都必须在该类型的令牌里」——`selector` 不是隐藏项：它是 `entry` 的字段名（`tiles` 的表头与字段也按它寻址），藏起来网格就画不出来。样式在 `www/static/reflux.css` 的 `@layer reflux` 里（`core.css` 先声明了 `tokens, reset, components, utilities, custom` 五个层，新层名排在 `custom` 之后 → 层内最强；unlayered 会盖掉渲染器**所有**层，不可控）。令牌族按需长：加一个名字＝改 profile、重出 SDK、写一条 CSS，三处各一行。
 
-属性侧的几处落空是**量出来的**，不是口味（见本节末尾的清单）；其中一条最容易被当成故障：`input` 只从 `source` 的 `default` 起手（不订阅槽，输入缓冲之后自己持有），所以 profile 不给它裸值形式的 `source`；字段名走 `tag`，只有 `input`／`select`（与嵌套的 `loom`）读它——别的类型上写 `tag` 是死键。
-**`scope: local` 与它的 `path`**：`scope` 是 `Bind` 上的一个字段（ADR 0031 §1），`local` 读的是**客户端槽**（vals 平面），而那个槽里装的是页内 emit 写下的 Outflow 形状包装，要显示载荷本身就得再往里一层——`path` 因此也是 `Bind` 的随行键（`slot` 与 `path` 本来就在同一个 `Bind` 里）。写法是 `text(source=Bind(slot="chan", scope="local", path="/data"))`；`scope` 在任一通道上都用这同一个 `Bind` 字段，没有第二个关键字。`gate_t2` 的 vals 平面那条检查因此从手写 dict 换成了这个构造器——它证明的从「渲染器接受这个形状」变成「SDK 能造出这个形状、渲染器也接受」。
+属性侧的几处落空是**量出来的**，不是口味（见本节末尾的清单）；其中一条最容易被当成故障：`input` 只从 `source` 的 `default` 起手（不订阅槽，输入缓冲之后自己持有），所以 profile 不给它裸值形式的 `source`；字段名走 `tag`，只有 `input`／`picker`（与嵌套的 `loom`）读它——别的类型上写 `tag` 是死键。
+**`scope: local` 与它的 `path`**：`scope` 是读、写两个形状（`Source`／`Sink`）都有的字段（ADR 0031 §1），`local` 读的是**客户端槽**（vals 平面），而那个槽里装的是页内 emit 写下的 Outflow 形状包装，要显示载荷本身就得再往里一层——`path` 因此也是 `Source` 的随行键（`slot` 与 `path` 本来就在同一个形状里）。写法是 `text(source=Source(slot="chan", scope="local", path="/data"))`；`scope` 在任一通道上都用这个词，没有第二个关键字。`gate_t2` 的 vals 平面那条检查因此从手写 dict 换成了这个构造器——它证明的从「渲染器接受这个形状」变成「SDK 能造出这个形状、渲染器也接受」。
 
 退场前那 21 项（`spec/components.json`）与它不是包含关系：同名 8 项——form / rack / input / textarea / select / button / image / text（前三个今天已经并进这条线：`loom`、`tiles`、`input(multiline=True)`，不再同名）；另外 13 项是 reflux 自己的词，逐个落成：
 
@@ -198,33 +209,33 @@ profile 是 reflux 侧的一份**可读数据**——里面没有类型定义（
 | row | `frame` + `attrs.horizontal` |
 | card | `frame` + class 令牌（`tone` 三个值是令牌） |
 | field | 不是类型：字段是 `loom` 的子节点，按自己的 `tag` 打包；标签与提示是同级 `text` |
-| option | 不是类型：`select` 的选项来自它绑的列表槽的行，行 `id` 即键 |
-| checkbox | `input` + `type = bool`（渲染器据此给 `type="checkbox"`） |
+| option | 不是类型：`picker`（旧名 `select`）的选项来自它绑的列表槽的行，行 `id` 即键 |
+| checkbox | `input` + `kind = bool`（渲染器据此给 `type="checkbox"`） |
 | switch | 同 checkbox，只差 class 令牌；`label` 降成同级 `text`，`disabled` 那边没有字段、只有 class |
 | heading | `text` + class 令牌（`level` 1–3 是令牌） |
 | badge | `text` + class 令牌（`tone` 五个值是令牌） |
 | code | `text` + `attrs.format = "md"`：GFM 出围栏代码块，样式在 `core.css` 的 `pre`/`code` |
 | empty | 表达得出来，但落点要核：`frame` 的空槽分支是现成的相反规则（槽非空渲染那个节点、空渲染 `children`），不过它看的是 data 平面，列表空不空它看不见 |
 | progress | 不进词表：纯展示、无交互，自绘部件走 `canvas` 的模块通道 |
-| link | **退场，不补替代**（2026-10-17 裁决）：accrete 没有锚点类型，渲染器也从不导航；词表里能上行事件的只有 `input`／`select` 与 `loom` 的 `submit`（`textarea` 是 `input(multiline=True)`）。所以 link 这个元素没有了，锚点语义（中键或修饰键新开标签、悬停看地址、右键复制链接）也没有。「点一下就把事件送上去」还剩一扇门——canvas 的模块通道（模块拿到 `host.send`，与 `loom` 的提交同一条上行腿），代价是应用自己写那个 ES 模块。页内导航怎么做见「客户端 runtime」 |
+| link | **退场，不补替代**（2026-10-17 裁决）：accrete 没有锚点类型，渲染器也从不导航；词表里能上行事件的只有 `input`／`picker` 与 `loom` 的 `submit`（`textarea` 是 `input(multiline=True)`）。所以 link 这个元素没有了，锚点语义（中键或修饰键新开标签、悬停看地址、右键复制链接）也没有。「点一下就把事件送上去」还剩一扇门——canvas 的模块通道（模块拿到 `host.send`，与 `loom` 的提交同一条上行腿），代价是应用自己写那个 ES 模块。页内导航怎么做见「客户端 runtime」 |
 
-同名那 8 项里还有两处不能按名字对：`button` 只在它最近的、`submit` 点名了 `button` 的 `loom` 里画出来（它就是那个组的确认键，自己不带 `sink`、**没有出口**，ADR 0039 §2a）；`input` 的类型来自 `kind`（`JsType`），不在属性上。
+同名那 8 项里还有两处不能按名字对：`button` 只在它最近的、`submit` 点名了 `button` 的 `loom` 里画出来（它就是那个组的确认键，自己不带 `sink`、**没有出口**，ADR 0039 §2a）；`input` 的类型来自 `kind`（`InputKind`），不在属性上。
 
 accrete 那侧比应用面宽的其余根变体——版面容器与栅格（`frame`：`style` 是内联样式面，`dir`／`wrap` 定轴向与折行）、内容区（`panel`：`fold`／`popup`／`layer` 是它 `place` × `state` 上的格子）、模块宿主（`canvas`；`chart`／`editor`／`diagram` 曾经的名字现在都是它的实例）、网格与条目（`tiles` 的 `fields` + `entry`，表头是 `header.layers` 行的格子，`window` 是一次窗口的大小）、SVG——是 fluxen 自己的语义面，现在都进了应用面。两个新面同样进来了：拖拽的两端都长在 `frame` 上（ADR 0034：`draggable` 让这个框带着自己的子树当货物，`accept` + `sink` 让它当落点，一次 drop 只送上货物的 `{id, tag}`——货物本身不旅行），`forcegraph` 是原生关系图（ADR 0029：渲染与布局都在 wasm 里，所以它没有 `url`、没有模块契约，`style` 是类型化词表而不是 `canvas` 的 `options` 动态袋；因为它没有角色 class 也没有 DOM id，T3 只能证明它挂出了一个尺寸非零的画布）。现在不暴露的只剩 `stamp`（`tmpl` 的替换节点；它只在展开期有意义，展开后渲染器画一个空槽）。
 
 每个类型声明四件事，前两件在类型里，后两件在 profile 里：
 
 - **本地态**：它内部维护什么（输入缓冲、是否展开、当前选中、滚动位置）——渲染器的。
-- **绑定**：读哪个槽（`source`）、写到哪个落点（`sink`）、上行时带哪些本地态（`loom` 按 `tag` 打的包）——形状来自 accrete 的 `Bind`。
+- **绑定**：读哪个槽（`source`）、写到哪个落点（`sink`）、上行时带哪些本地态（`loom` 按 `tag` 打的包）——形状来自 accrete 的 `Source` / `Sink`（ADR 0039 把一条 `Bind` 拆成两个）。
 - **上行时机**：在哪类事件上上行——渲染器与 profile 一起定。
 - **属性**：类型自己的白名单（闭枚举、受限值域）；变体的闭集合收在 profile 里、落成 class 令牌。
 
-属性侧有几处是这次裁决认下的落空（逐项核过 accrete 的属性空间）：`disabled`（input／select／button／loom）在那边没有字段，只有 class；`input` 的 `type` 里 email／search 没有对应（`JsType` 只有 bool／number／text／password／button／submit）；多行字段的高度、`loom` 的提交按钮文案、`tiles` 的 density／empty_text／follow 同样没有字段；`image.fit`、`text.wrap`、`text`／`button`／`badge` 的 size／tone／variant 都走 class 令牌。这些不构成加词表的理由——要么是外观（令牌），要么是渲染器的行为细节；真装不下的在落 profile 时逐条列出来。**还有一处落空不是属性而是机制**：我们的 `payload`（组件声明这次上行要带哪几件本地态）在那边没有位置——送什么由组件自己定（输入送它的值、`loom` 送它打的包），所以构造器不提供这个参数。
+属性侧有几处是这次裁决认下的落空（逐项核过 accrete 的属性空间）：`disabled`（input／picker／button／loom）在那边没有字段，只有 class；`input` 的 `kind` 里 email／search 没有对应（`InputKind` 只有 bool／number／text／password／button／submit）；多行字段的高度、`loom` 的提交按钮文案、`tiles` 的 density／empty_text／follow 同样没有字段；`image.fit`、`text.wrap`、`text`／`button`／`badge` 的 size／tone／variant 都走 class 令牌。这些不构成加词表的理由——要么是外观（令牌），要么是渲染器的行为细节；真装不下的在落 profile 时逐条列出来。**还有一处落空不是属性而是机制**：我们的 `payload`（组件声明这次上行要带哪几件本地态）在那边没有位置——送什么由组件自己定（输入送它的值、`loom` 送它打的包），所以构造器不提供这个参数。
 
 **M1.6 量出来的四处**（都改了 profile 或写进门的断言，不再靠「属性表应该这样」）：
 
-- `input` 只读 `type`（js-kind）与 `sink`，`source` 只取它的 `default`：槽里的值它**不订阅**（没有 `default` 时从 kind 的默认值起手，清空也回到那里），profile 因此只收 `Bind`／`Slot`，不收裸值。
-- 字段名是 `tag`：`loom` 按它打包（`input`／`select`，以及嵌套 `loom` 的 `tag` 或 `id`）；没写 `tag` 的节点走自己的 `sink`，不进包。
+- `input` 只读 `kind`（js-kind）与 `source` 的 `default`，wire 上没有 `sink`：槽里的值它**不订阅**（没有 `default` 时从 kind 的默认值起手，清空也回到那里），profile 因此只收 `Source`／`Slot`，不收裸值。
+- 字段名是 `tag`：`loom` 按它打包（`input`／`picker`，以及嵌套 `loom` 的 `tag`）；没写 `tag` 的字段不进包、也不上行，嵌套的 `loom` 没有 `tag` 就什么也不交给外层（它自己有 `sink` 就自己发）。`id` 是这次提交的实例身份，不参与打包（ADR 0032 §4）。
 - `loom` 送上来的包是 `{tag: value}`——值就是值，没有包装层（旧的 `{data, payload}` 条目随信封与 `payload` 一起退场）。
 - 一个类型要外部部署件才画得出：`canvas`（`url` 指向一个 ES module；accrete 早先的 `chart`／`editor`／`diagram` 现在都是它的实例）。它的「能画」属于部署件而不是词表，所以 T3′ 不画它；另外 `image` 只有在**带了 attrs** 时才渲染 `<img>`，否则是一个空 div——这是渲染器的条件，不是泄漏。
 
@@ -522,7 +533,7 @@ def on_disconnect(device, frame):
 **计数器页**（`examples/zh/demo_counter.py`，2026-11-24）：前面几页各讲一件事，这一页不讲内容——一个数、三个按钮、一个步长输入、一小段有上限的历史——所以它写出来的每一行都只是 API 的用法：路由的装饰器写在模块自己的 `register(app)` 里（页面模块不能 import 应用），三个按钮与输入框是闭包落点，历史用列表槽的 `append`/`remove`（超上限删最早一条），值挂在 `ctx.data` 上所以两个标签页各数各的。它是"新读者从哪里开始"的答案。
 
 **两种落点，一条界线**（2026-11-24）：一个上行帧在 wire 上只带一个名字（`dest`），所以"谁回答它"有两种写法，而它们的分界不是风格，是**名字是否需要先于一次绘制存在**。
-- **闭包**（持有出口的那个节点上的 `sink=add_row`，或 `sink=gated(save)`——按钮所在的 `loom` 是最常见的一处）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{字段: {data}}`），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
+- **闭包**（持有出口的那个节点上的 `sink=add_row`，或 `sink=gated(save)`——按钮所在的 `loom` 是最常见的一处）：处理器写在发出它的那个按钮旁边，参数就是事件的值（`input` 给字符串，表单给 `{tag: value}` 的打包对象），槽由闭包捕获。框架在 `_draw` 里给它起名（`<路径>.<函数名>`，同一个函数对象在一个页面里绑两次仍是同一个名字；两个不同的闭包才各得一名），登记在**这台设备**的表上——页面本来就是按连接画的，所以闭包的生命周期正好等于连接，换页即换表，旧名字自然成为未注册落点。它覆盖的是常规应用的绝大多数情形：一次请求，一次回应。
 - **名字**（`@app.on(slot)`）：必须先于任何绘制存在的那几类——一个槽有多个来源（同页被工作线程和用户同时写的状态行、走查页被拖拽落点和编辑器回传同时写的 `echo`）、身份不在页面里的（一行一个 id，名字归行持有）、框架自己的动词（`reflux:login`）、跨页或全局的事件。
 门（`auth`）跟落点走：`gated(fn)` 说的是"这个落点只给绑了用户的设备"，声明地点因此在写出落点的那一行，而不是在处理器上。闭包落点不在 `dests` 表里，所以 `cli dests` 看不到它们；检查改成了绘制时的不变量——**画出来的每个 sink 名都必须在绘制它的那台设备上解析得到**（`tests/test_cli_events.py` 用 `FakeDevice` 画一次页面再核）。`tests/test_landings.py` 钉住机制本身：命名、按函数身份去重、按连接隔离、换页换表、`gated` 先于闭包运行、两套落点同页共存。 Rust SDK 跟着给了同一个形状（`sdks/rust/src/landings.rs` 的 `Landings`：`bind(name, closure)` 返回名字、`bind_gated` 带上门、同一个名字两次仍是一个落点）—— 差别只在名字要由调用方写出来，因为 Rust 运行时没有函数名；`gate_t10` 的页面用例通过它取名字，两侧帧仍然逐字节相等。
 
@@ -530,7 +541,7 @@ def on_disconnect(device, frame):
 
 **槽的视图**（2026-11-24）：一个槽在 wire 上放的是节点，而多数槽放的就是一个值——一个数字、一行说明。`app.view(name, render)` 把"这个值长什么样"声明一次（写在它所属页面旁边），之后写入交值：`(slots / "count").set(3)` 变成 `render(3)`，id 与 variant 只出现在那一处。规则按值读、不按槽读：**已经是节点的值原样通过**（`(slots / "count").set(h.text("3"))` 不被转换），没有视图的槽照旧收节点。视图挂在 app 上而不是句柄上，因为句柄是每次投递的（`ctx.slot(...)`），而这是页面的决定。
 
-**字段的出口是它的组**（2026-11-24，随 fluxen `2ee6c13` 落地）：`tag` 是成员身份，没有 `tag` 的 `input`/`select` 不上行；字段自己的 `sink` 只表示**本地落点**（`scope: local`，值一变就写），`remote`/`both` 又没有 `tag` 的会被渲染器记一条警告并丢掉。清空也不再是字段的规则。组多了两件事：`attrs.reset`（`keep` 缺省 / `clear` / `default`）与 `attrs.sends`（发几次，`0` 从第一帧就锁）。本仓的 SDK 把这条提前到构造那一行：`parse()` 的 `_check_uplinks` 拒绝"remote sink 且无 `tag`"的字段——那是**没人收的值**，与其等渲染器丢，不如在写它的地方报错；本地落点与无落点的字段照旧合法。字段的类型仍走 `Bind.type`（读侧 `source.type` 亦可），登录面的密码框因此写成 `h.input(tag="pass", source=Bind(type=JsType.password))`：读侧说的是形状，不是出口。处理器拿到的永远是组打包出来的对象（`{tag: value}`），没有裸值特例。这一步之后字段上还留着一个不是出口的 `sink`——类型从它身上读（`sink.type`，读侧 `source.type` 亦可），不进组的字段还用它做本地落点；这两件事都不该由地址承担，所以字段上的 `sink` 整体删除的决定已写进 fluxen ADR 0032 §2 末段（工单 #470），本仓的 `_check_uplinks` 与那条借道写法随之退场。
+**字段的出口是它的组**（2026-11-24 随 fluxen `2ee6c13` 落地，2026-11-25 收口）：`tag` 是成员身份，没有 `tag` 的 `input`/`picker` 不上行；字段在 wire 上**没有 `sink`**（本地落点也是组的：`sink` 的 `scope: local` 加 `submit: ["change"]`），清空也不再是字段的规则。组多了两件事：`attrs.reset`（`keep` 缺省 / `clear` / `default`）与 `attrs.sends`（发几次：缺省或 `-1` 不限，`0` 从第一帧就锁）。本仓的 SDK 不另立"有 `sink` 没 `tag`"的守卫——wire 上那个键没了之后，没有 `tag` 的字段就是"不上行"，不是一种可拒绝的畸形；`_check_uplinks` 与 `FIELD_TYPES` 随之删除，手工构造的裸 dict 里再出现字段级 `sink` 由生成的模型在 `parse()` 那一行拒绝（`ValidationError`）。字段的类型在字段身上：`kind`（`InputKind`；`picker` 另有 `PickerKind`），登录面的密码框因此写成 `h.input(tag="pass", kind="password")`——类型不是读侧的形状，也不是出口。处理器拿到的永远是组打包出来的对象（`{tag: value}`），没有裸值特例。决定在 ADR 0004。
 
 - **状态挂在设备上**：`Chat` 挂在 `ctx.data`（与「socket 就是状态」一致），随连接回收；不持久化、不跨刷新。显示那份（行）在页面树里，模型那份（turn 窗口）在后端——两者只在「停止」时故意分叉。
 - **流式 = 往槽里 append**：回话不是一帧写完，是每块一次 `patch(slot, "/source/default", chunk, op="append")`。实测一句 126 字的回话是 42 帧（`gate_chat` 第 3 条）。这条路走查页早就在用，没有为聊天新增机制。
@@ -606,14 +617,14 @@ def on_disconnect(device, frame):
 - **T7——设备与心跳。**（已落地）设备即连接：连接打开即登记、断线即回收；心跳线程按默认 10s 发协议层 ping、30s 没有入站活动即判死并回收（关 socket 让阻塞的读线程退出）；计数 issued / reclaimed / dead，看现在的设备用 `App.live()`。门槛：一次刷新后表里只剩一个设备（旧连接被回收）；客户端不发 FIN 就消失时判死并回收、表归零，且那条算 `dead` 而不是 `reclaimed`。没有 token 这一层——「跨连接复用」随「设备即连接」一起作废，「伪造 token」那条门槛随之退休。
 - **T8——故障注入。** 坏帧（未知 action、未知路径、未知组件、未注册事件名、超大批次、重复行 id、慢客户端、地址栏与路径标记不一致）各自产生「失败模式」里规定的行为，且设备存活。
 - **T9——Python SDK。**（已落地 2026-10-20）由 schema 与 profile 生成的构造器，加上那一层命名与手感（见「开放问题」的生成后处理一条）；事件注册；`@page`；处理器签名 `handler(ctx, frame)`；出帧走每设备单队列（顺序由构造保证）。demo 应用（`examples/zh/demo_app.py`）只用 SDK 写出来：回声（`input` 的 Enter 上行 → `wire.set` 写槽）、列表增删与换位（列表是 `signals.Signal` 里的 `[(id, 文本)]`，槽由 `signals.keyed` 对齐 —— 增 `append`、删 `remove`、拖一行到另一行身上换位是一条 `move`；行身份随行 `loom` 的 id 上行）、`loom` 一次提交（`login` 带全部字段）、三条路由（`/`、`/about` 与走查 `/demo`）。
-  门槛（`python3 tools/gate_t9.py`，16 条）：参考应用真画出来并种好列表 · 输入的回声 · 一次 loom 提交加一行 · 行自己的 loom 按身份删掉它 · 一行拖进归档落点后由落点那一帧把行带走（`frame` 的 `draggable`／`accept` 在参考应用里的用处） · **一行拖到另一行身上，列表换位而线上只有一条 `move`**（同一个 `frame` 既是货物又是落点）· **匿名点 gated 落点开登录面而不是到处理器** · **登录的 loom 走场馆的动词并绑定这条连接** · **同一个落点随后落地** · **刷新（新连接）仍是同一个用户——token 的证明** · **退出撤销，下一次 gated 点击重新问** · 导航是**一次提交 + 标记镜像**（点「关于」→ 结构与地址栏一起变 `/about`）· 反方向同一机制 · 浏览器后退是一帧 `reflux:nav`（`data` 只有 path）· 未注册路径画内置 404 且地址栏停在原地 · 零 console error。
+  门槛（`python3 tools/gate_t9.py`，17 条）：参考应用真画出来并种好列表 · 输入的回声 · 一次 loom 提交加一行 · 行自己的 loom 按身份删掉它 · 一行拖进归档落点后由落点那一帧把行带走（`frame` 的 `draggable`／`accept` 在参考应用里的用处） · **一行拖到另一行身上，列表换位而线上只有一条 `move`**（同一个 `frame` 既是货物又是落点）· **匿名点 gated 落点开登录面而不是到处理器** · **登录的 loom 走场馆的动词并绑定这条连接** · **同一个落点随后落地** · **刷新（新连接）仍是同一个用户——token 的证明** · **退出撤销，下一次 gated 点击重新问** · 导航是**一次提交 + 标记镜像**（点「关于」→ 结构与地址栏一起变 `/about`）· 反方向同一机制 · 浏览器后退是一帧 `reflux:nav`（`data` 只有 path）· 未注册路径画内置 404 且地址栏停在原地 · 心跳窗口外的空页面连接还在 · 零 console error。
   这一轮实测到的两件事（都不改框架）：**空字段的 `loom` 照样发帧**（「加一行」的 `loom` 只有一个 button，提交带 `data: {}`）——`gate_t4` 只验证过带字段的 `loom`，这里补上；**内置 404 第一次有门**（M1.7 之前它是壳的形状，画不出来，`gate_t6` 因此刻意没有这条）。
   标记糖在 T10 之后落了（第二个消费者到齐才落的，见 T10 段的最后一段）：`reflux/sdk/markers.py` 与 `sdks/rust/src/markers.rs` 手写同一件事——`path_marker()`／`title_marker()`／`page(path, title, *children)`，把两个保留 id 放在页面的最前面。三份手写副本（参考应用、`gate_t6`、Rust 的帧转储）收敛到它；`gate_t6` 只留它自己的两个旋钮（`label=`、`markers=False`）。
-  **为什么手写、不进词表**：`reflux:` 前缀属于 `reflux/protocol.py`，是框架对自己 runtime 的约定；accrete 不认识 `path`、`title` 这两个词，词表也不该认识——把它放进 vocabulary，就是让词表开始承载 reflux 自己的策略，正是「词表不往外长」的反面。**否掉的另外两个形状**：把 `page` 提到构造器那一层——它不是线上的 `type`，会和 14 个构造器挤进同一个命名空间，而那个命名空间的规矩是「一个 type 一个名字」；留三份手写副本——两份一样还可以说「名字还没逼出来」，三份一样就只是重复。`PAGE_ID = "page-root"` 是默认不是规则：没有东西读它，它是生产者给自己根节点起的名字。
-  证据分两层：`gate_t10` 的翻页与关于页两帧跨语言逐字节相等（2 918 B / 796 B）——两语言的糖一致；`gate_t9` 在真浏览器里证明这两个标记**确实移动地址栏**——糖为了的那件事真的发生。
-- **T10——第二个语言的 SDK（最小）。**（已落地 2026-10-20）判据落地为 **8 条**（七帧字节对拍 ＋「七帧互不相同」）：`python3 tools/gate_t10.py` 用 Python SDK 建参考应用的七帧（回声／加行／删行／登录面／翻页＋两行种子／关于页／`local` 落点），跑 `cargo run --bin frames` 拿到 Rust 建的同样七帧，**逐字节相等**（109 / 306 / 48 / 686 / 2 918 / 796 / 176 B——比 `docs/PERF.md` 那组小：那组是 `json.dumps` 的带空白形态；2026-10-29 信封退场后两边都少了那 70 B，随后槽位字段改名 `slot` 又每个 op 少 1 B）。
-  形状：`tools/vocabulary.py` 是唯一的一份词表模型（schema + profile + 类型层的字段序），两个 emitter（`tools/gen_sdk.py` 出 Python，`tools/gen_rust.py` 出 Rust）只做格式化——**词表归一个模型，语言归各自的模板**。`sdks/rust/` 里生成的只有 `src/types.rs`（14 个构造器 + 变体与 `JsType` 两个闭集枚举），手写的是 `src/wire.rs`（八个 action，与 `reflux/wire.py` 一一对应）：**生成物承载「生产者能建什么」，帧的形状两语言都手写**，这条分工在两边一致。
-  两件承重的事实：**键序是契约**——Python 侧的键序是类型层的声明序（pydantic 按声明序序列化），`source`／`sink` 条目的序来自 `Bind` 的声明序（`slot, scope, default, path, type`，**不是字母序**），所以 Rust 侧开 `serde_json` 的 `preserve_order` 并按同一份序插入，两边都不排序；**默认值照写**——`oneshot=False`、`display='render'` 这类 schema 默认在 Python 侧省略实参也照样落到线上，Rust 侧因此是 `unwrap_or(默认)` 而不是省略（唯一表达不了的调用是显式传 `None` 去抑制一个有默认的字段，线上读起来一样）。
+  **为什么手写、不进词表**：`reflux:` 前缀属于 `reflux/protocol.py`，是框架对自己 runtime 的约定；accrete 不认识 `path`、`title` 这两个词，词表也不该认识——把它放进 vocabulary，就是让词表开始承载 reflux 自己的策略，正是「词表不往外长」的反面。**否掉的另外两个形状**：把 `page` 提到构造器那一层——它不是线上的 `type`，会和 15 个构造器挤进同一个命名空间，而那个命名空间的规矩是「一个 type 一个名字」；留三份手写副本——两份一样还可以说「名字还没逼出来」，三份一样就只是重复。`PAGE_ID = "page-root"` 是默认不是规则：没有东西读它，它是生产者给自己根节点起的名字。
+  证据分两层：`gate_t10` 的翻页与关于页两帧跨语言逐字节相等（5 981 B / 797 B）——两语言的糖一致；`gate_t9` 在真浏览器里证明这两个标记**确实移动地址栏**——糖为了的那件事真的发生。
+- **T10——第二个语言的 SDK（最小）。**（已落地 2026-10-20）判据落地为 **9 条**（八帧字节对拍 ＋「八帧互不相同」）：`python3 tools/gate_t10.py` 用 Python SDK 建参考应用的八帧（回声／加行／删行／移行／登录面／翻页＋两行种子／关于页／`local` 落点），跑 `cargo run --bin frames` 拿到 Rust 建的同样八帧，**逐字节相等**（2026-11-27 复跑：101 / 584 / 48 / 60 / 623 / 5 981 / 797 / 170 B；`docs/PERF.md` 那组是 `json.dumps` 的带空白形态，所以更大）。
+  形状：`tools/vocabulary.py` 是唯一的一份词表模型（schema + profile + 类型层的字段序），两个 emitter（`tools/gen_sdk.py` 出 Python，`tools/gen_rust.py` 出 Rust）只做格式化——**词表归一个模型，语言归各自的模板**。`sdks/rust/` 里生成的只有 `src/types.rs`（15 个构造器 + 变体（`FrameVariant`／`TextVariant`）两个闭集枚举；字段的 `kind` 在 Rust 侧是一个裸 `Value`），手写的是 `src/wire.rs`（八个 action，与 `reflux/wire.py` 一一对应）：**生成物承载「生产者能建什么」，帧的形状两语言都手写**，这条分工在两边一致。
+  两件承重的事实：**键序是契约**——Python 侧的键序是类型层的声明序（pydantic 按声明序序列化），`source`／`sink` 条目的序来自生成的 `Source`（`default, path, scope, slot`）与 `Sink`（`dest, path, scope`）的声明序，所以 Rust 侧开 `serde_json` 的 `preserve_order` 并按同一份序插入，两边都不排序；**默认值照写**——`oneshot=False`、`display='render'` 这类 schema 默认在 Python 侧省略实参也照样落到线上，Rust 侧因此是 `unwrap_or(默认)` 而不是省略（唯一表达不了的调用是显式传 `None` 去抑制一个有默认的字段，线上读起来一样）。
   对拍口径是**紧凑 JSON**（两侧各自规范化成无空白再比）：空白不是契约（`App.send` 写 Python 默认分隔符，渲染器只解析 JSON），键序与取值才是。
   明确没做的：Rust 侧没有 transport／设备／路由／入站校验（那是宿主的）；`source`／`sink` 的值收成 `&str`（要数字型 `default` 的生产者自己手写那一处）；schema 的枚举仍是 `&str`（闭集由服务端 ingest 对所有语言一视同仁地查，SDK 不重复查这道栅栏）。
   **位置参数是认下的代价**：Rust 没有关键字实参，所以 profile 每多一个关键字，所有调用点都要按位补——`text` 加 `local`/`path` 时 `frames.rs`／`markers.rs` 里 11 处调用、`form` 的 `path` 让另外 4 处各补一个 `None`。这在「最小 SDK」里是可接受的（调用点都在仓里，编译期就红）；等哪天真需要命名实参，再谈 builder 结构，而不是每加一个键就发明一种补位规则。

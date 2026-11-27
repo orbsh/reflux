@@ -1,6 +1,6 @@
 # PLAN
 
-方向与设计在 `docs/DESIGN.md`，测量数字与口径在 `docs/PERF.md`；本文件是索引——每一轮做了什么、门验的是什么、决定它的是谁。
+方向与决定在 `docs/adr/`（一份决定一个文件），形状与不变量在 `docs/DESIGN.md`，测量数字与口径在 `docs/PERF.md`；本文件是索引——每一轮做了什么、门验的是什么、决定它的是哪份 ADR。
 
 ## 方向
 
@@ -28,7 +28,7 @@
 - [x] T11 — 测量：四段数字进 `docs/PERF.md`；这一轮不改设计、不加缓存 — 2026-10-20
 - [x] T10 — Rust SDK，第二个语言：五帧字节对拍 — 2026-10-20
 
-## 变更记录（2026-10-20 … 2026-11-04）
+## 变更记录（2026-10-20 … 2026-11-26）
 
 - [x] 标记糖 `reflux:path` / `reflux:title` 有名字了：第二个消费者到齐才做 — 2026-10-20
 - [x] `reflux events`——事件名注册表，目标写法 `module:attr` — 2026-10-20
@@ -43,6 +43,8 @@
 - [x] 渲染器钉到 `6882ce4`：`Button.sink` 删掉之后重打、发了 `renderer-6882ce4`，`tools/vendor.py fetch` 端到端跑通，本地 vendor 树与发布件逐字节一致 — 2026-11-25
 - [x] `renderer-92f0a7f` 的 release 资产已发布，`tools/vendor.py fetch` 端到端跑通（装的是发布件，本地 vendor 树与它逐字节一致）— 2026-11-25
   同一 rev 两次构建不是逐字节可复现：js 相同（sha `fdc85bbe…`），wasm 差 8 KB（2,858,761 vs 2,867,046 B）。发布件为准——本地已换成发布件，十道门在它上面全绿
+- [x] 渲染器钉到 `42f28d4`（2026-11-26）：颜色字段、`picker` 的折起、字段的 `kind` 都在这一版里；本地 vendor 树与 `versions.json` 的四个文件逐个比过 sha256 与大小，逐字节一致
+- [x] CLI 退场：`reflux routes`／`reflux dests` 随 `hooks` 改成属性一起删除（`efe8627`），应用的声明改由 `@app.hooks.inspect("/v1/inspect")` 以 JSON 伺服；`tests/test_cli_events.py` 随之改名成 `test_cli_dests.py` 并只测表本身 — 2026-11-25
 - [x] 地址带查询串、内置 `connect`/`disconnect`、后端可加的 location 事件、`routes` 槽 — 2026-11-03
 - [x] 一个连接是一台设备，而通道是一条路由 — 2026-11-03
 - [x] 示例照框架文档的样子写：一个 app，一串装饰器 — 2026-11-03
@@ -57,77 +59,53 @@
 - [x] 词表构造器改名 `h`（`reflux/sdk/h.py`，`from reflux.sdk import h`）：属性式 `h.frame(...)` 是人写页面的写法，`h.node(('frame', props, children))` 是数据式（元组/列表进、节点出，props 仍走构造器签名）；示例与测试 464 处调用点改名，走查页的 pin chip 改用数据式演示，`tests/test_h.py` 八例 — 2026-11-24
 - [x] 计数器页 + 槽视图：`examples/{zh,en}/demo_counter.py`（装饰器写在 `register(app)` 里、闭包落点、列表槽、状态挂 `ctx.data`、步长输入带解析）；`app.view(name, render)` 让槽写入收值（节点原样通过），`reflux/slots.py` 的 `frame()` 读这条规则；`tests/test_counter.py` 十四例 + 浏览器探针 `tools/probe_counter.py` 验一次真实点击 — 2026-11-24
 
-## 输入统一进 loom（2026-11-24，已落地）
+## 输入统一进 loom（ADR 0004，2026-11-24，已落地）
 
-fluxen `2ee6c13`「a send has a budget, and the fields have an aftermath」把这件事做成了两条，本仓跟着落地：
+决定在 `docs/adr/0004-the-group-is-the-only-uplink.md`：组是唯一的出口，`tag` 是成员身份，载荷永远是 `{tag: value}` 的打包对象；清空与次数（`reset` / `sends`）归组。
 
-- **字段没有自己的出口了**（ADR 0032 §2 重写）：`tag` 是成员身份，没有 `tag` 的 `input`/`select` 不上行；字段的 `sink` 只表示**本地落点**（`scope: local`，值一变就写），`remote`/`both` 又没有 `tag` 的，渲染器记一条警告并丢掉。清空不再由字段做。
-- **组多了两件事**：`attrs.reset`（`keep` 缺省 / `clear` / `default`，发完之后字段变成什么）与 `attrs.sends`（发几次：缺省或 `-1` 不限，`0` 从第一帧就锁住）。
+- [x] `schema/accrete.schema.json` 同步（`LoomAttr` +`reset` +`sends`，新增 `$defs.ResetMode`），`tools/gen_sdk.py`、`tools/gen_rust.py` 重新生成 —— `h.loom(..., reset=…, sends=…)` 由此出现
+- [x] 两棵树的独立输入进组：回声 → `h.loom(h.input(tag="name"), sink=echo, submit=["enter"])`，`echo` 读 `value["name"]`；步长 → 同形的组，`set_step` 读 `value["step"]`；两个处理器都只认打包对象
+- [x] 聊天页的发送组 `reset="clear"`：发完输入框自己清空
+- [x] 测试与夹具：`tests/test_sdk_generated.py`（带 `tag` 的字段；字段级 `sink` 被生成的模型拒绝）、`tests/types_fixture.py` 的 `input` 条目补 `tag`、`tests/test_counter.py` 的载荷是数字（`{"step": 5}`，空盒是 `None`）
+- [x] 字段的 `sink` 从 wire 退场（fluxen 侧落地，本仓只跟着删）：`_check_uplinks` 与只被它用的 `FIELD_TYPES` 删除；`gate_t4` 的引言改成"字段在 wire 上没有 `sink` 这个属性，所以带不到页面上"，`tests/types_fixture.py` 的注释同改。手工构造的裸 dict 里再出现字段级 `sink` 现在是 `parse()` 的 `ValidationError`——终态由生成的模型挡在构造那一行
+- [x] 字段的类型落在字段上：`kind`（`InputKind`）取代 `Bind.type`；`select` 换成 `picker`（自己的 `PickerKind`，`t3` 跟着读它）；`type` 不再是组的属性
+- [x] 步长框改成 `kind="number"`：解析归渲染器（`42` → number，空盒 → null），`set_step` 只剩页面自己的 1–10 规则；`probe_counter` 从页面快照变成一条真检查（按一下得 1、输入 `3` 回车、再按得 4，否则非零退出）
+- [x] 门：`gate_t4` 10/10（含"无 `tag` 的字段回车什么都不发、也不清空"、"包里是裸值，没有 `{data, payload}` 包装"）、`gate_t10` 9/9 逐字节、`gate_t3` 16/16（2026-11-27 复跑）
 
-因此本仓的决定（已定）：
+## 设置页（ADR 0001，2026-11-25/26，已落地；控件的最后一半仍在上游）
 
-- **组的载荷永远是打包对象**，没有裸值特例。单字段的组发 `{tag: value}`，处理器自己取值。
-- **字段的 `tag` 拒绝，不生成**：一个带 `remote` sink 却没有 `tag` 的 `input`/`select` 是"没人收的值"，`parse()` 在构造那一行就 `ValueError`，消息里说清楚"给它一个 `tag`，把 `sink` 放到组上"。不自动从 `id` 推（那会把 UI 标识变成 wire 契约）。组自己的键仍按 `loom_key` 回退到 `id` —— 那是嵌套组的名字，性质不同。
-- `type` 没有挪成字段属性：fluxen 保留 `Bind.type`（`sink.type` 或 `source.type`，两channel都读），所以本仓不动。
+决定在 `docs/adr/0001-page-options-and-the-settings-page.md`（§2 值怎么走、§3–4 `TOKENS` 表与它的边界、§5 持久化、§8 整个令牌面、§9 颜色字段）。
 
-落地的清单：
-
-- [x] `schema/accrete.schema.json` 同步到 fluxen 的导出（`tools/sync_schema.py --write`：`LoomAttr` +`reset` +`sends`，新增 `$defs.ResetMode`），`tools/gen_sdk.py`、`tools/gen_rust.py` 重新生成 —— `h.loom(..., reset=…, sends=…)` 由此出现。
-- [x] `reflux/sdk/_parse.py`：`parse()` 先跑 `_check_uplinks`，拒绝"remote sink 且无 tag"的字段；本地落点（`scope: local`）仍合法，无线框的值也仍合法。
-- [x] 两棵树的独立输入进组：`demo_app.py` 的回声输入 → `h.loom(h.input(tag="name"), sink=echo, submit=["enter"])`，`echo` 读 `value["name"]`；`demo_counter.py` 的步长输入 → 同样的组，`set_step` 读 `value["step"]`；两个处理器都只认打包对象（不认识的东西给空串/报错，不当裸值用）。
-- [x] 聊天页的发送组加 `reset="clear"`：发完输入框自己清空，这是 fluxen 这次给的能力，也是那个页面本来该有的样子。
-- [x] 测试与夹具：`tests/test_sdk_generated.py`（带 `tag` 的字段、拒绝无 `tag` 的 remote sink、本地落点仍合法）、`tests/types_fixture.py` 的 `input` 条目补 `tag`、`tests/test_counter.py` 的载荷改成 `{"step": "5"}`。
-- [x] 门与文档：t0/t2/t3/t4/t6/t7/t9/t10/chat/demo 全绿（t4 改成断言"无 `tag` 的字段回车什么都不发、也不清空"，t10 的 Rust 夹具按新签名与新页面同步）；README 的 SDK 段、`docs/DESIGN.md` 的 ADR 0032 段落写了这条规则，`gen_sdk.py --check` 在同步态。
-- [x] **字段上的 `sink` 已经不在 wire 上**（fluxen 侧落地，本仓只跟着删）：`Input`/`Select` 的 schema 现在只有 `source`（`tools/sync_schema.py --write` → in sync，`6b0211c8…`），本仓把为它写的守卫删了——`reflux/sdk/_parse.py` 的 `_check_uplinks` 与只被它用的 `FIELD_TYPES`，`tools/gate_t4.py` 的引言改成"字段在 wire 上没有 `sink` 这个属性，所以带不到页面上"，`tests/types_fixture.py` 的注释同改。`tests/test_auth.py::TheLoginSurface` 与各处 `Bind(type=…)` 借道早已随前几轮收敛（全仓 0 处）。手工构造的裸 dict 里再出现字段级 `sink` 不会报错了——那正是终态：渲染器记一条警告并丢掉（ADR 0032 §2）。
-
-## 设置页（ADR 0001，2026-11-25，已落地；最后一条卡在上游）
-
-决定在 `docs/adr/0001-page-options-and-the-settings-page.md`：值走 `__CONFIG__` 一个槽（fluxen ADR 0038 §2），组的 `sink` 用 `scope: both`——本地立刻改、同时上行；浏览器侧由 `reflux.js` 的 `STYLE` 表把镜像的 `data-*` 落到 `:root` 的自定义属性；服务端是"新连接从哪开始"那份，落盘记住选择。
-
-- [x] 设置页：`examples/{zh,en}/demo_settings.py` 一页，一个组装 `sketch`（`kind: bool`）、`accent`、`round`，`sink=Sink(dest="__CONFIG__", scope="both", path="/")`、`submit=["change"]`、`reset="keep"`；`demo_app.py` 注册 `/settings` 路由、第七个导航项与 `on_go` 的一行。**槽里放的是"无形状"的 `frame`**：fluxen 读的是这个节点的 `source.default`（`config_members`），所以 `Slot.set(dict)` 会被 `wire` 拒——与走查页 `payload()` 同一个写法。
-- [x] 上行与持久化：`on_config` → `Store.apply`（`flatten` 拆渲染器那份 `{字段: {data: 值}}`、白名单 `sketch`/`accent`/`round`、值域 `#rrggbb` 与 0–24 整数、bool 不接受 `1`、合并后只收真变了的），`save_soon` 节流（`loop.call_later`，窗口内连续改动只写最后一次），`flush` 原子写（`.tmp` + `replace`）；`--settings <path>` 缺省 `./.demo-settings.json`（入 `.gitignore`），启动时 `load()`；外框每台设备第一次被画时把已存对象写进槽，新连接第一帧即生效（`seed`，带 `config_seeded` 一次性）。`tests/test_settings.py` 21 例。
-- [x] 上色：`www/static/reflux.js` 的 `STYLE` 表（白名单 + 值域：`accent` 只收 `#rrggbb`、`round` 0–24 补 `px`），`paint()` 先读一次再挂 `MutationObserver`（只听这两个属性），值不合法就撤掉那条自定义属性、交回样式表缺省；DESIGN「客户端 runtime」与 `HANDOFF` 记了这条新契约。
-- [x] 验证：`tools/gate_settings.py` 十条（真 Chromium）：第一帧带着已存选项、`TOKENS` 把镜像落成 `:root` 属性、一次改动**本地**就动（`data-accent` → `--accent`）、`round` 10→18 变 `18px`、表对 99.5 回落到样式表缺省、`sketch` 镜像给渲染器、上行到服务端并合并、刷新后仍是存下的值、控制台除渲染器那条 `<svg> viewBox` 警告外无错误。`tests/test_settings.py` 21 例 + 全量 390 例 + 十一门全绿。
-- [x] 扩到 core 的整个令牌面（2026-11-25）：`TOKENS` 由三个成员变成一张表（颜色十、长度三、线型一），页面按表生成控件、`reflux.js` 按种类落到 `:root`（颜色存 `L C H`、合成 `oklch`），空值 = 不设、回到 `light-dark` 成对缺省；`tests/test_settings.py` 新增"表对着 core.css 的 `:root` 块一个不漏"与"浏览器表 == 服务端表"两例，`tools/gate_settings.py` 十一条（含清空即回缺省、`--border` 跟着拼它的三样）。
-- [x] 颜色改成点出来的（2026-11-25）：fluxen 加了 `oklch` 色盘 `disc`（ADR 0048，字段而非新类别，值就是 `L C H` 三元组；角度是色相、半径是彩度、圆心是灰，亮度按令牌钉住），十个颜色令牌共用它，线型是五个词；`gate_settings` 十三条（盘一次点击只动 `accent`、盘的圆心只动 `bg`、折起来的 `border-style` 点开选词再收起、手绘模式下同一层浮层由笔描出而不是画一条直边、上行之后状态里只有这几样）。
-- [ ] 值的三种类型，两种控件给不同手势（fluxen ADR 0050 仍是 Proposed，本仓等它落地再跟）：`kind: text|number|bool` 一根轴——`input` 的文本是文本框、数字是「数字框 + 内联 `−`/`+`」、布尔是勾选框；`select` 的文本是菜单、数字是滑块、布尔是开关；两种控件的文本与数字都吃 `dir`（横/竖）。值只有三种形状（字符串 / 数字 / 布尔），控件只改手势不改值。待定：滑块缺省的边界（倾向 0–100、步长 1）与开关两端标签的来源。落地后本页的三根长度（`round`/`input-round`/`border-width`）换 `kind="number"`（`0–64`、步长 1），`sketch` 换 `kind="bool"` 的开关，服务端成员校验随之认数字与布尔两种形状。
+- [x] 一页、一个组：`demo_settings.py` 按 `TOKENS` 表生成十个颜色、三个长度、一个线型，加 `sketch`；出口 `sink=Sink(dest="__CONFIG__", scope="both", path="/")`、`submit=["change"]`、`reset="keep"`；`demo_app.py` 注册 `/settings` 路由、第七个导航项与 `on_go` 的一行。槽里放"无形状"的 `frame`（`source.default` 是 fluxen 读成员的地方）
+- [x] 上行与持久化：`on_config` → `Store.apply`（`flatten` 拆包、白名单、值域：颜色 `L C H`、长度 0–64、线型五个词、`sketch` 只收 bool）、`save_soon` 节流（`loop.call_later`）、`flush` 原子写（`.tmp` + `replace`）、`--settings <path>`（缺省 `./.demo-settings.json`，入 `.gitignore`）、启动 `load()`；外框每台设备第一次被画时写进槽（`seed`），新连接第一帧即生效
+- [x] 上色：`www/static/reflux.js` 的 `TOKENS` 表（白名单 + 种类：颜色十、长度三、线型一），颜色存 `L C H` 由表合成 `oklch()`，长度补 `px`；空值撤掉那条自定义属性、交回样式表缺省（成对的 `light-dark` 也在里面）
+- [x] 控件跟到上游：长度是 `kind="number"` 的输入框、`sketch` 是 `kind="bool"` 的勾选框、线型是折起来的 `picker`（`expand`，ADR 0049）；颜色是 `color` 字段（一块方片 + 可复制的 `oklch()` 字面量，悬浮展开 L/C/H 三根滑块），十个颜色令牌共用它（fluxen ADR 0052）— 2026-11-25/26
+- [x] 门：`gate_settings` 13/13（真 Chromium：首帧带已存选项、`TOKENS` 落成 `:root` 属性、一次点击只动一个成员、`round` 10→18、越界回落缺省、折起的词表选中即收起、`--border` 跟着拼它的三样、`sketch` 镜像给渲染器、手绘模式下浮层是描出来的、上行合并、刷新仍是存下的值）；`tests/test_settings.py` 27 例
+- [ ] 值的手势还剩上游一半：`picker` 的滑块与开关尚未画出（fluxen ADR 0050 的「还没做」）。本仓这一侧已经跟到位——`kind` 用上了、服务端也认数字与布尔两种形状；上游画出来之后，本页若出现数字/布尔选项再换控件
 
 ## 服务端搬到 asyncio（ADR 0002，2026-11-25，已落地）
 
-决定在 `docs/adr/0002-asyncio-transport-and-async-handlers.md`：传输换成 **aiohttp**，一条 loop、一条连接一个 task；处理器写 `async def`，同步的由框架 `to_thread` 兜住；`ctx` 与 `Slot` 保持同步；`asyncio.timeout` 管一次投递的预算；`@app.startup`/`@app.shutdown` 给 `ClientSession`、连接池与后台 task。
+决定、传输怎么落与五个阶段的证明在 `docs/adr/0002-asyncio-transport-and-async-handlers.md`（§3–§9，§13 阶段表）。硬约束是 `app.make_server(port)` 保持同形状，迁移当时的六个 harness 调用点一行不改——传输被换掉，门与探针的观测面不动。
 
-**一条硬约束**：`app.make_server(port)` 继续返回同形状的对象（`.server_address` / `.serve_forever()` / `.shutdown()` / `.close()`），内部是"后台线程跑 loop + `AppRunner`/`TCPSite`"。六个 harness 调用点（`tools/cdp.py`、`gate_t7`、`gate_demo`、`gate_ingest`、`tools/serve.py`、`tests/test_page.py`）一行不改——传输被换掉，门与探针的观测面不动，红了才分得清是谁的账。
+- [x] P1 传换 —— `server.py` 换成 aiohttp（静态 + index 回退 + `no-store`、通道升级 → `WebSocketResponse`），`App.handle` 变协程、每设备一个 writer task，看门狗变 task，`make_server` 返回同形状的 `Server` 垫片；测试夹具迁到 async（`run_sync`），`settle()` 消失
+- [x] P2 用户代码可 await —— `settle.maybe()` 是唯一入口（协程 await、普通函数 `to_thread`、返回可等待物也 await）；`App(handler_timeout=30.0)` 包住一次投递；页面重画是 outbox 里的排队项（`request_draw` + `_DRAW`），不是 task——否则它的帧会排到调用者下一句 emit 之后；`app.view` 的渲染器保持同步（ADR §5 记了理由）；`tests/test_async_handlers.py` 九例
+- [x] P3 生命周期与入口 —— `@app.startup` / `@app.shutdown`、`app.http` 共享 `ClientSession`、`App.start/stop/serve/serve_forever`、`app.loop` 公开、`web.AppKey`；`Server.shutdown` 关掉自己的 loop；`tests/test_lifecycle.py` 十例
+- [x] P4 聊天页 async 迭代 —— `Model.reply` → `AsyncIterator[str]`；`OpenAI` 走 `app.http`，`urllib` 与它的阻塞读退场；`parse_sse` / `parse_sse_async` 共用一条行判据；流式线程 → task（`launch()` 这一个测试缝），`threading.Event`/`Lock` → `asyncio.Event`，`time.sleep` → `asyncio.sleep`；断开时 cancel 那条 task
+- [x] P5 删死代码 + 文档 —— `channel.py` 只剩 `WsChannel`，手写编解码与握手（连同 8 例字节级测试）删除；`ChannelClosed` 留下并统一翻译 aiohttp 的三种死法；`grep -rn threading reflux/` 只剩三处真线程；DESIGN 加「并发模型」，HANDOFF 记三个入口与 `app.http`
 
-| 阶段 | 改什么 | 证明 |
-|:--|:--|:--|
-| P1 传换 | `server.py` → `web.Application`（每个 mount 一条 `web.static` + index 兜底 + `no-store`）；`/ws` → `WebSocketResponse`；`channel.py` 只留适配器；`App.handle` → `async`；`Device.emit` → `asyncio.Queue` + 每设备 writer task（`await ws.drain()`）；watchdog → task | 十门 + 全量测试；重点 `t7`、`demo`、`chat` |
-| P2 可 await | `dests._call`/`_call_local` → `async`（`await maybe(...)`，同步走 `to_thread`）；`_draw`/`shell`/`view` 渲染器/`Auth.verify` 可 await；`App(handler_timeout=30.0)`；`CancelledError` 不吞 | 全门 + 6 条新例（async on/page/view/verify、超时、取消、同设备不交错） |
-| P3 生命周期 | `@app.startup`/`@app.shutdown`、`app.http`、`App.serve()`、`start()`/`stop()`、`cli.py` | 门走老形状仍绿；CLI 起得来 |
-| P4 聊天页 | `ChatModel.reply` → `AsyncIterator[str]`；流式线程 → task；SSE 腿用 `app.http` | `gate_chat` |
-| P5 收尾 | 删 `_pump`/`_wake`/`await_frames`/`flush_device` 残留、`channel.py` 帧编解码、`accept_key`/`is_upgrade`、`threading`；DESIGN 加「并发模型」；HANDOFF 记 `serve()`/`start()` | 全绿 + `grep -rn threading reflux/` 收口 |
+## 槽的值：信号与存储（ADR 0005，2026-11-26，已落地）
 
-每个阶段一个 commit、全门绿才进下一阶段。P1 里先加一条守卫：处理器返回协程时抛 `TypeError`（P2 之前不支持），不许静默丢弃。P2 的真正工作量在夹具：`tests/fakes.py` 加 `run_sync(coro)`，17 处 `app._draw(...)` 与 5+ 处 `app.handle(channel)` 跟着改形状。
+决定在 `docs/adr/0005-signals-are-the-subject.md`：信号是主语、槽只是地址；`.store(key)` 决定活多久；存储在 `reflux/stores.py`，后端是一个名字。读写口为什么是 `.value` 这个属性，单独在 `docs/adr/0003-value-is-an-attribute.md`。
 
-- [x] P1 传换 —— 2026-11-25：`server.py` 换成 aiohttp（静态 + index 回退 + `no-cache`、通道升级 → `WebSocketResponse`），`App.handle` 变协程、每设备一个 writer task（保留 `outbox` 列表 + `asyncio.Event`，shed / `stale` / resync 语义逐条照旧），看门狗变 task，`make_server` 返回同形状的 `Server` 垫片（`server_address` / `serve_forever` / `server_close`），六个 harness 调用点零改动；`Device.wake()` 管跨线程 emit；测试夹具迁到 async（`run_sync` + async channel），`settle()` 消失（`handle` 返回即写完）。350 例 + 十道门全绿。顺手补 `frames.rs` 跟着 `emit` 窗口的第 9 个参数
-- [x] P2 用户代码可 await —— 2026-11-25：`reflux/settle.py` 的 `maybe()` 是唯一入口（协程函数 await，普通函数 `to_thread`，返回可等待物也 await）；`dests.dispatch` / `announce` / `_call` / `_call_local`、`App._draw` / `shell`、`@app.page` / 单页、`Auth.verify`、`connect` / `location` / `disconnect` 都可 await；`App(handler_timeout=30.0)` 用 `asyncio.timeout` 包住一次投递，超时取消 + 记一条 + 设备存活，`CancelledError` 不吞；**页面重画是 outbox 里的排队项**（`App.request_draw` + `_DRAW` 标记），不是 task——否则它的帧会排到调用者下一句 emit 之后；`evict` 的摘表仍是同步的（调用者的答案），关帧与 disconnect 通告在 loop 上跟进。`app.view` 的渲染器保持同步（它在 `Slot.set` 里，让写槽变成 await 等于推翻整个词表），ADR §5 记了理由。`tests/test_async_handlers.py` 九例：async 处理器 / 闭包落点 / 页面 / shell / 验证器、线程外跑、预算取消、同设备不交错、慢的不拖快的。362 例 + 十道门全绿
-- [x] P3 生命周期与入口 —— 2026-11-25：`@app.startup` / `@app.shutdown`（可 async，在服务的 loop 上；`_boot` 建 site 前跑 startup 并先建 `app.http`，`_halt` 在 `app.stop()` 前跑、后注册的先跑、单节抛异常只记一行）；`app.http` 共享 `ClientSession`；`App.start(port, host)` 拥有 server、`App.stop()` 结束它（可重复），`serve()` = start + 后台线程，`serve_forever()` = start + 阻塞 + Ctrl-C（`tools/serve.py` 现在就是这一行）；`app.loop` 公开；`Server.shutdown` 关掉自己的 loop（原来漏 fd）；`web.Application` 改用 `web.AppKey`（消掉 `NotAppKeyWarning`）。`tests/test_lifecycle.py` 十例。372 例 + 十道门全绿
-- [x] P4 聊天页 async 迭代 —— 2026-11-25：`Model.reply` → `AsyncIterator[str]`（`Scripted` 包着同步的 `scripted_reply`）；`OpenAI` 走 `app.http`，`urllib` 与其阻塞读退场，`parse_sse` / `parse_sse_async` 共用一条 `sse_piece` 行判据（`END` 哨兵把 `[DONE]` 与"这行没有增量"分开）；`demo_chat.share_http` 在 `@app.startup` 把共享会话交给模型、`@app.shutdown` 收回；流式线程 → task（`launch()` 这一个测试缝），`threading.Event`/`Lock` → `asyncio.Event`（一次投递在 loop 上，`busy` 翻转不需要锁），`time.sleep` → `asyncio.sleep`；`disconnect` 的处理器 cancel 那条 task（否则 gate 退出时留下一个 pending task）。两面树同步。377 例（聊天 25 例，含异步读器对齐、缺会话的具名报错、启动钩子交会话、断开取消）+ 十道门全绿
-- [x] P5 删死代码 + 文档 —— 2026-11-25：`channel.py` 只剩 `WsChannel` 这个包装——手写编解码（`Channel` 的 `_take`/`recv`/`_send`/`send`/`ping`/`close`/`abort`/`__iter__`）与握手（`accept_key`／`is_upgrade`／`upgrade`）连同 `tests/test_channel.py` 的 8 例字节级测试一起删除（-8 例）；`ChannelClosed` 留下并成为 `WsChannel.send` 对 aiohttp 三种死法的统一翻译；`handle` 里那条读侧 `except ChannelClosed` 删掉（读侧现在以 `StopAsyncIteration` 结束）；看门狗的 `threading.Event` 删掉（task 可取消，不需要第二个停止信号）。`grep -rn threading reflux/` 只剩三处真线程：`Server` 的 loop 线程、`serve()` 的后台线程、`Server._stopped`。DESIGN 加「并发模型」一节，HANDOFF 记三个入口与 `app.http`。369 例 + 十道门全绿
-- 服务端搬到 asyncio：P1–P5 全部落地（ADR 0002）。
+- [x] `reflux/signals.py`：`Signal` / `Computed` / `Effect`，`batch()` 把一轮收在一起，`drawing()` 把首写推迟到绘制结束；`.bind` / `.view` / `.keyed` / `.store` 是声明链，槽上没有值
+- [x] 身份：`.bind(slot)` 一个槽名一个信号（`ctx.data`），重画拿回同一个、首值只种一次；`.store(key)` 一个 key 一个信号——匿名连接存在这条连接的数据里，有用户的连接存在 `app.store`（按 user id），换连接/设备接着来
+- [x] `reflux/stores.py`：`Store` 两个方法 `load(user, key)` / `save(user, key, value)`，值是 JSON（节点存不进去，当场报错）；`MemoryStore` 缺省、`SqliteStore`（SQL 的例子）、`KvStore`（任何有 `get`/`set` 的客户端）、`FjallStore`（`durable=True` 时每次 `sync_all`）；后端按名字挂（`app.set_store("sqlite", {"path"})`、`create_app(store=…)`），`redis`/`valkey` 收但排在最后（`reflux[redis]`，容忍不推荐）
+- [x] 槽的值退场：`Slot.signal` / `.computed` / `.keyed` / `.value` 与 `signals.bound` / `into` / `own` / `mirror` / `keep` 删除；名字只由 `/` 拼、点号只到句柄自己的东西、点号子名与 `__getitem__` 一起删除
+- [x] 两棵树的 `demo_counter`：`State` 类与 `state()` 缓存删除，五条声明放在页函数头部（三条 `.store`、两条上线 + `.keyed`），视图提成 `_count_node` / `_hint_node`
+- [x] 测试：`tests/test_signals.py`、`tests/test_slots.py::TheValue` 改成新 API，新增 `tests/test_stores.py` 22 例（匿名/用户/sqlite 跨 app/四条拒绝/KV 客户端/后端按名字）；`probe_counter` 真 Chromium 一次点击 0→1
 
-## 槽的值：信号与持久化（2026-11-26，已落地）
+## 复核与门的现状（2026-11-27）
 
-值这一层翻了两次，最终形状是**信号是主语、槽是它的去处**：
-
-- 声明写在页函数头部，一行一条：`Signal(0).bind(slot).view(fn)`、`Computed(fn).bind(slot).view(fn)`、`Signal([]).keyed(render).bind(slot)`、`Signal(v).store(key)`。`Slot` 不再有 `.signal`／`.computed`／`.keyed`／`.value` —— 值只在信号上，槽是地址加动词。
-- 身份：`.bind(slot)` 一个槽名一个信号（`ctx.data`），重画拿回同一个、首值只种一次；`.store(key)` 一个 key 一个信号 —— 匿名连接存在这条连接的数据里，`ctx.user` 有值时存在 `app.store`（按 user id），换连接／设备接着来。
-- 首写推迟到绘制结束（`signals.drawing`），所以 `.view` 写在 `.bind` 之后也不再要求调用者记顺序；`keyed` 的首写是它的行，不是列表本身。
-- 存储是接口：`reflux/stores.py` 的 `Store` 两个方法 `load(user, key)`／`save(user, key, value)`，值是 JSON，节点存不进去（会当场报错）。后端按名字挂：`app.set_store("sqlite", {"path"})`、`fjall`（`{"path"}`，`pip install reflux[fjall]`）、`kv`（`{"client"}`，任何有 `get`/`set` 的客户端），默认 `memory`；`redis` 也收但排在最后（容忍，不推荐 —— 值是内存里的一个数，不该隔一层网络去取）。`KvStore` 把 Redis 与 KV 引擎收成同一个适配器，`FjallStore` 用 fjall 自己的绑定（一个库、一个 keyspace、`durable=True` 时每次写 `sync_all`）。
-- 名字仍然只由 `/` 拼（两侧留空格，与 `pathlib` 一致），点只到句柄自己的东西（动词、`view`、`name`）；点号子名与 `__getitem__` 都删了，`/` 不查属性，所以叫 `remove`／`value` 的槽直接写。名字不走常量表（不做 `names.py`／`Literal`）：可读性优先，拼错靠 `AttributeError` 与 `/status`。
-- `demo_counter` 两棵树：`State` 类与 `state()` 缓存删除，五条声明在页函数头部（三条 `.store`、两条上线 + `.keyed`），视图提成 `_count_node`／`_hint_node`；`tests/test_slots.py::TheValue` 与 `tests/test_signals.py::TestTheAdapters` 改成新 API，新增 `tests/test_stores.py` 九例（匿名/用户/跨 app 的 sqlite/三条拒绝）。
-- 验证：全量 426 例、`probe_counter` 真 Chromium 一次点击 0→1。
-
-## 复核与门的现状（2026-11-26）
-
-- [x] 全量 426 例、`tools/gen_sdk.py --check` 在同步态；十三道门十二绿（t0/t2/t3/t4/t6/t7/t8/t10/ingest/chat/demo/settings；t10 是 9/9 逐字节）。
-- [ ] `gate_t9` 17 项里两项红（#11 退出不撤销、#14 后退的帧带着 `token`）：同一个因——渲染器在「已登录的 auth 子树换成登录面」那一帧 panic（`Tried to access a reactive value that has already been disposed`），DOM 冻在旧状态，空标记到不了浏览器，存下的 token 因此还在。已排除空文本标记、`request_draw`、重复写同一块登录面三种嫌疑。这是 fluxen 侧的账（它的 `dd1765d` 已写明「the panic T9 reports」仍在），本仓等那边修好后重取 vendor、回跑十三道门。
+- [x] 全量 439 例、`tools/gen_sdk.py --check` 在同步态；十二道门全绿（t0 7／t2 12／t3 16／t4 10／t6 8／t7 4／t8 5／t10 9／ingest 12／chat 12／demo 19／settings 13）；`probe_counter` 通过
+- [x] 渲染器钉在 `42f28d4`，本地 vendor 树与 `versions.json` 逐字节一致（见上节）
+- [ ] `gate_t9` 15/17 里两项红（#11 退出不撤销、#14 后退的帧带着 `token`）：同一个因——渲染器在「已登录的 auth 子树换成登录面」那一帧 panic（`Tried to access a reactive value that has already been disposed`），DOM 冻在旧状态，空标记到不了浏览器，存下的 token 因此还在。已排除空文本标记、`request_draw`、重复写同一块登录面三种嫌疑。这是 fluxen 侧的账（它的 `dd1765d` 已写明「the panic T9 reports」仍在），本仓等那边修好后重取 vendor、回跑十三道门。
