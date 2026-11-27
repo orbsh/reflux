@@ -210,6 +210,23 @@ class TestTheToken(unittest.TestCase):
         run_sync(app.handle(second))
         self.assertEqual(who, [None], "an unknown token is simply a visitor")
 
+    def test_a_logout_answers_with_the_surface_it_put_back(self) -> None:
+        """An app whose login seam is a hook has no `Auth` object — the logout may not reach for one.
+
+        It did (`self.auth.screen`), and the AttributeError was swallowed by the dispatcher's log: the
+        token was dropped, nothing was sent, and the browser kept both the token and the page it had.
+        """
+        app = with_login(verify)
+        channel = Scripted(
+            {"dest": LOGIN, "data": {"username": "ada", "password": "pw"}},
+            {"dest": LOGOUT, "data": {}},
+        )
+        run_sync(app.handle(channel))
+        self.assertEqual(len(app.tokens), 0, "the row is gone")
+        surfaces = ops_on(channel, AUTH_SLOT)
+        self.assertEqual(len(surfaces), 2, "one surface opened the door, one put it back")
+        self.assertFalse([line for line in app.dests.log if "raised" in line], app.dests.log)
+
     def test_the_idle_window_expires_a_token_on_its_lookup(self) -> None:
         table = Tokens(idle_window=0.01)
         token = table.mint("u1")

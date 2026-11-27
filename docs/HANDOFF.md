@@ -38,7 +38,7 @@
 ```
 python3 tools/vendor.py fetch                    # 先装渲染器包（不入库；离线用 build --fluxen <path>）
 python3 tools/gen_sdk.py --check                 # schema + profile → reflux/sdk（唯一的词表门）
-python3 -m unittest discover -s tests -t .       # 442 例
+python3 -m unittest discover -s tests -t .       # 443 例
 python3 tools/gate_ingest.py                     # 12 条：两道门、整帧拒收、计数（真 socket，无 chromium）
 python3 tools/gate_t0.py                         # 7 条：请求集 == versions.json、逐件哈希、深链、缺模块 404
 python3 tools/gate_t2.py                         # 12 条：八个 action 各一条 DOM 断言 + 拒收 + empty
@@ -47,7 +47,7 @@ python3 tools/gate_t4.py                         # 10 条：输入/loom 上行�
 python3 tools/gate_t6.py                         # 8 条：runtime 镜像 / 历史 / 后退 / 深链 / 无标记
 python3 tools/gate_t7.py                         # 4 条：会话（浏览器重载 + 离线判死，两套时钟）
 python3 tools/gate_t8.py                         # 5 条：页面侧的坏帧后果
-python3 tools/gate_t9.py                         # 17 条（15 绿）：参考应用（回声／列表增删／拖拽归档／登录与 token／两页导航／404）
+python3 tools/gate_t9.py                         # 17 条：参考应用（回声／列表增删／拖拽归档／登录与 token／两页导航／404）
 python3 tools/gate_t10.py                        # 9 条：Rust SDK 的八帧与 Python 逐字节相等（要 cargo）
 python3 tools/gate_chat.py                       # 12 条：聊天页的后端（9 条真 socket + 3 条真浏览器）
 python3 tools/gate_demo.py                       # 19 条：走查页（一域一槽、悬浮按钮四态、播放按连接）
@@ -177,7 +177,7 @@ tools/gate_chat.py             聊天页的门：真 socket 的九条 + 真浏�
 ## 七、下一步怎么开头
 
 ```
-1. 跑一遍第二节的全套，确认基线（442 例 + 十三道门，十二绿；一条红是本地包的 `-dirty` rev，发布件不会；`gate_t9` 15/17，两项等 fluxen 修；`gate_t10` 需要 cargo，浏览器门需要 chromium）
+1. 跑一遍第二节的全套，确认基线（443 例 + 十三道门全绿；唯一一条红是 `tests/test_packaging.py` 的本地包 `-dirty` rev，发布件不会有这个后缀；`gate_t10` 需要 cargo，浏览器门需要 chromium）
 2. 读 DESIGN 的「开放问题」里还没结的几条，以及第五节那条门缺口
 3. 出下一轮的计划（补小缺口，或按开放问题做一个裁决）—— 等「开」
 4. 落地、跑全套、报实测行与改动文件

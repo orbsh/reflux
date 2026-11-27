@@ -758,19 +758,26 @@ class App:
         device.data["user"] = user
         device.data["token"] = token
 
-    def _open_auth(self, device: Device, state: str, note: str = "") -> None:
-        """Draw the login surface into the reserved slot, with the refusal's words when there are some."""
-        if self.tokens is None:  # no login seam: there is no surface to open
-            return
-        ctx = self.context(device)
+    def _surface(self, ctx: Context, state: str) -> Accrete:
+        """The login surface for this moment — the app's hook, its `Auth` view, or the framework's own.
+
+        One resolver for every place the framework has to draw it: opening the door on a refused
+        click, and putting it back after a logout. An app that declares `@app.hooks.login_request()`
+        has no `Auth` object at all, so a caller reaching for `self.auth.screen` finds None.
+        """
         from .auth import default_view
 
         view = self.hook("login.request")
         if view is None and self.auth is not None:
             view = self.auth.screen
-        if view is None:
-            view = default_view
-        surface = view(ctx, state)
+        return (view or default_view)(ctx, state)
+
+    def _open_auth(self, device: Device, state: str, note: str = "") -> None:
+        """Draw the login surface into the reserved slot, with the refusal's words when there are some."""
+        if self.tokens is None:  # no login seam: there is no surface to open
+            return
+        ctx = self.context(device)
+        surface = self._surface(ctx, state)
         ctx.slot(AUTH_SLOT).set(
             h.frame(surface, h.text(note, variant="muted")) if note else surface
         )
@@ -839,7 +846,7 @@ class App:
         device.data.pop("user", None)
         # An EMPTY marker is how the browser's storage hears about it — leaving the node out would
         # say nothing, and the next hello would present a dead token.
-        ctx.slot(AUTH_SLOT).set(h.frame(token_marker(""), self.auth.screen(ctx, "login")))
+        ctx.slot(AUTH_SLOT).set(h.frame(token_marker(""), self._surface(ctx, "login")))
         pending = self.request_draw(device)
         if pending is not None:
             await pending
